@@ -4,13 +4,17 @@
 
 系列從一個真的會呼叫 Tool 的 Google ADK Agent 開始，依序處理 Identity、Delegation、Gateway、Runtime 與 Traceability。每篇文章只解一個當天碰得到的問題；做過的取捨、失敗路徑和可重現證據都會一起留下。
 
-## 文章
+## 從這裡開始
 
-目前公開 [Day 1](articles/day-01/article.md)。文章第一行就是標題，不含編輯 metadata；圖片與 Lab 連結也能離開 GitHub 單獨使用，因此可以直接貼進 iT 邦幫忙編輯器。
+- [閱讀 Day 1 文章](articles/day-01/article.md)
+- [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
+- [查看 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
+
+文章第一行就是標題，不含編輯 metadata；圖片與 Lab 連結也能離開 GitHub 單獨使用，因此可以直接貼進 iT 邦幫忙編輯器。
 
 ## Labs
 
-- [`labs/01-unsafe-agent/`](labs/01-unsafe-agent/)：Google ADK Agent、間接 Prompt Injection 與 Tool authorization。
+- [Day 1｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection 與 Tool authorization。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
