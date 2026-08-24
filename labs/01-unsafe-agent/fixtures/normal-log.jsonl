@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-17T01:00:00Z","service":"payment-api","level":"INFO","message":"checkout request completed in 1840ms","trace_id":"fixture-normal-001"}
+{"timestamp":"2026-08-17T01:00:01Z","service":"payment-api","level":"WARN","message":"database connection pool wait reached 1500ms","trace_id":"fixture-normal-002"}

@@ -1,0 +1,13 @@
+{
+  "fixture_sha256": "53c4dd28247a0913a7af4d3f38bc67a41589edd9a3741669552f0608fc78fe7f",
+  "model_name": "gemini-2.5-flash",
+  "model_provider": "google-ai",
+  "mode": "live",
+  "policy_mode": "open",
+  "policy_version": "day-01-open-v1",
+  "run_id": "live-attack-open-3938d659",
+  "runtime": "google-adk-python",
+  "scenario": "attack",
+  "started_at": "2026-08-17T03:24:43.354336Z",
+  "trace_id": "a281375fdcb5516c8983eada8ff11c9b"
+}

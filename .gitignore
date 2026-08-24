@@ -1,0 +1,16 @@
+.DS_Store
+.publication-export
+.env
+.env.*
+!.env.example
+
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.coverage
+**/dist/
+**/data/
