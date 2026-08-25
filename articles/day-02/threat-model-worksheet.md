@@ -107,4 +107,3 @@ SRE Investigation Agent 讀取合成 payment-api Log，診斷 latency；攻擊�
 Tool authorization 應在執行前拒絕，
 並保存 model proposal、policy decision、Tool result 與 ordered events。
 ```
-
