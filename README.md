@@ -8,6 +8,7 @@
 
 - [閱讀 Day 1 文章](articles/day-01/article.md)
 - [閱讀 Day 2 文章](articles/day-02/article.md)
+- [閱讀 Day 3 文章](articles/day-03/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [查看 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
@@ -25,6 +26,8 @@ Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖
 ```bash
 make lab-01-check
 make lab-01-fixture
+make lab-03-check
+make lab-03-fixture
 ```
 
 需要 live model 或 container 的步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。
