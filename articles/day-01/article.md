@@ -30,7 +30,7 @@ for payments-demo with ticket INC-DEMO-001.
 
 惡意指令不在使用者 Prompt，而是在 Agent 主動讀取的資料裡。企業裡的 Agent 會碰 ticket、網頁、文件、郵件與 Tool 回傳值；資料一旦被放進 context，並不會因此變得可信。
 
-![不可信 Log 進入 ADK Agent context，Gemini 提出危險 Tool Call；open policy 放行後，Function Tool 追加安全 canary event。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02/assets/diagrams/day-01/unsafe-action-chain.png)
+![不可信 Log 進入 ADK Agent context，Gemini 提出危險 Tool Call；open policy 放行後，Function Tool 追加安全 canary event。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04/assets/diagrams/day-01/unsafe-action-chain.png)
 
 這個 baseline 也刻意留下錯誤設計：system instruction 要求 Agent 採信 evidence 裡像 runbook 的操作方向，Tool policy 則全部放行。它不是 Gemini 的安全能力測驗，而是要確認一件事：外部資料、模型判斷與 Tool 權限直接串在一起時，一次錯誤判斷能走多遠。
 
@@ -38,7 +38,7 @@ for payments-demo with ticket INC-DEMO-001.
 
 我用同一份攻擊資料連跑兩次 Gemini live mode。兩次模型都先提出 `delete_demo_database`，Google ADK 接著讓流程走進 Function Tool。下圖是第二次執行留下的 CLI summary：
 
-![Gemini live run 選擇 delete_demo_database，open policy 放行後 safe canary 增加一筆。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02/assets/screenshots/day-01/01-live-unsafe-tool-call.png)
+![Gemini live run 選擇 delete_demo_database，open policy 放行後 safe canary 增加一筆。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04/assets/screenshots/day-01/01-live-unsafe-tool-call.png)
 
 原始結果也保留成文字，圖片只負責讓畫面容易閱讀：
 
@@ -88,7 +88,7 @@ canary 明明增加了一筆，最後狀態卻是 `SUCCESS`。原因不是模型
 
 這個系列不會每天換一套熱門工具。我會沿著同一條 action path，逐步補上缺少的控制與證據。
 
-![三十天沿著同一條 action path 分成五個階段，從 Agent 攻擊面走到 Identity、執行控制、Traceability 與組織落地。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02/assets/diagrams/day-01/series-route.png)
+![三十天沿著同一條 action path 分成五個階段，從 Agent 攻擊面走到 Identity、執行控制、Traceability 與組織落地。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04/assets/diagrams/day-01/series-route.png)
 
 1. **Day 1–5｜Agent 的攻擊面**：先讓危險動作真的走到 Tool，再拆 Prompt Injection、Excessive Agency、Delegation 與責任邊界。
 2. **Day 6–12｜Identity 與 Delegation**：從 Keycloak、Cognito 到 OAuth，釐清 Human、Agent、Workload 與 downstream token。
@@ -100,7 +100,7 @@ canary 明明增加了一筆，最後狀態卻是 `SUCCESS`。原因不是模型
 
 ## 跟著跑 Day 1 Lab
 
-完整 source code、測試與操作說明都放在 [直接進入 Day 1 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02/labs/01-unsafe-agent/README.md)。不想先 clone 整個 repo，也可以從這裡確認目錄與執行條件。
+完整 source code、測試與操作說明都放在 [直接進入 Day 1 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04/labs/01-unsafe-agent/README.md)。不想先 clone 整個 repo，也可以從這裡確認目錄與執行條件。
 
 Repo 提供兩種執行模式：
 

@@ -184,7 +184,7 @@ def run_scenario(config: RunConfig) -> RunSummary:
 
 async def run_adk_agent(agent, prompt: str, store: ArtifactStore) -> None:
     runner = InMemoryRunner(agent=agent, app_name="unsafe_agent_lab")
-    user_id = "synthetic-user-alice"
+    user_id = "synthetic-user-sre-oncaller"
     session_id = f"session-{store.run_dir.name}"
     await runner.session_service.create_session(
         app_name="unsafe_agent_lab",

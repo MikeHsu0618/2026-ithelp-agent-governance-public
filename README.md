@@ -9,7 +9,9 @@
 - [閱讀 Day 1 文章](articles/day-01/article.md)
 - [閱讀 Day 2 文章](articles/day-02/article.md)
 - [閱讀 Day 3 文章](articles/day-03/article.md)
+- [閱讀 Day 4 文章](articles/day-04/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
+- [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [查看 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 
@@ -17,7 +19,7 @@
 
 ## Labs
 
-- [Day 1–3｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model 與 Tool authorization。
+- [Day 1–4｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization 與 Delegation evidence。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
