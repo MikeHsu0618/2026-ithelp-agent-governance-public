@@ -11,23 +11,26 @@
 - AI 平台需要一致的 OIDC issuer，提供 Human federated login 與 machine-to-machine token。
 - 下游 Gateway 必須根據 token claim 對 MCP Tool 做授權。
 - 真實人員的到職、轉調、離職仍由既有企業 IdP 與其流程掌握。
-- Keycloak 技術鏈已在 Kubernetes 環境跑通；後續 Cognito User Pools 的 Human／M2M 路徑也完成端到端驗證。
+- AI 平台尚未和 IT 團隊完成 onboarding／offboarding、group／role lifecycle 與權限回收整合。
+- 當時沒有將所有下游服務與 SaaS 入口接進同一個企業 Identity Center 的共同計畫，明確範圍主要是少數 AI 服務。
+- Keycloak 技術鏈已在 Kubernetes 環境跑通。後續 Cognito User Pools 的 Human／M2M 路徑也完成端到端驗證。
 
 ### Decision
 
-以 Amazon Cognito User Pools 承接這個 AI 平台範圍內的 OIDC federation／issuer，不在此範圍自建全公司的 Identity Center。組織的人員生命週期仍以上游企業 IdP 為準；Gateway 與 Resource Server 繼續負責 action／resource authorization。
+以 Amazon Cognito User Pools 承接這個 AI 平台範圍內的 OIDC federation／issuer，不為少數服務先自建全公司的 Identity Center。企業級 Identity Center 等 IT、Security、平台與各服務 owner 對 lifecycle、下游接入及操作責任形成共同計畫後再重新評估。組織的人員生命週期仍以上游企業 IdP 為準，Gateway 與 Resource Server 繼續負責 action／resource authorization。
 
 ### 比較矩陣
 
 | 決策面 | 必須回答的問題 | Keycloak 路徑 | Cognito 路徑 | 對本次決策的影響 |
 | --- | --- | --- | --- | --- |
-| 必要技術鏈 | federation、Token、Human、M2M、角色／scope 能否接到 Gateway？ | Human federation、role claim、per-tool RBAC 已 `PASS`；彈性高 | Human PKCE、M2M Client Credentials 與 Gateway policy 已 `PASS` | 兩邊都能做，不用功能多寡決勝 |
+| 必要技術鏈 | federation、Token、Human、M2M、角色／scope 能否接到 Gateway？ | Human federation、role claim、per-tool RBAC 已 `PASS`，彈性高 | Human PKCE、M2M Client Credentials 與 Gateway policy 已 `PASS` | 兩邊都能做，不用功能多寡決勝 |
 | 人員生命週期 | 誰建立、轉調與停用真實員工？ | 仍由上游企業 IdP 掌握 | 仍由上游企業 IdP 掌握 | 兩者都不是本案的 lifecycle source of truth |
-| Runtime ownership | 誰維運服務、資料庫、cache、容量、升級與故障復原？ | 平台團隊 | 服務 runtime 在 AWS 邊界；平台仍管設定、整合與復原策略 | AI-only 範圍不值得新增完整自管 IdP runtime |
-| 設定 ownership | 誰管 client、callback、scope、claim mapping、keys 與 IaC？ | 平台／Security 共同定義；平台操作 | 平台／Security 共同定義；平台操作 | Managed service 沒有消滅 identity engineering |
+| 組織整合範圍 | IT lifecycle、下游服務與 SaaS 入口是否真的會一起接入？ | 能力可支援共用平台，但當時沒有跨團隊導入承諾 | 維持少數 AI 服務的 managed identity boundary | 暫不以局部需求承擔企業平台成本 |
+| Runtime ownership | 誰維運服務、資料庫、cache、容量、升級與故障復原？ | 平台團隊 | 服務 runtime 在 AWS 邊界，平台仍管設定、整合與復原策略 | AI-only 範圍不值得新增完整自管 IdP runtime |
+| 設定 ownership | 誰管 client、callback、scope、claim mapping、keys 與 IaC？ | 平台／Security 共同定義，由平台操作 | 平台／Security 共同定義，由平台操作 | Managed service 沒有消滅 identity engineering |
 | 客製需求 | 是否真的需要自訂 login flow、extension、storage 或精細管理能力？ | 能力強，適合明確的客製需求 | 受服務介面限制，換取較小 runtime 面 | 當時沒有足以支付自管成本的必要客製需求 |
 | 重用範圍 | 除 AI 平台外，有多少系統會共同使用？ | 當時主要服務 AI 平台 | 當時主要服務 AI 平台 | 使用面窄，使自建中心的固定成本較難攤提 |
-| 可攜性與退出 | 若離開目前平台，設定與身分資料怎麼移？ | 開放原始碼、部署選項較多，但 migration 仍需設計 | AWS 耦合較深；pool、client、Lambda hook 與資料移轉要另做出口 | Cognito 的代價必須明列，不能寫成單向獲利 |
+| 可攜性與退出 | 若離開目前平台，設定與身分資料怎麼移？ | 開放原始碼、部署選項較多，但 migration 仍需設計 | AWS 耦合較深，pool、client、Lambda hook 與資料移轉要另做出口 | Cognito 的代價必須明列，不能寫成單向獲利 |
 | 稽核與授權責任 | IdP claim、Gateway policy、Resource authorization 由誰負責？ | 三層責任都要定義 | 三層責任都要定義 | 換 IdP 不會自動完成 Agent Governance |
 
 ### Consequences
@@ -49,7 +52,8 @@
 出現下列任一條件時，重新評估 Keycloak 或其他組織級 Identity Center：
 
 - 多個非 AI 系統開始需要共用的 federation、realm／tenant 或管理模型。
-- 組織決定把 joiner／mover／leaver 與 group／role lifecycle 收斂到新的中心。
+- IT、Security 與平台團隊決定共同整合 joiner／mover／leaver、group／role lifecycle 與權限回收。
+- 多個下游服務或 SaaS 入口承諾接進共用的 SSO 與存取治理。
 - 需要 Cognito 無法合理表達的 authentication flow、extension 或 portability。
 - AWS coupling、費用、quota 或復原目標不再能接受。
 - 已有專責 Identity Platform 團隊願意擁有 runtime、資料與 on-call。
@@ -69,6 +73,7 @@
 | --- | --- | --- | --- | --- |
 | 必要技術鏈 | 成功與失敗 request、token、policy decision |  |  |  |
 | 人員生命週期 | joiner／mover／leaver 流程與停用延遲 |  |  |  |
+| 組織整合範圍 | IT／Security owner、下游服務清單、SaaS 接入承諾 |  |  |  |
 | Runtime ownership | HA、DB、cache、patch、upgrade、on-call |  |  |  |
 | 設定 ownership | client、callback、scope、claim、keys、IaC |  |  |  |
 | 客製需求 | 已確認的必要 extension，不列願望清單 |  |  |  |
