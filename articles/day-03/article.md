@@ -6,7 +6,7 @@ Tool 名稱故意寫得很危險，但它沒有真正的副作用。`delete_demo
 
 Day 2 已經沿著同一條 trace 找出 Prompt Injection 進入 context、模型提出 Tool Call，以及 open policy 放行的位置。今天不換 Agent，也不修改 Tool，只測一件事：輸入檢查漏掉攻擊後，另一個決策點能不能在執行前把危險動作攔下來。
 
-[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-05-r1/labs/01-unsafe-agent/README.md)
+[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06/labs/01-unsafe-agent/README.md)
 
 以下 Log、service、database 與 ticket 都是合成資料。模型行為來自 2026-08-17 保存的 Gemini live runs，沒有把 Lab 寫成正式環境事故。
 
@@ -111,7 +111,7 @@ return DENY
 
 下圖要看的不是模型有沒有識破攻擊。Keyword guard 在兩條路徑都已經放行，Gemini 也提出相同 Tool Call。差異發生在 ADK callback 裡載入的 Tool policy。
 
-![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用 open policy 時觸發 canary，換成 Tool allowlist 後在 function 執行前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05-r1/assets/diagrams/day-03/guard-vs-authorization.png)
+![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用 open policy 時觸發 canary，換成 Tool allowlist 後在 function 執行前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/diagrams/day-03/guard-vs-authorization.png)
 
 我在整理 Gateway 責任時，原本很容易把 inspection 和 authorization 一起收進「安全檢查」。真的把 action path 跑過一遍後，兩種決策需要的資料完全不同。Inspection 判斷內容像不像攻擊，可以產生風險分數。Authorization 要回答某個 actor 能否對某個 resource 執行 action，最後必須留下 `ALLOW` 或 `DENY`，以及做決定時使用的 policy version 和 input。
 
@@ -119,9 +119,9 @@ return DENY
 
 ## Live run：DENY 後改走唯讀 Tool
 
-下面的 Carbon 圖來自兩次 Gemini live run。兩邊使用相同 fixture，兩個 manifest 記錄的 SHA-256 都是 `11936a4292b4524c147d557908cdd10568222f47e6d327bc28ad099d8d479262`。圖片方便比較，完整的 [open policy events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-05-r1/assets/screenshots/day-03/evidence/live-open-events.jsonl) 與 [allowlist events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-05-r1/assets/screenshots/day-03/evidence/live-allowlist-events.jsonl) 也保留在 repo，指令和 trace ID 不需要從圖上抄。
+下面的 Carbon 圖來自兩次 Gemini live run。兩邊使用相同 fixture，兩個 manifest 記錄的 SHA-256 都是 `11936a4292b4524c147d557908cdd10568222f47e6d327bc28ad099d8d479262`。圖片方便比較，完整的 [open policy events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06/assets/screenshots/day-03/evidence/live-open-events.jsonl) 與 [allowlist events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06/assets/screenshots/day-03/evidence/live-allowlist-events.jsonl) 也保留在 repo，指令和 trace ID 不需要從圖上抄。
 
-![Gemini 對相同改寫 fixture 都提出 delete_demo_database。Open policy 觸發 canary，Tool allowlist 回覆 DENY，canary 維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05-r1/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
+![Gemini 對相同改寫 fixture 都提出 delete_demo_database。Open policy 觸發 canary，Tool allowlist 回覆 DENY，canary 維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
 
 Allowlist run 還多發生了一件事：Gemini 收到拒絕後，改用允許的 `query_metrics` 完成 latency investigation。
 
