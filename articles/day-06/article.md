@@ -38,7 +38,7 @@ MCP request             PASS
 
 |  | Keycloak | Amazon Cognito User Pools |
 | --- | --- | --- |
-| 產品識別 | <img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/third-party/keycloak/keycloak-icon-color.png" alt="Keycloak 官方專案圖示" width="120"> | <img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/third-party/aws/amazon-cognito-architecture-icon.png" alt="Amazon Cognito 官方 AWS Architecture Icon" width="120"> |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 定位 | 開源的 Identity and Access Management server，由採用者部署與操作 | AWS 受管的 user directory 與 OIDC provider |
 | 控制面 | realm、client、role、group、session、identity brokering、user federation、protocol mapper 與 authentication flow | user pool、app client、federation、attribute mapping、resource server 與 OAuth scope |
 | Runtime 責任 | 團隊管理服務、資料庫、cache、HA、升級與復原 | AWS 管理服務 runtime，團隊仍管設定、整合、監控與退出方案 |
