@@ -11,17 +11,15 @@ Enforcement    PARTIAL
 Traceability   PARTIAL
 ```
 
-差別出在檢查範圍。那次 policy 只看 `tool_name`，沒有值班工程師、executing workload 與 `payments-demo` target。Agent 和 Tool 的版本也沒有進入事件。Ordered events 雖然能重播，仍不足以還原完整責任鏈。
+那次 policy 只看 `tool_name`，沒有值班工程師、executing workload 與 `payments-demo` target。Agent 和 Tool 的版本也沒有進入事件，ordered events 雖然能重播，仍不足以還原完整責任鏈。這些缺口讓四個狀態都停在 `PARTIAL` 或 `UNKNOWN`，也說明一次成功的 `DENY` 只能證明我們找到有效控制點，不能直接推論整條 action path 已受治理。
 
-一次成功的 `DENY` 證明我們找到了一個有效控制點，不能直接推論整條 action path 都已受治理。這篇要做的，就是把「一個控制點」與「一條責任鏈」分開盤點。
-
-先說明這套盤點的界線。Identity、Provenance、Enforcement、Traceability 是我根據前四天的 Lab，以及後續研究 Identity Center、Gateway、Agent Registry 與 LGTM 的過程整理出的 review lens。它不是外部標準，尚未驗證的能力也不會因為畫進架構圖就變成 `PASS`。
+Identity、Provenance、Enforcement、Traceability 是我根據前四天的 Lab，以及後續研究 Identity Center、Gateway、Agent Registry 與 LGTM 的過程整理出的 review lens。這篇會用它們分開盤點「一個控制點」與「一條責任鏈」，但它們不是外部標準，尚未驗證的能力也不會因為畫進架構圖就變成 `PASS`。
 
 ## 產品分類與 Action Path
 
 我最初也照產品分工整理架構。身分中心（Identity Center）負責登入與 token，Gateway 負責 routing、auth 與 policy，Agent Registry 管 catalog 和 metadata，Grafana LGTM 收 metrics、logs、traces。方框都有名字，看起來也各有 owner。
 
-真正的動作卻不是照產品分類執行。`delete_demo_database` 只會沿著 request path 往下走：
+當 `delete_demo_database` 被提出時，request 不會照產品分類跳格子，只會沿著下面這條 path 往下走：
 
 ```text
 值班工程師
@@ -38,7 +36,7 @@ Traceability   PARTIAL
 - Gateway 回傳 `ALLOW`，resource server 仍可能有自己的 authorization。
 - Trace 收得齊，不代表事件裡有 policy version、delegation 與 artifact digest。
 
-後來我不再繼續增加產品欄位，而是固定追四個不會跟著產品名稱改變的治理問題。
+看到同一條 action path 在產品接縫間一路掉資料後，我就不再繼續增加產品欄位，而是固定追四個不會跟著產品名稱改變的治理問題。後面即使替換 IdP、Gateway 或 Agent runtime，盤點欄位也不需要跟著重畫。
 
 ## 治理四問
 
@@ -52,23 +50,23 @@ Day 1–4 目前只有兩個可見值：ADK session 裡的 `synthetic-user-sre-o
 
 Repo 裡找得到 Agent 定義與三個 Function Tools，但 `policy.decision` 沒有 Agent version、Tool digest、signer、approval 或 Registry source。事後即使知道 `delete_demo_database` 被拒絕，也無法單靠事件確認當時載入哪一版 Agent、Tool definition 是否更換過，以及該 artifact 由誰核准。
 
-所以 Provenance 保留 `UNKNOWN`。Source tree 能證明程式碼存在，不能證明執行中的 action 已經綁定到可信 artifact。後面談 Agent Registry 時，也會繼續分開兩件事：catalog 讓人找得到 artifact，provenance 才負責交代版本與信任來源。
+Source tree 只能證明程式碼存在，不能證明執行中的 action 已經綁定到可信 artifact，因此 Provenance 只能保留 `UNKNOWN`。後面談 Agent Registry 時，也會繼續分開兩件事：catalog 讓人找得到 artifact，provenance 才負責交代版本與信任來源。
 
 ### Enforcement：Decision Point 與拒絕位置
 
-這一項的證據最完整。Day 3 已實測改寫後的 Prompt Injection 能通過 keyword guard，open policy 會觸發 canary，Tool allowlist 則在 function 執行前拒絕相同 Tool Call。
+Day 3 已實測改寫後的 Prompt Injection 能通過 keyword guard，open policy 會觸發 canary，Tool allowlist 則在 function 執行前拒絕相同 Tool Call，這是四項裡最完整的一份 evidence。
 
-缺口也很明確。現有 policy input 只有 Tool name，尚未判斷 principal、resource、environment、delegation 或 approval。Safe canary 後面也沒有真正的 resource server 執行第二次授權。因此目前能確認的是「已有獨立拒絕點」，還不是完整 authorization model，狀態仍是 `PARTIAL`。
+不過現有 policy input 只有 Tool name，尚未判斷 principal、resource、environment、delegation 或 approval。Safe canary 後面也沒有真正的 resource server 執行第二次授權。目前能確認的是「已有獨立拒絕點」，還不是完整 authorization model，所以 Enforcement 仍是 `PARTIAL`。
 
 ### Traceability：Event 與重建能力
 
 Day 1 留下 trace ID、ordered events、summary 與 replay command，並且真的抓到兩次 summary bug。第一次是危險 Tool 執行後被後續 `SUCCESS` 蓋掉，另一次則是 policy `DENY` 被允許的 read-only Tool 蓋過。
 
-這些結果支持一個實務判斷：ordered events 比單一 final status 更可靠。不過目前事件仍缺 verified Human、executing workload、artifact version 與下游 authorization，也尚未定義 retention、integrity、redaction 與查詢權限。現在的 Traceability 足以重播 Lab，還不是完整 Audit，所以也是 `PARTIAL`。
+兩次 summary bug 都是 ordered events 保住了真實執行順序，才沒有讓 final status 把前面的危險動作或 policy `DENY` 蓋掉。不過目前事件仍缺 verified Human、executing workload、artifact version 與下游 authorization，也尚未定義 retention、integrity、redaction 與查詢權限。現在的 Traceability 足以重播 Lab，還不是完整 Audit，所以也是 `PARTIAL`。
 
 ## Reference Architecture v0.1
 
-![Agent action path 由 Caller 經 Agent Runtime 與 Policy Checkpoint 到 Tool／Resource。四個治理問題分別補上 principal 與 delegation、artifact 版本與信任、policy decision，以及可重建的執行證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05/assets/diagrams/day-05/reference-architecture-v0.1.png)
+![Agent action path 由 Caller 經 Agent Runtime 與 Policy Checkpoint 到 Tool／Resource。四個治理問題分別補上 principal 與 delegation、artifact 版本與信任、policy decision，以及可重建的執行證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r1/assets/diagrams/day-05/reference-architecture-v0.1.png)
 
 這張圖沒有放 Cognito、Keycloak、agentgateway、kagent、Registry 或 Grafana Logo。v0.1 先固定責任與 evidence，等實作時再決定哪個元件承接：
 
@@ -89,7 +87,7 @@ Day 1 留下 trace ID、ordered events、summary 與 replay command，並且真�
 
 ## Day 1–4 盤點結果
 
-我把目前的 evidence 填進 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-05/articles/day-05/governance-four-question-checklist.md)：
+我把目前的 evidence 填進 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r1/articles/day-05/governance-four-question-checklist.md)：
 
 | 治理問題 | 現有 evidence | 狀態 | 下一個最小缺口 |
 | --- | --- | --- | --- |
@@ -113,4 +111,4 @@ Day 5 沒有再加一層防護，而是把前四天的結果放回同一張責�
 
 實際做平台時，人員身分通常早已存在企業 IdP，AI 平台缺的是一份穩定的 OIDC contract，把既有登入轉成 Gateway 與 MCP 能使用的 token 和 claim。當時我們先選了 Keycloak，而且 federation、role claim、Gateway 到 MCP Tool RBAC 都真的跑通。
 
-真正改變選型的問題，是在技術鏈成功後才浮現。如果員工的到職、轉調與離職仍由上游系統管理，這一層究竟是組織的 Identity Center，還是只服務 AI 平台的 identity bridge？Day 6 會從 Keycloak 的成功驗收開始，再說明 Cognito 為什麼後來才進入選項。
+技術鏈跑通後，我們還是得回答一個組織問題：如果員工的到職、轉調與離職仍由上游系統管理，這一層究竟是組織的 Identity Center，還是只服務 AI 平台的 identity bridge？Day 6 會從 Keycloak 的成功驗收開始，再說明 Cognito 為什麼後來才進入選項。
