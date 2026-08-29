@@ -1,4 +1,4 @@
-# Day 6｜Keycloak 驗收全過，最後仍換成 Cognito：AI Identity Bridge 的選型帳
+# Day 6｜雖然 Keycloak 十分強大，但最終我們選擇 AWS Cognito
 
 Day 5 盤點完 Identity 缺口後，下一步看起來很直覺：替 Gateway 接上一個可信的 OIDC issuer，讓 `synthetic-user-sre-oncaller` 這種 Lab label 換成可驗證的人員身分。這題我們不是從白紙開始。當時已經有一套 Keycloak 跑在 Kubernetes，上游企業 IdP、JWT role、Gateway 與 MCP Tool RBAC 也真的串了起來。把那次驗收重新排在一起，最後一列反而最醒目：
 
