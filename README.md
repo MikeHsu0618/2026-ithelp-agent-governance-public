@@ -12,10 +12,12 @@
 - [閱讀 Day 4 文章](articles/day-04/article.md)
 - [閱讀 Day 5 文章](articles/day-05/article.md)
 - [閱讀 Day 6 文章](articles/day-06/article.md)
+- [閱讀 Day 7 文章](articles/day-07/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
 - [下載 Day 6 Identity Center 組織選型 Decision Record](articles/day-06/identity-center-decision-matrix.md)
+- [下載 Day 7 Human／Service／Agent／Workload Identity Flow Matrix](articles/day-07/identity-flow-matrix.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [查看 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 
