@@ -13,7 +13,7 @@ hop=2  agent.runtime     client_id=client/sre-agent-runtime
        kubernetes.audit  user.username=system:serviceaccount:lab:sre-agent
 ```
 
-這幾行不是同一枚 Token 解出來的四個欄位，也不是四個系統都剛好把欄位叫作 `actor`。它們來自同一條 action path 上的不同 credential hop，各自回答「誰登入」、「哪個 client 參與」、「哪套 Agent 邏輯做決定」以及「哪個 runtime 真的送出 request」。
+這四筆資料來自同一條 action path 上的不同 credential hop。Human `sub` 回答誰登入，`client_id` 記錄哪個 client 參與，Agent artifact 指向做決定的邏輯版本，ServiceAccount 則把 request 帶回實際執行的 runtime。
 
 如果 audit 最後只留 `actor=user/sre-oncaller`，看起來歸責很完整，實際上卻把中間三段都壓平了。遇到誤刪資料、越權查詢或 Tool 參數異常時，我仍然無法知道是哪一版 Agent 做了選擇、哪個 service 接手任務，也不能確認 credential 當時落在哪個 workload。
 
@@ -34,11 +34,11 @@ hop=2  agent.runtime     client_id=client/sre-agent-runtime
 
 下圖把這四類資訊排成 2×2，共同對應同一條 action path。圖上刻意不畫串聯箭頭，避免讀者把它理解成「Human 依序變成 Service、Agent、Workload」的流水線。
 
-![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 可分 requester 與 approver，Service 與 Agent 可依 hop 或呼叫順序保留多筆，Workload 記錄實際送出 request 的 runtime。四類資訊一起進入 audit，缺少證據時寫 UNKNOWN，本來不存在時才寫 NOT_APPLICABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/diagrams/day-07/four-identity-slots.png)
+![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 可分 requester 與 approver，Service 與 Agent 可依 hop 或呼叫順序保留多筆，Workload 記錄實際送出 request 的 runtime。四類資訊一起進入 audit，缺少證據時寫 UNKNOWN，本來不存在時才寫 NOT_APPLICABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08/assets/diagrams/day-07/four-identity-slots.png)
 
 Human 與完成 client authentication 的 confidential Service，可能在各自的 network hop 成為 authenticated principal。Public client 的 `client_id` 只能說明哪個應用參與登入流程，不能證明它持有 secret。Agent 比較接近邏輯上的決策者，Workload 則是讓那套邏輯實際運作的 process、Pod 或 deployment instance。
 
-有些平台會替 Agent 發獨立 credential，Agent、Service 與 Workload 的邊界因而部分重疊。也有不少系統只有 OAuth client 與共用 secret，Agent 名稱只是 deployment 裡的一個設定值。Design review 要把每個值的來源與驗證強度寫清楚，不能只把產品名稱塞進四格。
+有些平台會替 Agent 發獨立 credential，Agent、Service 與 Workload 的邊界因而部分重疊。也有不少系統只有 OAuth client 與共用 secret，Agent 名稱只是 deployment 裡的一個設定值。Design review 要把每個值的來源與驗證強度寫清楚，光填產品名稱看不出這些差異。
 
 ## Human 委派 Agent：一個請求跨過兩個 credential hop
 
@@ -105,9 +105,9 @@ Human 委派與排程 Agent 使用相同的四類責任，Human 與 Service 欄�
 | Human 委派 Agent | requester／approver | interactive client + runtime service | 依順序保存 Agent chain | Agent runtime workload |
 | Service 排程 Agent | `NOT_APPLICABLE` | authenticated confidential client | Agent artifact + version | runtime ServiceAccount／attestation |
 
-我把這兩條路徑，加上 Human 直接使用 MCP client 與 Agent 呼叫另一個 A2A Agent，整理成可直接拿去做 design review 的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r1/articles/day-07/identity-flow-matrix.md)。完整版會逐欄記錄主要 credential、credential 能證明什麼、decision point 與最低 audit evidence。
+我把這兩條路徑，加上 Human 直接使用 MCP client 與 Agent 呼叫另一個 A2A Agent，整理成可直接拿去做 design review 的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08/articles/day-07/identity-flow-matrix.md)。完整版會逐欄記錄主要 credential、credential 能證明什麼、decision point 與最低 audit evidence。
 
-Matrix 中的 A2A row 只處理 identity boundary：caller Agent、remote Agent 與中間 coordinator 應依實際順序保存，不能覆寫成最後回應的那一個。Agent Card 可以協助 discovery，卻不會取代 transport credential，也不能單靠一張 Card 證明這次呼叫者是誰。[A2A Protocol Specification v1.0.0](https://github.com/a2aproject/A2A/blob/v1.0.0/docs/specification.md)
+Matrix 的 A2A row 依實際順序保存 caller Agent、remote Agent 與中間 coordinator。Agent Card 提供 discovery 資訊，transport credential 才能證明這次連線由誰發出。兩種證據解的是不同問題。[A2A Protocol Specification v1.0.0](https://github.com/a2aproject/A2A/blob/v1.0.0/docs/specification.md)
 
 排程工作本來就沒有人類在場，所以 Human 是 `NOT_APPLICABLE`。Human 委派 Agent 時，事件理應知道執行 workload，卻沒有留下任何可驗證線索，這才叫 `UNKNOWN`。Matrix 必須分開這兩種狀態。
 
@@ -124,7 +124,7 @@ Matrix 不只檢查 identifier 有沒有值，還要求每筆資料附上四項�
 
 ## Audit 保存責任鏈，Policy 再挑欄位
 
-四類責任都值得進 audit，不代表每條 policy 都要一次使用所有欄位。M2M rate limit 可能只看 authenticated Service，高風險 Tool approval 會同時看 Human、Agent 與 Workload，resource server 還是要驗自己的 audience、scope、resource 與 action。
+Audit 先保存完整的四類責任，各 decision point 再挑自己需要的欄位。M2M rate limit 可能只看 authenticated Service，高風險 Tool approval 會同時看 Human、Agent 與 Workload，resource server 則驗自己的 audience、scope、resource 與 action。
 
 設計順序不該從「現在 JWT 有哪些 claims」開始，而是先把 action path 上應負責的人與程序列完整，再讓每個 decision point 選擇必要欄位。反過來做，很容易把目前拿得到的 `sub` 或 `client_id` 當成完整真相。
 

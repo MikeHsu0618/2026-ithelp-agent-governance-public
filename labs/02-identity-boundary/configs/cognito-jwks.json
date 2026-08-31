@@ -1,0 +1,15 @@
+{
+  "keys": [
+    {
+      "alg": "RS256",
+      "e": "AQAB",
+      "key_ops": [
+        "verify"
+      ],
+      "kid": "day12-config-validation",
+      "kty": "RSA",
+      "n": "qFECVUn-aEy8oUak5vnNRoTWs1LTQVLkJ-_DyBP12LmNbbiO7vQp6iPpfAPzlaoLJW31fdfPBWXIp3uHUWLO7RBEmaeFFQrjjmyn-T6kUXgCaEr2N3UamsBhGos4LoZcraiyNnsMRMdQ63uatn2S-88hP0ZVHh46j03-JUB1a4F8J38FQNzmiMInNU0gltkG3xI5jYqIo-FnfNSIzoiObaSPyblHt3XE2ChHLT4Tx4uASVUXucVVMz1w6VHE-EIkVVDPp_vU__eCxp5F_F8VlrCJNQqMQWuV8K4eDx0zcPKQ1_703SKbhNJSrE7sOOph_vtaxRe0a-Ik6CGkRfcJdw",
+      "use": "sig"
+    }
+  ]
+}

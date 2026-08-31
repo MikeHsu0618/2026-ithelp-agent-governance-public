@@ -1,0 +1,13 @@
+{
+  "encoded_tokens_persisted": false,
+  "fixture_hash": "sha256:a995bdcab3593ba9914abeb160f8fe6109ed7f1bb005e6bc4fbdfa4c3394cc9c",
+  "generated_at": "2026-08-19T03:32:32Z",
+  "lab": "02-identity-boundary",
+  "matched": 7,
+  "private_key_persisted": false,
+  "pyjwt_version": "2.13.0",
+  "python_version": "3.14.5",
+  "run_id": "20260819T033232Z-af32958a",
+  "slice": "day-08-token-validation",
+  "total": 7
+}

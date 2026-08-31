@@ -1,0 +1,71 @@
+{
+  "matched": 7,
+  "results": [
+    {
+      "allowed": true,
+      "case_id": "valid_access",
+      "code": "ALLOW",
+      "expected_allowed": true,
+      "expected_code": "ALLOW",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "allowed": false,
+      "case_id": "wrong_issuer",
+      "code": "ISSUER_MISMATCH",
+      "expected_allowed": false,
+      "expected_code": "ISSUER_MISMATCH",
+      "matched": true,
+      "stage": "claims"
+    },
+    {
+      "allowed": false,
+      "case_id": "wrong_audience",
+      "code": "AUDIENCE_MISMATCH",
+      "expected_allowed": false,
+      "expected_code": "AUDIENCE_MISMATCH",
+      "matched": true,
+      "stage": "claims"
+    },
+    {
+      "allowed": false,
+      "case_id": "expired_access",
+      "code": "TOKEN_EXPIRED",
+      "expected_allowed": false,
+      "expected_code": "TOKEN_EXPIRED",
+      "matched": true,
+      "stage": "claims"
+    },
+    {
+      "allowed": false,
+      "case_id": "missing_scope",
+      "code": "SCOPE_MISSING",
+      "expected_allowed": false,
+      "expected_code": "SCOPE_MISSING",
+      "matched": true,
+      "stage": "policy"
+    },
+    {
+      "allowed": false,
+      "case_id": "access_missing_team",
+      "code": "CLAIM_MISSING",
+      "expected_allowed": false,
+      "expected_code": "CLAIM_MISSING",
+      "matched": true,
+      "stage": "policy"
+    },
+    {
+      "allowed": false,
+      "case_id": "id_token_has_team",
+      "code": "TOKEN_TYPE_INVALID",
+      "expected_allowed": false,
+      "expected_code": "TOKEN_TYPE_INVALID",
+      "matched": true,
+      "stage": "header"
+    }
+  ],
+  "run_dir": "artifacts/20260819T033232Z-af32958a",
+  "run_id": "20260819T033232Z-af32958a",
+  "total": 7
+}

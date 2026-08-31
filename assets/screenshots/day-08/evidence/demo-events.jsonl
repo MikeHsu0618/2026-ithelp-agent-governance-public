@@ -1,0 +1,7 @@
+{"case_id": "valid_access", "decision": "ALLOW", "decision_code": "ALLOW", "event_type": "validation.decision", "matched_expected": true, "stage": "complete", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "wrong_issuer", "decision": "DENY", "decision_code": "ISSUER_MISMATCH", "event_type": "validation.decision", "matched_expected": true, "stage": "claims", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "wrong_audience", "decision": "DENY", "decision_code": "AUDIENCE_MISMATCH", "event_type": "validation.decision", "matched_expected": true, "stage": "claims", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "expired_access", "decision": "DENY", "decision_code": "TOKEN_EXPIRED", "event_type": "validation.decision", "matched_expected": true, "stage": "claims", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "missing_scope", "decision": "DENY", "decision_code": "SCOPE_MISSING", "event_type": "validation.decision", "matched_expected": true, "stage": "policy", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "access_missing_team", "decision": "DENY", "decision_code": "CLAIM_MISSING", "event_type": "validation.decision", "matched_expected": true, "stage": "policy", "timestamp": "2026-08-19T03:32:32Z"}
+{"case_id": "id_token_has_team", "decision": "DENY", "decision_code": "TOKEN_TYPE_INVALID", "event_type": "validation.decision", "matched_expected": true, "stage": "header", "timestamp": "2026-08-19T03:32:32Z"}

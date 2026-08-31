@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MikeHsu0618/2026-ithelp-agent-governance/raw/main/labs/02-identity-boundary/src/identity_boundary/schemas/delegation-context-v0.1.schema.json",
+  "title": "Delegation Context v0.1",
+  "description": "A queryable actor chain for human, service, agent, workload, credential, and target context.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "trace_id",
+    "timestamp",
+    "flow_kind",
+    "actor_chain",
+    "credential",
+    "target"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "delegation-context/v0.1"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt-[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "not": {
+        "const": "00000000000000000000000000000000"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "flow_kind": {
+      "enum": ["HUMAN_DELEGATED", "SERVICE_AUTONOMOUS", "AGENT_TO_AGENT"]
+    },
+    "actor_chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human", "service", "agents", "workload"],
+      "properties": {
+        "human": {
+          "$ref": "#/$defs/identitySlot"
+        },
+        "service": {
+          "$ref": "#/$defs/identitySlot"
+        },
+        "agents": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/agentIdentity"
+          },
+          "contains": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "const": "EXECUTING"
+              }
+            },
+            "required": ["role"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        "workload": {
+          "$ref": "#/$defs/identitySlot"
+        }
+      }
+    },
+    "credential": {
+      "$ref": "#/$defs/credentialContext"
+    },
+    "target": {
+      "$ref": "#/$defs/targetContext"
+    }
+  },
+  "$defs": {
+    "evidenceLevel": {
+      "enum": ["VERIFIED", "ASSERTED", "CONTEXT_ONLY"]
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^\\S+$"
+    },
+    "presentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "principal", "evidence_source", "evidence_level"],
+      "properties": {
+        "state": {
+          "const": "PRESENT"
+        },
+        "principal": {
+          "$ref": "#/$defs/principal"
+        },
+        "evidence_source": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/evidenceLevel"
+        }
+      }
+    },
+    "absentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": {
+          "enum": ["UNKNOWN", "NOT_APPLICABLE"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 240
+        }
+      }
+    },
+    "identitySlot": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/presentIdentity"
+        },
+        {
+          "$ref": "#/$defs/absentIdentity"
+        }
+      ]
+    },
+    "agentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "principal",
+        "version",
+        "role",
+        "evidence_source",
+        "evidence_level"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "principal": {
+          "$ref": "#/$defs/principal"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "role": {
+          "enum": ["DELEGATING", "EXECUTING"]
+        },
+        "evidence_source": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/evidenceLevel"
+        }
+      }
+    },
+    "credentialContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "issuer",
+        "subject",
+        "client_id",
+        "audiences",
+        "fingerprint"
+      ],
+      "properties": {
+        "type": {
+          "const": "OAUTH_ACCESS_TOKEN"
+        },
+        "issuer": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 240
+        },
+        "subject": {
+          "$ref": "#/$defs/principal"
+        },
+        "client_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "audiences": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 240
+          }
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "targetContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource", "action"],
+      "properties": {
+        "resource": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 240
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._:-]{1,119}$"
+        }
+      }
+    }
+  }
+}

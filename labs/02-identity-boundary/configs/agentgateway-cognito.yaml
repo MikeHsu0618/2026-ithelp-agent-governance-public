@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+# Validated with agentgateway v1.4.1. Replace every Lab value before deployment.
+mcp:
+  port: 3000
+  policies:
+    mcpAuthentication:
+      mode: strict
+      issuer: https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_LabPool
+      # agentgateway v1.4.1 validates aud only when the claim is present
+      # because aud is intentionally absent from requiredClaims below.
+      audiences:
+        - https://observability.lab.example/mcp
+      jwks:
+        # Lab validation uses a committed public key only. Production replaces
+        # this with <Cognito issuer>/.well-known/jwks.json and tests rotation.
+        file: /config/cognito-jwks.json
+      jwtValidationOptions:
+        # Human tokens carry aud/sub. Cognito Client Credentials cannot use
+        # resource binding, so the shared authentication layer requires only
+        # claims common to both paths. CEL below applies the conditional rules.
+        requiredClaims:
+          - exp
+          - iss
+      resourceMetadata:
+        resource: https://observability.lab.example/mcp
+        scopesSupported:
+          - platform/observability.query
+        bearerMethodsSupported:
+          - header
+    mcpAuthorization:
+      rules:
+        # Human: public PKCE client, resource-bound token, and team claim.
+        - >-
+          jwt.client_id == "sre-console" &&
+          has(jwt.sub) &&
+          jwt.aud == "https://observability.lab.example/mcp" &&
+          jwt.scope.split(" ").exists(s, s == "platform/observability.query")
+        # M2M: confidential app client. client_id is the machine actor;
+        # any sub-like claim must never be reclassified as a Human identity.
+        - >-
+          jwt.client_id == "sre-scheduler" &&
+          !has(jwt.aud) &&
+          jwt.scope.split(" ").exists(s, s == "platform/observability.query")
+  targets:
+    - name: observability
+      stdio:
+        cmd: npx
+        args:
+          - "-y"
+          - "@modelcontextprotocol/server-everything@2026.8.18"

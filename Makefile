@@ -1,6 +1,8 @@
 LAB01 := $(CURDIR)/labs/01-unsafe-agent
+LAB02 := $(CURDIR)/labs/02-identity-boundary
 
 .PHONY: lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
+	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-down \
 	lab-03-check lab-03-fixture lab-03-live
 
 lab-01-up:
@@ -38,3 +40,19 @@ lab-01-replay:
 
 lab-01-down:
 	uv run --directory "$(LAB01)" unsafe-agent clean --lab-root .
+
+lab-02-up:
+	uv sync --directory "$(LAB02)" --all-groups
+
+lab-02-test:
+	uv run --directory "$(LAB02)" pytest -q
+
+lab-02-check: lab-02-test
+	uv run --directory "$(LAB02)" ruff check .
+	uv run --directory "$(LAB02)" ruff format --check .
+
+lab-02-demo:
+	uv run --directory "$(LAB02)" identity-boundary run
+
+lab-02-down:
+	uv run --directory "$(LAB02)" identity-boundary clean --lab-root "$(LAB02)"

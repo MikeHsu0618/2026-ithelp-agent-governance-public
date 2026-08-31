@@ -13,19 +13,24 @@
 - [閱讀 Day 5 文章](articles/day-05/article.md)
 - [閱讀 Day 6 文章](articles/day-06/article.md)
 - [閱讀 Day 7 文章](articles/day-07/article.md)
+- [閱讀 Day 8 文章](articles/day-08/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
 - [下載 Day 6 Identity Center 組織選型 Decision Record](articles/day-06/identity-center-decision-matrix.md)
 - [下載 Day 7 Human／Service／Agent／Workload Identity Flow Matrix](articles/day-07/identity-flow-matrix.md)
+- [下載 Day 8 Token Claim Boundary](articles/day-08/token-claim-boundary.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
-- [查看 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
+- [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
+- [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
+- [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 
 文章第一行就是標題，不含編輯 metadata；圖片與 Lab 連結也能離開 GitHub 單獨使用，因此可以直接貼進 iT 邦幫忙編輯器。
 
 ## Labs
 
 - [Day 1–5｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization、Delegation evidence 與治理四問盤點。
+- [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
@@ -36,6 +41,8 @@ make lab-01-check
 make lab-01-fixture
 make lab-03-check
 make lab-03-fixture
+make lab-02-check
+make lab-02-demo
 ```
 
 需要 live model 或 container 的步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。
