@@ -38,7 +38,7 @@ MCP request             PASS
 
 |  | Keycloak | Amazon Cognito User Pools |
 | --- | --- | --- |
-| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 定位 | 開源的 Identity and Access Management server，由採用者部署與操作 | AWS 受管的 user directory 與 OIDC provider |
 | 控制面 | realm、client、role、group、session、identity brokering、user federation、protocol mapper 與 authentication flow | user pool、app client、federation、attribute mapping、resource server 與 OAuth scope |
 | Runtime 責任 | 團隊管理服務、資料庫、cache、HA、升級與復原 | AWS 管理服務 runtime，團隊仍管設定、整合、監控與退出方案 |
@@ -108,7 +108,7 @@ Keycloak 在這裡新增了什麼？          AI 平台使用的 federation、cl
 | Upgrade／rollback | 版本、schema 與 extension 如何測試，失敗退到哪裡？ |
 | Audit／on-call | 登入異常、管理事件與 IdP outage 由誰回應？ |
 
-這份清單不表示每個 Keycloak deployment 都得從跨區多叢集起步。單一叢集也能成立，但 database、cache、backup、upgrade 與 on-call 的責任仍在。可用性要求提高後，load balancer、跨叢集故障模式與更多資料層考量才會跟著展開。Keycloak 官方文件也分開說明 [HA 架構取捨](https://www.keycloak.org/high-availability/introduction)、[distributed cache](https://www.keycloak.org/server/caching) 與 [multi-cluster upgrade](https://www.keycloak.org/high-availability/multi-cluster/upgrades)。
+Keycloak 可以先從單一叢集開始，但 database、cache、backup、upgrade 與 on-call 還是要找到 owner。等可用性要求提高，才需要把 load balancer、跨叢集故障模式與更多資料層設計納入。Keycloak 官方也把這幾個階段分開說明，包括 [HA 架構取捨](https://www.keycloak.org/high-availability/introduction)、[distributed cache](https://www.keycloak.org/server/caching) 與 [multi-cluster upgrade](https://www.keycloak.org/high-availability/multi-cluster/upgrades)。
 
 如果 Keycloak 同時服務多個內外部系統，IT onboarding／offboarding 已經能驅動帳號與權限回收，各下游服務也承諾接進共用 SSO 與角色模型，這份 operating surface 就有機會攤在整個組織上。當時我們的收益主要落在少數 AI 服務，平台團隊卻要先為它們接下接近完整 IdP 的 runtime responsibility。這才是放棄 Keycloak 的主因。
 
@@ -116,7 +116,7 @@ Keycloak 在這裡新增了什麼？          AI 平台使用的 federation、cl
 
 下面這張圖不是在比較誰的功能比較多。兩條技術路徑都已經通過，閱讀重點是 JML 的 owner 有沒有移動，以及平台團隊少了哪些 runtime 工作。
 
-![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07/assets/diagrams/day-06/identity-center-before-after.png)
+![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/diagrams/day-06/identity-center-before-after.png)
 
 換成 Amazon Cognito User Pools 後，request path 仍然要經過 issuer、Gateway 與 MCP Server：
 
@@ -128,11 +128,11 @@ Human／Service
   → MCP Server
 ```
 
-改採 Cognito 後，平台不再操作 Keycloak Pod、Operator、database 與 cache。OIDC service runtime 進入 AWS 的服務邊界，正好對準當時想縮小的維運面。這項選擇也保留了一條界線：企業級 Identity Center 要等 IT、Security 與各服務 owner 對範圍與責任取得共識，並且有足夠人力承接整合時再談，不由 AI 平台靠多部署一套服務先行宣布完成。
+改採 Cognito 後，平台不再操作 Keycloak Pod、Operator、database 與 cache。OIDC service runtime 進入 AWS 的服務邊界，正好對準當時想縮小的維運面。Upstream IdP、attribute／claim mapping、app client、callback URL、scope、token lifetime、Gateway policy、IaC、quota、監控與退出方案仍由平台維護。員工是否存在、屬於哪個群組、何時失效，也依舊以上游企業 IdP 和組織流程為準。
 
-設定責任沒有一起消失。平台仍然要維護 upstream IdP 與 attribute／claim mapping、app client、callback URL、scope、token lifetime、Gateway policy、IaC、quota、監控與退出方案。員工是否存在、屬於哪個群組、何時失效，也依舊以上游企業 IdP 和組織流程為準。
+App client 最後按 flow 拆開，Human 使用 public client 走 Authorization Code + PKCE，M2M 則使用帶有 secret 的 confidential client 走 Client Credentials。AWS 的 [app client 文件](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-client-apps.html) 也要求 client-credentials client 必須有 secret，而且不能同時支援 authorization-code 或 implicit grant。
 
-Human 與 M2M 也不能偷懶塞進同一個 client。我們把 Human 做成 public client，走 Authorization Code + PKCE。M2M 使用有 secret 的 confidential client，走 Client Credentials。AWS 的 [app client 文件](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-client-apps.html) 也要求 client-credentials client 必須有 secret，而且不能同時支援 authorization-code 或 implicit grant。
+企業級 Identity Center 仍要等 IT、Security 與各服務 owner 對範圍與責任取得共識，也要有足夠人力承接整合。這次由 AI 平台採用 Cognito，只處理當下的 OIDC bridge。
 
 把這些責任放回 request path 後，owner 分成四層：
 
@@ -143,11 +143,11 @@ Human 與 M2M 也不能偷懶塞進同一個 client。我們把 Human 做成 pub
 | 這個角色能不能呼叫某個 MCP Tool？ | Agent Gateway policy |
 | Tool 對目標資源能做什麼？ | MCP／Resource Server 最終授權 |
 
-IdP 能發出 role，不表示所有 action／resource policy 都該塞進 IdP。Cognito 幫我們縮小的是 runtime ownership，沒有收走 claim contract、Gateway policy 與 Resource Server authorization。
+Cognito 負責簽發帶有 role／scope 的 token，Gateway 仍依 action 與 resource 執行 policy，MCP／Resource Server 則保留最後一道授權。改用 managed IdP 縮小的是 runtime ownership，claim contract 與下游 authorization 仍然存在。
 
 ## Decision Record：不做功能加權總分
 
-完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07/articles/day-06/identity-center-decision-matrix.md) 放在 repo。文章裡保留最影響這次決策的六列：
+完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r1/articles/day-06/identity-center-decision-matrix.md) 放在 repo。文章裡保留最影響這次決策的六列：
 
 | 決策面 | Keycloak | Cognito | 本次判斷 |
 | --- | --- | --- | --- |

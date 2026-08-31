@@ -34,7 +34,7 @@ hop=2  agent.runtime     client_id=client/sre-agent-runtime
 
 下圖把這四類資訊排成 2×2，共同對應同一條 action path。圖上刻意不畫串聯箭頭，避免讀者把它理解成「Human 依序變成 Service、Agent、Workload」的流水線。
 
-![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 可分 requester 與 approver，Service 與 Agent 可依 hop 或呼叫順序保留多筆，Workload 記錄實際送出 request 的 runtime。四類資訊一起進入 audit，缺少證據時寫 UNKNOWN，本來不存在時才寫 NOT_APPLICABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07/assets/diagrams/day-07/four-identity-slots.png)
+![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 可分 requester 與 approver，Service 與 Agent 可依 hop 或呼叫順序保留多筆，Workload 記錄實際送出 request 的 runtime。四類資訊一起進入 audit，缺少證據時寫 UNKNOWN，本來不存在時才寫 NOT_APPLICABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/diagrams/day-07/four-identity-slots.png)
 
 Human 與完成 client authentication 的 confidential Service，可能在各自的 network hop 成為 authenticated principal。Public client 的 `client_id` 只能說明哪個應用參與登入流程，不能證明它持有 secret。Agent 比較接近邏輯上的決策者，Workload 則是讓那套邏輯實際運作的 process、Pod 或 deployment instance。
 
@@ -105,7 +105,7 @@ Human 委派與排程 Agent 使用相同的四類責任，Human 與 Service 欄�
 | Human 委派 Agent | requester／approver | interactive client + runtime service | 依順序保存 Agent chain | Agent runtime workload |
 | Service 排程 Agent | `NOT_APPLICABLE` | authenticated confidential client | Agent artifact + version | runtime ServiceAccount／attestation |
 
-我把這兩條路徑，加上 Human 直接使用 MCP client 與 Agent 呼叫另一個 A2A Agent，整理成可直接拿去做 design review 的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07/articles/day-07/identity-flow-matrix.md)。完整版會逐欄記錄主要 credential、credential 能證明什麼、decision point 與最低 audit evidence。
+我把這兩條路徑，加上 Human 直接使用 MCP client 與 Agent 呼叫另一個 A2A Agent，整理成可直接拿去做 design review 的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r1/articles/day-07/identity-flow-matrix.md)。完整版會逐欄記錄主要 credential、credential 能證明什麼、decision point 與最低 audit evidence。
 
 Matrix 中的 A2A row 只處理 identity boundary：caller Agent、remote Agent 與中間 coordinator 應依實際順序保存，不能覆寫成最後回應的那一個。Agent Card 可以協助 discovery，卻不會取代 transport credential，也不能單靠一張 Card 證明這次呼叫者是誰。[A2A Protocol Specification v1.0.0](https://github.com/a2aproject/A2A/blob/v1.0.0/docs/specification.md)
 

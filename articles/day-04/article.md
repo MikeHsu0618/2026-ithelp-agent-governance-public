@@ -21,7 +21,7 @@ store.record(
 
 所以 Day 3 只能證明「不在 allowlist 裡的 Tool 會被拒絕」。如果某個 Tool 本來就在清單裡，這段 policy 分不出是誰要求、哪個 Agent 代辦、哪個 workload 拿著 credential 執行，也不知道 action 最後要落到哪個 resource。
 
-> `Lab` Day 4 沿用前一天的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07/labs/01-unsafe-agent/README.md) 與 attack scenario，不另造一套 runtime。檢查焦點從模型是否犯錯，移到現有證據走到 policy 前還剩多少。
+> `Lab` Day 4 沿用前一天的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r1/labs/01-unsafe-agent/README.md) 與 attack scenario，不另造一套 runtime。檢查焦點從模型是否犯錯，移到現有證據走到 policy 前還剩多少。
 
 ## Day 3 的 Policy 只收到 Tool 名稱
 
@@ -67,7 +67,7 @@ Hardy 的案例和這次 Lab 不能做一對一的角色映射，因為前者的
 
 下面這張圖沿著 action 走到 policy checkpoint，檢查四個位置是否一起進入 decision。Tool action 寫在箭頭上，`payments-demo` 只代表 requested target，Lab 的實際結果仍是 safe canary。
 
-![值班工程師要求 SRE Agent 調查 latency。Agent 讀到惡意 Log 後提出 delete_demo_database，Runtime workload 在呼叫 requested target 前經過 Policy checkpoint。現有 policy 只收到 Tool name。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07/assets/diagrams/day-04/confused-deputy-sequence.png)
+![值班工程師要求 SRE Agent 調查 latency。Agent 讀到惡意 Log 後提出 delete_demo_database，Runtime workload 在呼叫 requested target 前經過 Policy checkpoint。現有 policy 只收到 Tool name。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r1/assets/diagrams/day-04/confused-deputy-sequence.png)
 
 後面的文章會固定用四個位置描述一筆 Agent action：
 
@@ -105,7 +105,7 @@ Day 4 先把 policy 與 audit 需要的位置留對，等 Day 7–12 實作這�
 
 ## Decision Table：分開記錄證據狀態
 
-我把現有 Lab 填進 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07/articles/day-04/delegation-decision-table.md)。這次不只寫值，還要標明證據狀態，以及 policy 現在是否看得到：
+我把現有 Lab 填進 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r1/articles/day-04/delegation-decision-table.md)。這次不只寫值，還要標明證據狀態，以及 policy 現在是否看得到：
 
 | Decision input | 現有值 | 證據狀態 | Policy 看得到嗎 |
 | --- | --- | --- | --- |
