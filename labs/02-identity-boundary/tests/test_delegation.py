@@ -25,10 +25,8 @@ def valid_context() -> dict:
                 "evidence_level": "VERIFIED",
             },
             "service": {
-                "state": "PRESENT",
-                "principal": "client/sre-console",
-                "evidence_source": "verified_access_token.client_id",
-                "evidence_level": "CONTEXT_ONLY",
+                "state": "NOT_APPLICABLE",
+                "reason": "human delegated flow has no separate service actor",
             },
             "agents": [
                 {

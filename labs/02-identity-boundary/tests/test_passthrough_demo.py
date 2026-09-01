@@ -60,6 +60,11 @@ def test_audience_bound_token_preserves_full_chain_and_cannot_be_replayed_at_ent
     summary = run_passthrough_demo(tmp_path / "artifacts")
     events = _read_jsonl(summary.run_dir / "events.jsonl")
     by_case = {event["case_id"]: event for event in events}
+    context = json.loads(
+        (summary.run_dir / "contexts" / "audience-bound-downstream.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
     downstream = by_case["audience_bound_downstream"]
     replay = by_case["downstream_token_replay_entry"]
@@ -67,6 +72,12 @@ def test_audience_bound_token_preserves_full_chain_and_cannot_be_replayed_at_ent
 
     assert downstream["human_principal"] == "user/sre-oncaller"
     assert downstream["token_subject"] == "client/sre-investigator-runtime"
+    assert context["actor_chain"]["service"] == {
+        "state": "PRESENT",
+        "principal": "client/sre-investigator-runtime",
+        "evidence_source": "verified_downstream_access_token.client_id",
+        "evidence_level": "VERIFIED",
+    }
     assert downstream["executing_agent"] == "agent/sre-investigator@v1"
     assert downstream["workload_principal"] == "k8s://lab/identity-boundary/sa/sre-agent"
     assert downstream["credential_fingerprint"] != entry["credential_fingerprint"]

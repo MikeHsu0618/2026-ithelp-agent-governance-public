@@ -1,0 +1,57 @@
+{
+  "actor_chain": {
+    "agents": [
+      {
+        "evidence_level": "ASSERTED",
+        "evidence_source": "controlled_deployment_metadata",
+        "principal": "agent/sre-copilot",
+        "role": "DELEGATING",
+        "sequence": 0,
+        "version": "v1"
+      },
+      {
+        "evidence_level": "ASSERTED",
+        "evidence_source": "controlled_deployment_metadata",
+        "principal": "agent/sre-investigator",
+        "role": "EXECUTING",
+        "sequence": 1,
+        "version": "v1"
+      }
+    ],
+    "human": {
+      "evidence_level": "VERIFIED",
+      "evidence_source": "verified_access_token.sub",
+      "principal": "user/sre-oncaller",
+      "state": "PRESENT"
+    },
+    "service": {
+      "reason": "human delegated flow has no separate service actor",
+      "state": "NOT_APPLICABLE"
+    },
+    "workload": {
+      "evidence_level": "ASSERTED",
+      "evidence_source": "kubernetes.serviceaccount",
+      "principal": "k8s://lab/identity-boundary/sa/sre-agent",
+      "state": "PRESENT"
+    }
+  },
+  "credential": {
+    "audiences": [
+      "mcp://lab/observability/query"
+    ],
+    "client_id": "sre-console",
+    "fingerprint": "sha256:5d333c1bd8075ace62ef09e3d8e9ca8153cbe6e4dc51c307ab0806f8fcbd3f3e",
+    "issuer": "https://issuer.lab.example/identity-boundary",
+    "subject": "user/sre-oncaller",
+    "type": "OAUTH_ACCESS_TOKEN"
+  },
+  "event_id": "evt-day09-human-delegated",
+  "flow_kind": "HUMAN_DELEGATED",
+  "schema_version": "delegation-context/v0.1",
+  "target": {
+    "action": "query_logs",
+    "resource": "mcp://lab/observability/query"
+  },
+  "timestamp": "2026-09-01T06:54:24Z",
+  "trace_id": "0af7651916cd43dd8448eb211c80319c"
+}

@@ -119,9 +119,10 @@ def _build_cases(now: datetime) -> tuple[DelegationCase, ...]:
         "state": "UNKNOWN",
         "reason": "upstream agent did not propagate human identity",
     }
-    a2a_unknown["actor_chain"]["service"] = _identity(
-        "client/sre-copilot", "verified_access_token.client_id", "CONTEXT_ONLY"
-    )
+    a2a_unknown["actor_chain"]["service"] = {
+        "state": "NOT_APPLICABLE",
+        "reason": "agent-to-agent flow has no separate service actor",
+    }
     a2a_unknown["actor_chain"]["workload"] = {
         "state": "UNKNOWN",
         "reason": "upstream runtime did not propagate workload identity",
@@ -212,9 +213,10 @@ def _human_delegated_context(now: datetime) -> dict[str, Any]:
         "flow_kind": "HUMAN_DELEGATED",
         "actor_chain": {
             "human": _identity("user/sre-oncaller", "verified_access_token.sub", "VERIFIED"),
-            "service": _identity(
-                "client/sre-console", "verified_access_token.client_id", "CONTEXT_ONLY"
-            ),
+            "service": {
+                "state": "NOT_APPLICABLE",
+                "reason": "human delegated flow has no separate service actor",
+            },
             "agents": [
                 _agent(0, "agent/sre-copilot", "v1", "DELEGATING"),
                 _agent(1, "agent/sre-investigator", "v1", "EXECUTING"),

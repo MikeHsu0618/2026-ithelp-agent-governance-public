@@ -38,8 +38,14 @@ def test_delegation_demo_writes_queryable_safe_evidence(tmp_path: Path) -> None:
     assert manifest["raw_credentials_persisted"] is False
     assert len(events) == 7
     assert events[0]["human_state"] == "PRESENT"
+    assert events[0]["service_state"] == "NOT_APPLICABLE"
     assert events[0]["agent_chain"] == ["agent/sre-copilot@v1", "agent/sre-investigator@v1"]
     assert events[0]["workload_state"] == "PRESENT"
+    assert accepted["actor_chain"]["service"] == {
+        "state": "NOT_APPLICABLE",
+        "reason": "human delegated flow has no separate service actor",
+    }
+    assert accepted["credential"]["client_id"] == "sre-console"
     assert accepted["credential"]["fingerprint"].startswith("sha256:")
 
     all_evidence = "\n".join(

@@ -6,7 +6,7 @@
 
 當時最直覺的解法，是把資料比較完整的 ID token 送給後端。我沒有採用這條捷徑，因為這個 resource 的 contract 要求 OAuth access token。為了多拿一個 claim 改送 ID token，會把「使用者完成登入」和「client 取得 resource access」混在一起，後續連 audience 和 audit 都很難解釋。
 
-我把這個落差縮成可離線重現的 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08/labs/02-identity-boundary/README.md)。公開案例用 `team=platform` 取代實際欄位，其中四筆最能說明問題：
+我把這個落差縮成可離線重現的 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09/labs/02-identity-boundary/README.md)。公開案例用 `team=platform` 取代實際欄位，其中四筆最能說明問題：
 
 ```text
 valid_access          ALLOW  ALLOW
@@ -17,9 +17,9 @@ id_token_has_team     DENY   TOKEN_TYPE_INVALID
 
 七枚 Token 都由同一個本機 issuer 產生，也使用同一把 2048-bit RSA private key 簽署。它們的 signature 都能通過，最後卻只有 `valid_access` 被放行。少了 `team` 的 access token 停在 policy，帶著 `team=platform` 的 ID token 則更早就因 Token type 不符而被拒絕。
 
-![Lab 02 的實際 CLI 結果：七組 Token case 只有 valid_access 被放行，其他案例各自在 header、claims 或 policy 階段被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08/assets/screenshots/day-08/01-jwt-boundary-results.png)
+![Lab 02 的實際 CLI 結果：七組 Token case 只有 valid_access 被放行，其他案例各自在 header、claims 或 policy 階段被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09/assets/screenshots/day-08/01-jwt-boundary-results.png)
 
-這張圖保留的是 2026-08-19 完成 Day 8 slice 時的實際輸出，當時有 24 個測試。Lab 後來繼續承接 Day 9 到 Day 12，目前從 repo root 執行 `make lab-02-check` 會跑完整的 72 個測試。原始 JSON summary、hash 和圖片製作方式都放在 [Day 8 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08/assets/screenshots/day-08/evidence.md)，指令和結果不需要從圖片上抄。
+這張圖保留的是 2026-08-19 完成 Day 8 slice 時的實際輸出，當時有 24 個測試。Lab 後來繼續承接 Day 9 到 Day 12，目前從 repo root 執行 `make lab-02-check` 會跑完整的 72 個測試。原始 JSON summary、hash 和圖片製作方式都放在 [Day 8 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09/assets/screenshots/day-08/evidence.md)，指令和結果不需要從圖片上抄。
 
 ## 簽章正確，Token 的用途仍可能不對
 
@@ -33,7 +33,7 @@ OIDC 和 OAuth 又各自多回答了一層問題。OpenID Connect 的 ID Token �
 
 Lab 02 把 Token 從「看得懂」走到「可以交給 policy」拆成四道 gate。每一道都留下穩定的拒絕 stage 和 decision code，這樣 on-call 才能分辨問題出在 key、registered claim、OAuth context，還是應用 policy。
 
-![一枚尚未可信的 JWT 依序通過 Header 與 Key、Signature 與 Registered Claims、OAuth Context、Application Policy Inputs。任何一道失敗都回傳對應的拒絕碼，全部通過後 claims 才能進入 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08/assets/diagrams/day-08/token-validation-gates.png)
+![一枚尚未可信的 JWT 依序通過 Header 與 Key、Signature 與 Registered Claims、OAuth Context、Application Policy Inputs。任何一道失敗都回傳對應的拒絕碼，全部通過後 claims 才能進入 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09/assets/diagrams/day-08/token-validation-gates.png)
 
 第一道檢查 header 和 key。Server 固定允許 `RS256`，`kid` 只能到預先信任的 JWKS 裡找 key，也不會跟著 Token 內的 `jku` 去抓任意 URL。Lab 使用 `at+jwt` 和 `id+jwt` 做 explicit typing，讓 access token 和 ID token 從入口就走不同規則。
 
@@ -78,7 +78,7 @@ access_missing_team    → CLAIM_MISSING  (Application policy)
 
 對外 response 可以維持模糊，不必透露內部政策。內部 audit event 至少要留下拒絕 stage 和 stable code，否則 on-call 很難判斷該找 IdP claim mapping、OAuth client、JWKS rotation，還是應用 policy 的 owner。
 
-我另外整理了一份 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08/articles/day-08/token-claim-boundary.md)，逐欄記錄每個 claim 能證明什麼，又不能拿來代替什麼。像 `sub` 可以識別 issuer namespace 裡的 subject，卻不能直接複製成 Day 7 的 Human、Service、Agent 和 Workload 四種責任。
+我另外整理了一份 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09/articles/day-08/token-claim-boundary.md)，逐欄記錄每個 claim 能證明什麼，又不能拿來代替什麼。像 `sub` 可以識別 issuer namespace 裡的 subject，卻不能直接複製成 Day 7 的 Human、Service、Agent 和 Workload 四種責任。
 
 ## ID Token 有資料，不代表適合拿來打 API
 

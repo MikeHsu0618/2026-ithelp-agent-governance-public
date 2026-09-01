@@ -1,0 +1,13 @@
+{
+  "fixture_hash": "sha256:8c6f89aab0a4161f1211130b88d74c665cb9c85ed932d2647d6574a91396fe96",
+  "generated_at": "2026-09-01T06:54:24Z",
+  "jsonschema_version": "4.26.0",
+  "lab": "02-identity-boundary",
+  "matched": 7,
+  "python_version": "3.14.5",
+  "raw_credentials_persisted": false,
+  "run_id": "day09-20260901T065424Z-ba745470",
+  "slice": "day-09-delegation-context",
+  "synthetic_identities_only": true,
+  "total": 7
+}

@@ -1,0 +1,71 @@
+{
+  "matched": 7,
+  "results": [
+    {
+      "accepted": true,
+      "case_id": "human_delegated",
+      "code": "ACCEPT",
+      "expected_accepted": true,
+      "expected_code": "ACCEPT",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "accepted": true,
+      "case_id": "scheduled_service",
+      "code": "ACCEPT",
+      "expected_accepted": true,
+      "expected_code": "ACCEPT",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "accepted": true,
+      "case_id": "a2a_unknown_workload",
+      "code": "ACCEPT",
+      "expected_accepted": true,
+      "expected_code": "ACCEPT",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "accepted": false,
+      "case_id": "missing_workload_slot",
+      "code": "REQUIRED_FIELD_MISSING",
+      "expected_accepted": false,
+      "expected_code": "REQUIRED_FIELD_MISSING",
+      "matched": true,
+      "stage": "schema"
+    },
+    {
+      "accepted": false,
+      "case_id": "human_null",
+      "code": "NULL_NOT_ALLOWED",
+      "expected_accepted": false,
+      "expected_code": "NULL_NOT_ALLOWED",
+      "matched": true,
+      "stage": "schema"
+    },
+    {
+      "accepted": false,
+      "case_id": "duplicate_agent_sequence",
+      "code": "AGENT_SEQUENCE_INVALID",
+      "expected_accepted": false,
+      "expected_code": "AGENT_SEQUENCE_INVALID",
+      "matched": true,
+      "stage": "semantics"
+    },
+    {
+      "accepted": false,
+      "case_id": "actor_only",
+      "code": "REQUIRED_FIELD_MISSING",
+      "expected_accepted": false,
+      "expected_code": "REQUIRED_FIELD_MISSING",
+      "matched": true,
+      "stage": "schema"
+    }
+  ],
+  "run_dir": "artifacts/day09-20260901T065424Z-ba745470",
+  "run_id": "day09-20260901T065424Z-ba745470",
+  "total": 7
+}

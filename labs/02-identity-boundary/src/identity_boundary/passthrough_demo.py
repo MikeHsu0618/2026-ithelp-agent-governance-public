@@ -298,7 +298,9 @@ def _build_contexts(
                 "VERIFIED",
             ),
             "service": _identity(
-                "client/sre-console", "verified_upstream_access_token.client_id", "CONTEXT_ONLY"
+                "client/sre-investigator-runtime",
+                "verified_downstream_access_token.client_id",
+                "VERIFIED",
             ),
             "agents": [
                 _agent(0, "agent/sre-copilot", "v1", "DELEGATING"),

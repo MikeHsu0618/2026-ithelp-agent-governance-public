@@ -208,6 +208,8 @@ Day 8 slice 完成時為 24 passed，branch coverage 87.07%，並已包含錯 cl
 
 Day 9 slice 完成時，完整 Lab 為 37 passed，branch coverage 89.86%。該 slice 額外測試 schema package data、opaque subject、W3C trace ID、explicit identity states、Agent order／role、safe evidence、CLI 與 raw credential 欄位拒絕。
 
+Human delegated 與純 A2A case 沒有獨立 Service actor，因此 `service` slot 為 `NOT_APPLICABLE`。Public OAuth `client_id` 留在 credential context；只有通過 client authentication 的 M2M flow 才把 Service principal 寫進 `service`。
+
 ## Day 10 Token Passthrough 執行結果
 
 | Case | Decision | Decision code | Attribution |
