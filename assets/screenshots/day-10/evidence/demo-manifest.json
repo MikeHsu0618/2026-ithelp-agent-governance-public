@@ -1,0 +1,16 @@
+{
+  "fixture_hash": "sha256:e3b4bb3587ce8e5458f9cbfcf6aaa262e9d6a0440cb0d63022b0c55e5afed376",
+  "generated_at": "2026-09-01T06:59:11Z",
+  "jsonschema_version": "4.26.0",
+  "lab": "02-identity-boundary",
+  "matched": 7,
+  "private_key_persisted": false,
+  "pyjwt_version": "2.13.0",
+  "python_version": "3.14.5",
+  "raw_credentials_persisted": false,
+  "run_id": "day10-20260901T065911Z-024490f2",
+  "same_user_token_reused_across_hops": true,
+  "slice": "day-10-token-passthrough",
+  "synthetic_identities_only": true,
+  "total": 7
+}

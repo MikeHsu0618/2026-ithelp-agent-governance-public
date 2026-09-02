@@ -1,0 +1,59 @@
+{
+  "actor_chain": {
+    "agents": [
+      {
+        "evidence_level": "ASSERTED",
+        "evidence_source": "controlled_deployment_metadata",
+        "principal": "agent/sre-copilot",
+        "role": "DELEGATING",
+        "sequence": 0,
+        "version": "v1"
+      },
+      {
+        "evidence_level": "ASSERTED",
+        "evidence_source": "controlled_deployment_metadata",
+        "principal": "agent/sre-investigator",
+        "role": "EXECUTING",
+        "sequence": 1,
+        "version": "v1"
+      }
+    ],
+    "human": {
+      "evidence_level": "VERIFIED",
+      "evidence_source": "verified_upstream_access_token.sub",
+      "principal": "user/sre-oncaller",
+      "state": "PRESENT"
+    },
+    "service": {
+      "evidence_level": "VERIFIED",
+      "evidence_source": "verified_downstream_access_token.client_id",
+      "principal": "client/sre-investigator-runtime",
+      "state": "PRESENT"
+    },
+    "workload": {
+      "evidence_level": "ASSERTED",
+      "evidence_source": "kubernetes.serviceaccount",
+      "principal": "k8s://lab/identity-boundary/sa/sre-agent",
+      "state": "PRESENT"
+    }
+  },
+  "credential": {
+    "audiences": [
+      "https://observability.lab.example/mcp"
+    ],
+    "client_id": "sre-investigator-runtime",
+    "fingerprint": "sha256:75965e2b0cac514be5bc46ab979d9a8dc1f39278f192f34454d1dcef02d5123b",
+    "issuer": "https://issuer.lab.example/identity-boundary",
+    "subject": "client/sre-investigator-runtime",
+    "type": "OAUTH_ACCESS_TOKEN"
+  },
+  "event_id": "evt-day10-audience-bound-downstream",
+  "flow_kind": "HUMAN_DELEGATED",
+  "schema_version": "delegation-context/v0.1",
+  "target": {
+    "action": "query_logs",
+    "resource": "https://observability.lab.example/mcp"
+  },
+  "timestamp": "2026-09-01T06:59:11Z",
+  "trace_id": "0af7651916cd43dd8448eb211c80319c"
+}

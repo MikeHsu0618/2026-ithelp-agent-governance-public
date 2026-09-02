@@ -15,6 +15,7 @@
 - [閱讀 Day 7 文章](articles/day-07/article.md)
 - [閱讀 Day 8 文章](articles/day-08/article.md)
 - [閱讀 Day 9 文章](articles/day-09/article.md)
+- [閱讀 Day 10 文章](articles/day-10/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -22,9 +23,11 @@
 - [下載 Day 7 Human／Service／Agent／Workload Identity Flow Matrix](articles/day-07/identity-flow-matrix.md)
 - [下載 Day 8 Token Claim Boundary](articles/day-08/token-claim-boundary.md)
 - [下載 Day 9 Delegation Context Field Guide](articles/day-09/delegation-context-field-guide.md)
+- [下載 Day 10 Token Passthrough Audit Reading Guide](articles/day-10/token-passthrough-audit-guide.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
+- [直接執行 Day 10 Token Passthrough Lab](labs/02-identity-boundary/README.md)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 
@@ -47,6 +50,7 @@ make lab-03-fixture
 make lab-02-check
 make lab-02-demo
 make lab-02-delegation
+make lab-02-passthrough
 ```
 
 需要 live model 或 container 的步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。

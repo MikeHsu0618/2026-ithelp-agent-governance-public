@@ -1,0 +1,85 @@
+{
+  "matched": 7,
+  "results": [
+    {
+      "attribution": "TOKEN_SUBJECT_AT_ENTRY",
+      "case_id": "user_to_entry_resource",
+      "code": "ALLOW",
+      "decision": "ALLOW",
+      "expected_attribution": "TOKEN_SUBJECT_AT_ENTRY",
+      "expected_code": "ALLOW",
+      "expected_decision": "ALLOW",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "attribution": "NOT_EVALUATED",
+      "case_id": "passthrough_to_tool_strict",
+      "code": "AUDIENCE_MISMATCH",
+      "decision": "DENY",
+      "expected_attribution": "NOT_EVALUATED",
+      "expected_code": "AUDIENCE_MISMATCH",
+      "expected_decision": "DENY",
+      "matched": true,
+      "stage": "claims"
+    },
+    {
+      "attribution": "COLLAPSED_TO_TOKEN_SUBJECT",
+      "case_id": "passthrough_shared_audience",
+      "code": "ALLOW",
+      "decision": "ALLOW",
+      "expected_attribution": "COLLAPSED_TO_TOKEN_SUBJECT",
+      "expected_code": "ALLOW",
+      "expected_decision": "ALLOW",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "attribution": "FULL_CHAIN",
+      "case_id": "audience_bound_downstream",
+      "code": "ALLOW",
+      "decision": "ALLOW",
+      "expected_attribution": "FULL_CHAIN",
+      "expected_code": "ALLOW",
+      "expected_decision": "ALLOW",
+      "matched": true,
+      "stage": "complete"
+    },
+    {
+      "attribution": "NOT_EVALUATED",
+      "case_id": "downstream_token_replay_entry",
+      "code": "AUDIENCE_MISMATCH",
+      "decision": "DENY",
+      "expected_attribution": "NOT_EVALUATED",
+      "expected_code": "AUDIENCE_MISMATCH",
+      "expected_decision": "DENY",
+      "matched": true,
+      "stage": "claims"
+    },
+    {
+      "attribution": "NOT_EVALUATED",
+      "case_id": "missing_delegation_context",
+      "code": "DELEGATION_CONTEXT_REQUIRED",
+      "decision": "DENY",
+      "expected_attribution": "NOT_EVALUATED",
+      "expected_code": "DELEGATION_CONTEXT_REQUIRED",
+      "expected_decision": "DENY",
+      "matched": true,
+      "stage": "context"
+    },
+    {
+      "attribution": "NOT_EVALUATED",
+      "case_id": "mismatched_delegation_context",
+      "code": "DELEGATION_CONTEXT_MISMATCH",
+      "decision": "DENY",
+      "expected_attribution": "NOT_EVALUATED",
+      "expected_code": "DELEGATION_CONTEXT_MISMATCH",
+      "expected_decision": "DENY",
+      "matched": true,
+      "stage": "context"
+    }
+  ],
+  "run_dir": "artifacts/day10-20260901T065911Z-024490f2",
+  "run_id": "day10-20260901T065911Z-024490f2",
+  "total": 7
+}
