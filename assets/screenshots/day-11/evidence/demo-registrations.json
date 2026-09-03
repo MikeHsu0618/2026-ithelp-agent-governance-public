@@ -1,0 +1,52 @@
+{
+  "clients": [
+    {
+      "allowed_grants": [
+        "authorization_code"
+      ],
+      "allowed_resources": [
+        "https://agent.lab.example/mcp"
+      ],
+      "allowed_scopes": [
+        "agent.delegate",
+        "observability.query"
+      ],
+      "client_authentication": "none",
+      "client_id": "sre-console",
+      "client_type": "public",
+      "redirect_uris": [
+        "http://127.0.0.1:8765/callback"
+      ]
+    },
+    {
+      "allowed_grants": [
+        "token_exchange"
+      ],
+      "allowed_resources": [
+        "https://observability.lab.example/mcp"
+      ],
+      "allowed_scopes": [
+        "observability.query"
+      ],
+      "client_authentication": "configured",
+      "client_id": "sre-investigator-runtime",
+      "client_type": "confidential",
+      "redirect_uris": []
+    },
+    {
+      "allowed_grants": [
+        "client_credentials"
+      ],
+      "allowed_resources": [
+        "https://observability.lab.example/mcp"
+      ],
+      "allowed_scopes": [
+        "observability.query"
+      ],
+      "client_authentication": "configured",
+      "client_id": "sre-scheduler",
+      "client_type": "confidential",
+      "redirect_uris": []
+    }
+  ]
+}

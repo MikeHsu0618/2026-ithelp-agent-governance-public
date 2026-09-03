@@ -1,0 +1,13 @@
+{
+  "act": {
+    "sub": "client/sre-investigator-runtime"
+  },
+  "aud": "https://observability.lab.example/mcp",
+  "client_id": "sre-investigator-runtime",
+  "exp": 1788404476,
+  "iat": 1788404416,
+  "iss": "https://issuer.lab.example/identity-boundary",
+  "scope": "observability.query",
+  "sub": "user/sre-oncaller",
+  "token_use": "access"
+}

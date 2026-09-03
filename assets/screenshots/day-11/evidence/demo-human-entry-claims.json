@@ -1,0 +1,14 @@
+{
+  "aud": "https://agent.lab.example/mcp",
+  "client_id": "sre-console",
+  "exp": 1788404715,
+  "iat": 1788404415,
+  "iss": "https://issuer.lab.example/identity-boundary",
+  "may_act": {
+    "sub": "client/sre-investigator-runtime"
+  },
+  "scope": "agent.delegate observability.query",
+  "sub": "user/sre-oncaller",
+  "team": "platform",
+  "token_use": "access"
+}

@@ -1,0 +1,17 @@
+{
+  "authorization_codes_persisted": false,
+  "client_secrets_persisted": false,
+  "fixture_hash": "483c9b5f8f8e3b717f7251de47265714c72e033869b05c1b3d5a0708b81daf14",
+  "generated_at": "2026-09-03T03:00:15Z",
+  "lab": "02-identity-boundary",
+  "matched": 9,
+  "pkce_verifiers_persisted": false,
+  "private_key_persisted": false,
+  "pyjwt_version": "2.13.0",
+  "python_version": "3.14.5",
+  "raw_credentials_persisted": false,
+  "run_id": "day11-20260903T030015Z-ac212b5d",
+  "slice": "day-11-oauth-flows",
+  "synthetic_identities_only": true,
+  "total": 9
+}

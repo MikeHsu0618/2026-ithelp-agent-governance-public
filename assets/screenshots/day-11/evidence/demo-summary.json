@@ -1,0 +1,149 @@
+{
+  "matched": 9,
+  "results": [
+    {
+      "actor": "user/sre-oncaller",
+      "case_id": "pkce_human_success",
+      "code": "TOKEN_ISSUED",
+      "decision": "ISSUE",
+      "expected_code": "TOKEN_ISSUED",
+      "expected_decision": "ISSUE",
+      "flow": "PKCE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://agent.lab.example/mcp",
+      "scopes": [
+        "agent.delegate"
+      ],
+      "stage": "complete",
+      "subject": "user/sre-oncaller"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "pkce_callback_mismatch",
+      "code": "REDIRECT_URI_MISMATCH",
+      "decision": "DENY",
+      "expected_code": "REDIRECT_URI_MISMATCH",
+      "expected_decision": "DENY",
+      "flow": "PKCE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://agent.lab.example/mcp",
+      "scopes": [],
+      "stage": "authorization_request",
+      "subject": "NOT_ISSUED"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "pkce_invalid_scope",
+      "code": "INVALID_SCOPE",
+      "decision": "DENY",
+      "expected_code": "INVALID_SCOPE",
+      "expected_decision": "DENY",
+      "flow": "PKCE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://agent.lab.example/mcp",
+      "scopes": [],
+      "stage": "authorization_request",
+      "subject": "NOT_ISSUED"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "pkce_unregistered_client",
+      "code": "CLIENT_NOT_REGISTERED",
+      "decision": "DENY",
+      "expected_code": "CLIENT_NOT_REGISTERED",
+      "expected_decision": "DENY",
+      "flow": "PKCE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://agent.lab.example/mcp",
+      "scopes": [],
+      "stage": "registration",
+      "subject": "NOT_ISSUED"
+    },
+    {
+      "actor": "client/sre-scheduler",
+      "case_id": "client_credentials_success",
+      "code": "TOKEN_ISSUED",
+      "decision": "ISSUE",
+      "expected_code": "TOKEN_ISSUED",
+      "expected_decision": "ISSUE",
+      "flow": "CLIENT_CREDENTIALS",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://observability.lab.example/mcp",
+      "scopes": [
+        "observability.query"
+      ],
+      "stage": "complete",
+      "subject": "client/sre-scheduler"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "client_credentials_public_client",
+      "code": "UNAUTHORIZED_CLIENT",
+      "decision": "DENY",
+      "expected_code": "UNAUTHORIZED_CLIENT",
+      "expected_decision": "DENY",
+      "flow": "CLIENT_CREDENTIALS",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://agent.lab.example/mcp",
+      "scopes": [],
+      "stage": "client_authentication",
+      "subject": "NOT_ISSUED"
+    },
+    {
+      "actor": "client/sre-investigator-runtime",
+      "case_id": "token_exchange_success",
+      "code": "TOKEN_ISSUED",
+      "decision": "ISSUE",
+      "expected_code": "TOKEN_ISSUED",
+      "expected_decision": "ISSUE",
+      "flow": "TOKEN_EXCHANGE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://observability.lab.example/mcp",
+      "scopes": [
+        "observability.query"
+      ],
+      "stage": "complete",
+      "subject": "user/sre-oncaller"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "token_exchange_invalid_target",
+      "code": "INVALID_TARGET",
+      "decision": "DENY",
+      "expected_code": "INVALID_TARGET",
+      "expected_decision": "DENY",
+      "flow": "TOKEN_EXCHANGE",
+      "matched": true,
+      "reason_code": "NOT_APPLICABLE",
+      "resource": "https://billing.lab.example/mcp",
+      "scopes": [],
+      "stage": "token_request",
+      "subject": "NOT_ISSUED"
+    },
+    {
+      "actor": "NOT_ISSUED",
+      "case_id": "token_exchange_wrong_subject_audience",
+      "code": "SUBJECT_TOKEN_INVALID",
+      "decision": "DENY",
+      "expected_code": "SUBJECT_TOKEN_INVALID",
+      "expected_decision": "DENY",
+      "flow": "TOKEN_EXCHANGE",
+      "matched": true,
+      "reason_code": "AUDIENCE_MISMATCH",
+      "resource": "https://observability.lab.example/mcp",
+      "scopes": [],
+      "stage": "subject_token",
+      "subject": "NOT_ISSUED"
+    }
+  ],
+  "run_dir": "artifacts/day11-20260903T030015Z-ac212b5d",
+  "run_id": "day11-20260903T030015Z-ac212b5d",
+  "total": 9
+}

@@ -1,6 +1,6 @@
 # Lab 02 — Identity Boundary
 
-> 狀態：Day 8–12 `lab-green`。2026-08-23 已跑通 7 組合成 JWT、7 組 Delegation Context、7 組 Token passthrough、9 組 OAuth flow 與 9 組 Cognito dual-path case，完整 Lab 為 72 tests、branch coverage 91.17%。
+> 狀態：Day 8–12 `lab-green`。2026-09-03 重新驗證 7 組合成 JWT、7 組 Delegation Context、7 組 Token passthrough、9 組 OAuth flow 與 9 組 Cognito dual-path case，完整 Lab 為 73 tests、branch coverage 90.81%。
 
 這個 Lab 服務 Day 7–12。它不會連到作者的企業 IdP、Cognito User Pool 或 Kubernetes 環境；公開版只使用合成 principal、client、issuer、resource 與每次執行時產生的 RSA key。
 
@@ -38,7 +38,7 @@ Token 驗過以後，同一筆 Tool Call 的 Human、Service、Agent、Workload 
 - 合成 ServiceAccount 與 Agent metadata 標為 `ASSERTED`；本 Lab 沒有宣稱已完成 workload attestation 或 context integrity protection。
 - Day 10 的 downstream token 由本機 issuer 直接簽出，不是 RFC 8693 Token Exchange、On-Behalf-Of 或 Cognito endpoint 的 emulator。
 - Day 11 的 Authorization Server 是 in-memory policy simulator；沒有 HTTP endpoint、browser／consent、`state`／authorization-response `iss`、CIMD fetch、DCR、TLS、refresh token 或 production client authentication。
-- Day 11 實作 RFC 8693 Token Exchange 語意。Microsoft Entra OBO request profile 另外說明，不宣稱兩者 wire-compatible。
+- Day 11 實作 RFC 8693 Token Exchange delegation profile，要求 `subject_token`、`actor_token`、authenticated client 與 `may_act` 綁定。Microsoft Entra OBO request profile 另外說明，不宣稱兩者 wire-compatible。
 - Day 12 是 Cognito-shaped offline contract，不是 live Cognito emulator。Terraform 只通過 provider-schema validation；agentgateway 只通過 v1.4.1 config／JWKS／CEL validation，沒有 AWS apply 或真實 Token call。
 - agentgateway 官方 tested-provider 表沒有 Cognito；公開 config 使用 Resource Server Only，不宣稱 discovery、DCR／CIMD 或 provider adaptation 已解決。
 
@@ -50,7 +50,7 @@ PyJWT:        2.13.0
 cryptography: 50.0.0
 jsonschema:   4.26.0
 pytest:       9.1.1
-Tested:       2026-08-23
+Tested:       2026-09-03
 Terraform:    1.8.2 (AWS provider 6.61.0)
 agentgateway: 1.4.1 (config validation only)
 Git tag:      尚未建立；正式發稿前補上
@@ -120,8 +120,9 @@ Day 11 再回答 downstream token 從哪裡來：
 Scheduler confidential client
   └── Client Credentials ─────────> sub=client/sre-scheduler, aud=tool
 
-值班工程師的 entry token + authenticated Runtime
-  └── RFC 8693 Token Exchange ────> sub=user/sre-oncaller, act=runtime, aud=tool
+值班工程師的 subject token + Runtime actor token + client authentication
+  └── 驗證 may_act 綁定
+       └── RFC 8693 Token Exchange ─> sub=user/sre-oncaller, act=sre-investigator-runtime, aud=tool
 ```
 
 Day 12 把兩條 flow 映射到 Cognito provider contract：
@@ -192,7 +193,7 @@ uv run --directory labs/02-identity-boundary \
 | `access_missing_team` | DENY | DENY | `CLAIM_MISSING` | `policy` |
 | `id_token_has_team` | DENY | DENY | `TOKEN_TYPE_INVALID` | `header` |
 
-Day 8 slice 完成時為 24 passed，branch coverage 87.07%，並已包含錯 client、未知 signing key、非 allowlist 演算法、危險 `kid`、過大 Token、弱 RSA key、marker symlink 與 cleanup ownership 的回歸測試。Lab 後續承接 Day 9–12，目前完整測試為 72 passed，branch coverage 91.17%。
+Day 8 slice 完成時為 24 passed，branch coverage 87.07%，並已包含錯 client、未知 signing key、非 allowlist 演算法、危險 `kid`、過大 Token、弱 RSA key、marker symlink 與 cleanup ownership 的回歸測試。Lab 後續承接 Day 9–12，目前完整測試為 73 passed，branch coverage 90.81%。
 
 ## Day 9 Delegation Context 執行結果
 
@@ -234,11 +235,11 @@ Human delegated 與純 A2A case 沒有獨立 Service actor，因此 `service` sl
 | `pkce_unregistered_client` | PKCE | DENY | `CLIENT_NOT_REGISTERED` | `NOT_ISSUED` |
 | `client_credentials_success` | Client Credentials | ISSUE | `TOKEN_ISSUED` | `client/sre-scheduler` |
 | `client_credentials_public_client` | Client Credentials | DENY | `UNAUTHORIZED_CLIENT` | `NOT_ISSUED` |
-| `token_exchange_success` | Token Exchange | ISSUE | `TOKEN_ISSUED` | `user/sre-oncaller via client/runtime` |
+| `token_exchange_success` | Token Exchange | ISSUE | `TOKEN_ISSUED` | `user/sre-oncaller via client/sre-investigator-runtime` |
 | `token_exchange_invalid_target` | Token Exchange | DENY | `INVALID_TARGET` | `NOT_ISSUED` |
 | `token_exchange_wrong_subject_audience` | Token Exchange | DENY | `SUBJECT_TOKEN_INVALID` | `NOT_ISSUED` |
 
-完整 Lab 現為 62 passed，branch coverage 91.21%。Authorization code、PKCE verifier、client credential、compact JWT 與 private key 都不寫入 Artifact。
+Day 11 slice 完成時，完整共用 Lab 為 62 passed，branch coverage 91.21%。加入後續 Day 12 與 actor-binding regression test 後，目前為 73 passed、branch coverage 90.81%。Authorization code、PKCE verifier、client credential、compact JWT 與 private key 都不寫入 Artifact。
 
 ## Day 12 Cognito Dual Path 執行結果
 
@@ -254,7 +255,7 @@ Human delegated 與純 A2A case 沒有獨立 Service actor，因此 `service` sl
 | `m2m_openid_scope` | M2M | DENY | `INVALID_SCOPE` | token |
 | `m2m_resource_binding` | M2M | DENY | `RESOURCE_BINDING_UNSUPPORTED` | token |
 
-完整 Lab 現為 72 passed，branch coverage 91.17%。M2M fixture 不合成 resource-bound `aud`，audit Human 為 `NOT_APPLICABLE`，machine actor 由 verified `client_id` 取得。Terraform `validate` 與 agentgateway v1.4.1 `--validate-only` 另外通過；兩者都沒有被標成 live AWS／Cognito integration PASS。
+Day 12 slice 完成時，完整 Lab 為 72 passed，branch coverage 91.17%。加入 Day 11 的 actor-binding regression test 後，目前為 73 passed、branch coverage 90.81%。M2M fixture 不合成 resource-bound `aud`，audit Human 為 `NOT_APPLICABLE`，machine actor 由 verified `client_id` 取得。Terraform `validate` 與 agentgateway v1.4.1 `--validate-only` 另外通過；兩者都沒有被標成 live AWS／Cognito integration PASS。
 
 ## Expected terminal output
 
@@ -374,10 +375,11 @@ Day 11 run 另外保存：
 artifacts/<day11-run-id>/registrations.json
 artifacts/<day11-run-id>/credential-fingerprints.json
 artifacts/<day11-run-id>/tokens/issuer-input/human-entry.json
+artifacts/<day11-run-id>/tokens/issuer-input/runtime-actor.json
 artifacts/<day11-run-id>/tokens/issuer-output/{pkce,client-credentials,token-exchange}.json
 ```
 
-Registration snapshot 只保存 client type、redirect URI、grant、scope、resource 與是否已配置 client authentication；不保存 raw 或 derived client credential。Authorization code 與 PKCE verifier 完全不落盤。
+Registration snapshot 只保存 client type、redirect URI、grant、scope、resource 與是否已配置 client authentication；不保存 raw 或 derived client credential。Human input claims 會留下 `may_act`，Runtime input claims 則留下 actor subject 與 token-endpoint audience，方便驗證兩者確實相互綁定。Authorization code、PKCE verifier 與 compact JWT 完全不落盤。
 
 ## Day 12 planned slice
 
@@ -414,3 +416,4 @@ Registration snapshot 只保存 client type、redirect URI、grant、scope、res
 9. `REDIRECT_URI_MISMATCH`：把 scheme、host、port、path 逐字比對 registration；`localhost` 與 `127.0.0.1` 要分開列。
 10. `CLIENT_NOT_REGISTERED`：確認 pre-registration、CIMD capability 或 legacy DCR fallback；不要把 registration failure 誤判成 PKCE failure。
 11. `SUBJECT_TOKEN_INVALID`：先確認 subject token 的 audience 是目前 middle tier，再看 scope／expiry；不要拿任意可驗簽 Token 做 exchange。
+12. `ACTOR_NOT_AUTHORIZED`：比對 authenticated client、`actor_token.sub` 與 Human Token 的 `may_act.sub`；client authentication 成功不代表 Human 已授權這個 actor。

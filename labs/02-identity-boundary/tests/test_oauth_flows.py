@@ -17,6 +17,8 @@ PUBLIC_CLIENT = "sre-console"
 SCHEDULER_CLIENT = "sre-scheduler"
 RUNTIME_CLIENT = "sre-investigator-runtime"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
+TOKEN_ENDPOINT = "https://issuer.lab.example/identity-boundary/token"
+ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 
 
 @pytest.fixture
@@ -28,6 +30,13 @@ def oauth_server(issuer):
             audience=ENTRY_RESOURCE,
             client_id=PUBLIC_CLIENT,
             required_scopes=frozenset({"agent.delegate"}),
+            required_claims=frozenset({"may_act"}),
+        ),
+        actor_token_policy=TokenPolicy(
+            issuer=ISSUER,
+            audience=TOKEN_ENDPOINT,
+            client_id=RUNTIME_CLIENT,
+            required_scopes=frozenset({"agent.exchange"}),
             required_claims=frozenset(),
         ),
     )
@@ -240,7 +249,18 @@ def test_token_exchange_preserves_human_subject_and_names_current_actor(
         audience=ENTRY_RESOURCE,
         client_id=PUBLIC_CLIENT,
         scopes=("agent.delegate", "observability.query"),
-        additional_claims={"team": "platform"},
+        additional_claims={
+            "team": "platform",
+            "may_act": {"sub": f"client/{RUNTIME_CLIENT}"},
+        },
+        issued_at=datetime.now(UTC),
+    )
+    actor_token = issuer.issue_access_token(
+        subject=f"client/{RUNTIME_CLIENT}",
+        audience=TOKEN_ENDPOINT,
+        client_id=RUNTIME_CLIENT,
+        scopes=("agent.exchange",),
+        additional_claims={},
         issued_at=datetime.now(UTC),
     )
 
@@ -248,6 +268,9 @@ def test_token_exchange_preserves_human_subject_and_names_current_actor(
         client_id=RUNTIME_CLIENT,
         client_secret=runtime_secret,
         subject_token=subject_token.encoded,
+        subject_token_type=ACCESS_TOKEN_TYPE,
+        actor_token=actor_token.encoded,
+        actor_token_type=ACCESS_TOKEN_TYPE,
         scopes=frozenset({"observability.query"}),
         resource=TOOL_RESOURCE,
     )
@@ -283,13 +306,20 @@ def test_token_exchange_rejects_unknown_target_and_wrong_subject_audience(
         audience=ENTRY_RESOURCE,
         client_id=PUBLIC_CLIENT,
         scopes=("agent.delegate",),
-        additional_claims={},
+        additional_claims={"may_act": {"sub": f"client/{RUNTIME_CLIENT}"}},
     )
     wrong_subject = issuer.issue_access_token(
         subject="user/sre-oncaller",
         audience=TOOL_RESOURCE,
         client_id=PUBLIC_CLIENT,
         scopes=("agent.delegate",),
+        additional_claims={"may_act": {"sub": f"client/{RUNTIME_CLIENT}"}},
+    )
+    actor_token = issuer.issue_access_token(
+        subject=f"client/{RUNTIME_CLIENT}",
+        audience=TOKEN_ENDPOINT,
+        client_id=RUNTIME_CLIENT,
+        scopes=("agent.exchange",),
         additional_claims={},
     )
 
@@ -298,6 +328,9 @@ def test_token_exchange_rejects_unknown_target_and_wrong_subject_audience(
             client_id=RUNTIME_CLIENT,
             client_secret=runtime_secret,
             subject_token=valid_subject.encoded,
+            subject_token_type=ACCESS_TOKEN_TYPE,
+            actor_token=actor_token.encoded,
+            actor_token_type=ACCESS_TOKEN_TYPE,
             scopes=frozenset({"observability.query"}),
             resource="https://billing.lab.example/mcp",
         )
@@ -308,11 +341,56 @@ def test_token_exchange_rejects_unknown_target_and_wrong_subject_audience(
             client_id=RUNTIME_CLIENT,
             client_secret=runtime_secret,
             subject_token=wrong_subject.encoded,
+            subject_token_type=ACCESS_TOKEN_TYPE,
+            actor_token=actor_token.encoded,
+            actor_token_type=ACCESS_TOKEN_TYPE,
             scopes=frozenset({"observability.query"}),
             resource=TOOL_RESOURCE,
         )
     assert subject_error.value.code == "SUBJECT_TOKEN_INVALID"
     assert subject_error.value.reason_code == "AUDIENCE_MISMATCH"
+
+
+def test_token_exchange_rejects_an_actor_not_authorized_by_the_subject(
+    oauth_server, issuer
+) -> None:
+    runtime_secret = secrets.token_urlsafe(32)
+    oauth_server.register_confidential_client(
+        client_id=RUNTIME_CLIENT,
+        client_secret=runtime_secret,
+        allowed_grants=frozenset({"token_exchange"}),
+        allowed_scopes=frozenset({"observability.query"}),
+        allowed_resources=frozenset({TOOL_RESOURCE}),
+    )
+    subject_token = issuer.issue_access_token(
+        subject="user/sre-oncaller",
+        audience=ENTRY_RESOURCE,
+        client_id=PUBLIC_CLIENT,
+        scopes=("agent.delegate",),
+        additional_claims={"may_act": {"sub": "client/another-runtime"}},
+    )
+    actor_token = issuer.issue_access_token(
+        subject=f"client/{RUNTIME_CLIENT}",
+        audience=TOKEN_ENDPOINT,
+        client_id=RUNTIME_CLIENT,
+        scopes=("agent.exchange",),
+        additional_claims={},
+    )
+
+    with pytest.raises(OAuthFlowError) as error:
+        oauth_server.token_exchange(
+            client_id=RUNTIME_CLIENT,
+            client_secret=runtime_secret,
+            subject_token=subject_token.encoded,
+            subject_token_type=ACCESS_TOKEN_TYPE,
+            actor_token=actor_token.encoded,
+            actor_token_type=ACCESS_TOKEN_TYPE,
+            scopes=frozenset({"observability.query"}),
+            resource=TOOL_RESOURCE,
+        )
+
+    assert error.value.code == "ACTOR_NOT_AUTHORIZED"
+    assert error.value.stage == "delegation_policy"
 
 
 def test_safe_registration_snapshot_never_exposes_client_secret(oauth_server) -> None:

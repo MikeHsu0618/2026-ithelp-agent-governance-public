@@ -4,6 +4,7 @@ import base64
 import hashlib
 import re
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -15,6 +16,7 @@ PKCE_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 TOKEN_EXCHANGE_GRANT = "token_exchange"
 CLIENT_CREDENTIALS_GRANT = "client_credentials"
 AUTHORIZATION_CODE_GRANT = "authorization_code"
+ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 
 
 class OAuthFlowError(ValueError):
@@ -86,11 +88,18 @@ class _AuthorizationCodeRecord:
 class OfflineAuthorizationServer:
     """A small in-memory authorization server used only for deterministic policy cases."""
 
-    def __init__(self, *, issuer: LocalIssuer, subject_token_policy: TokenPolicy) -> None:
+    def __init__(
+        self,
+        *,
+        issuer: LocalIssuer,
+        subject_token_policy: TokenPolicy,
+        actor_token_policy: TokenPolicy,
+    ) -> None:
         self.issuer = issuer
         self._subject_token_validator = TokenValidator(
             jwks=issuer.jwks(), policy=subject_token_policy
         )
+        self._actor_token_validator = TokenValidator(jwks=issuer.jwks(), policy=actor_token_policy)
         self._registrations: dict[str, _ClientRegistration] = {}
         self._authorization_codes: dict[str, _AuthorizationCodeRecord] = {}
 
@@ -266,14 +275,29 @@ class OfflineAuthorizationServer:
         client_id: str,
         client_secret: str,
         subject_token: str,
+        subject_token_type: str,
+        actor_token: str,
+        actor_token_type: str,
         scopes: frozenset[str],
         resource: str,
     ) -> IssuedToken:
-        """Exchange a valid Human subject token for one downstream delegated token."""
+        """Issue a delegated token after validating subject, actor, and their binding."""
 
         registration = self._authenticate_confidential_client(
             client_id, client_secret, grant=TOKEN_EXCHANGE_GRANT
         )
+        if subject_token_type != ACCESS_TOKEN_TYPE:
+            raise OAuthFlowError(
+                "SUBJECT_TOKEN_TYPE_UNSUPPORTED",
+                "token_request",
+                "subject token type is not supported",
+            )
+        if actor_token_type != ACCESS_TOKEN_TYPE:
+            raise OAuthFlowError(
+                "ACTOR_TOKEN_TYPE_UNSUPPORTED",
+                "token_request",
+                "actor token type is not supported",
+            )
         if resource not in registration.allowed_resources:
             raise OAuthFlowError(
                 "INVALID_TARGET", "token_request", "requested resource is not allowed"
@@ -289,12 +313,39 @@ class OfflineAuthorizationServer:
                 reason_code=error.code,
             ) from error
 
+        try:
+            actor_claims = self._actor_token_validator.validate(actor_token)
+        except TokenRejected as error:
+            raise OAuthFlowError(
+                "ACTOR_TOKEN_INVALID",
+                "actor_token",
+                "actor token could not be accepted",
+                reason_code=error.code,
+            ) from error
+
+        expected_actor = f"client/{client_id}"
+        actor_subject = actor_claims.get("sub")
+        if actor_subject != expected_actor:
+            raise OAuthFlowError(
+                "ACTOR_CLIENT_MISMATCH",
+                "delegation_policy",
+                "actor token does not represent the authenticated client",
+            )
+
+        may_act = subject_claims.get("may_act")
+        if not isinstance(may_act, Mapping) or may_act.get("sub") != actor_subject:
+            raise OAuthFlowError(
+                "ACTOR_NOT_AUTHORIZED",
+                "delegation_policy",
+                "subject token does not authorize this actor",
+            )
+
         return self.issuer.issue_access_token(
             subject=str(subject_claims["sub"]),
             audience=resource,
             client_id=client_id,
             scopes=tuple(sorted(scopes)),
-            additional_claims={"act": {"sub": f"client/{client_id}"}},
+            additional_claims={"act": {"sub": str(actor_subject)}},
             lifetime=timedelta(minutes=1),
         )
 

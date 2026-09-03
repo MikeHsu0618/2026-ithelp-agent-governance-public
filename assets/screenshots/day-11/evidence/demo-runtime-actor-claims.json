@@ -1,0 +1,10 @@
+{
+  "aud": "https://issuer.lab.example/identity-boundary/token",
+  "client_id": "sre-investigator-runtime",
+  "exp": 1788404715,
+  "iat": 1788404415,
+  "iss": "https://issuer.lab.example/identity-boundary",
+  "scope": "agent.exchange",
+  "sub": "client/sre-investigator-runtime",
+  "token_use": "access"
+}

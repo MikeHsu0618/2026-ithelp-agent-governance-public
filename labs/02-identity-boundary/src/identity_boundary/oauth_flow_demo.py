@@ -14,6 +14,7 @@ from typing import Any
 from identity_boundary.artifacts import ArtifactStore
 from identity_boundary.issuer import IssuedToken, LocalIssuer
 from identity_boundary.oauth_flows import (
+    ACCESS_TOKEN_TYPE,
     OAuthFlowError,
     OfflineAuthorizationServer,
     create_pkce_pair,
@@ -28,6 +29,7 @@ PUBLIC_CLIENT = "sre-console"
 SCHEDULER_CLIENT = "sre-scheduler"
 RUNTIME_CLIENT = "sre-investigator-runtime"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
+TOKEN_ENDPOINT = f"{ISSUER}/token"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +105,7 @@ def run_oauth_flow_demo(artifact_root: Path) -> OAuthFlowDemoSummary:
     )
     subject_token = _issue_subject_token(issuer, now, audience=ENTRY_RESOURCE)
     wrong_audience_subject = _issue_subject_token(issuer, now, audience=TOOL_RESOURCE)
+    actor_token = _issue_actor_token(issuer, now)
     cases = _build_cases(
         server=server,
         pkce_verifier=pkce_verifier,
@@ -111,6 +114,7 @@ def run_oauth_flow_demo(artifact_root: Path) -> OAuthFlowDemoSummary:
         runtime_credential=runtime_credential,
         subject_token=subject_token,
         wrong_audience_subject=wrong_audience_subject,
+        actor_token=actor_token,
     )
 
     executions = tuple(_run_case(case, store, now) for case in cases)
@@ -126,12 +130,14 @@ def run_oauth_flow_demo(artifact_root: Path) -> OAuthFlowDemoSummary:
     store.write_json("jwks.json", issuer.jwks())
     store.write_json("registrations.json", {"clients": server.safe_registration_snapshot()})
     store.write_json("tokens/issuer-input/human-entry.json", subject_token.claims)
+    store.write_json("tokens/issuer-input/runtime-actor.json", actor_token.claims)
     for case_id, token in issued_tokens.items():
         store.write_json(f"tokens/issuer-output/{case_id}.json", token.claims)
     store.write_json(
         "credential-fingerprints.json",
         {
             "human_subject_token": credential_fingerprint(subject_token.encoded),
+            "runtime_actor_token": credential_fingerprint(actor_token.encoded),
             **{
                 case_id: credential_fingerprint(token.encoded)
                 for case_id, token in sorted(issued_tokens.items())
@@ -171,6 +177,13 @@ def _build_server(issuer: LocalIssuer) -> OfflineAuthorizationServer:
             audience=ENTRY_RESOURCE,
             client_id=PUBLIC_CLIENT,
             required_scopes=frozenset({"agent.delegate"}),
+            required_claims=frozenset({"may_act"}),
+        ),
+        actor_token_policy=TokenPolicy(
+            issuer=ISSUER,
+            audience=TOKEN_ENDPOINT,
+            client_id=RUNTIME_CLIENT,
+            required_scopes=frozenset({"agent.exchange"}),
             required_claims=frozenset(),
         ),
     )
@@ -189,7 +202,21 @@ def _issue_subject_token(issuer: LocalIssuer, now: datetime, *, audience: str) -
         audience=audience,
         client_id=PUBLIC_CLIENT,
         scopes=("agent.delegate", "observability.query"),
-        additional_claims={"team": "platform"},
+        additional_claims={
+            "team": "platform",
+            "may_act": {"sub": f"client/{RUNTIME_CLIENT}"},
+        },
+        issued_at=now,
+    )
+
+
+def _issue_actor_token(issuer: LocalIssuer, now: datetime) -> IssuedToken:
+    return issuer.issue_access_token(
+        subject=f"client/{RUNTIME_CLIENT}",
+        audience=TOKEN_ENDPOINT,
+        client_id=RUNTIME_CLIENT,
+        scopes=("agent.exchange",),
+        additional_claims={},
         issued_at=now,
     )
 
@@ -203,6 +230,7 @@ def _build_cases(
     runtime_credential: str,
     subject_token: IssuedToken,
     wrong_audience_subject: IssuedToken,
+    actor_token: IssuedToken,
 ) -> tuple[OAuthFlowCase, ...]:
     return (
         OAuthFlowCase(
@@ -298,6 +326,9 @@ def _build_cases(
                 client_id=RUNTIME_CLIENT,
                 client_secret=runtime_credential,
                 subject_token=subject_token.encoded,
+                subject_token_type=ACCESS_TOKEN_TYPE,
+                actor_token=actor_token.encoded,
+                actor_token_type=ACCESS_TOKEN_TYPE,
                 scopes=frozenset({"observability.query"}),
                 resource=TOOL_RESOURCE,
             ),
@@ -313,6 +344,9 @@ def _build_cases(
                 client_id=RUNTIME_CLIENT,
                 client_secret=runtime_credential,
                 subject_token=subject_token.encoded,
+                subject_token_type=ACCESS_TOKEN_TYPE,
+                actor_token=actor_token.encoded,
+                actor_token_type=ACCESS_TOKEN_TYPE,
                 scopes=frozenset({"observability.query"}),
                 resource="https://billing.lab.example/mcp",
             ),
@@ -328,6 +362,9 @@ def _build_cases(
                 client_id=RUNTIME_CLIENT,
                 client_secret=runtime_credential,
                 subject_token=wrong_audience_subject.encoded,
+                subject_token_type=ACCESS_TOKEN_TYPE,
+                actor_token=actor_token.encoded,
+                actor_token_type=ACCESS_TOKEN_TYPE,
                 scopes=frozenset({"observability.query"}),
                 resource=TOOL_RESOURCE,
             ),
