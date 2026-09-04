@@ -2,7 +2,8 @@ LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
 
 .PHONY: lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
-	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-delegation lab-02-passthrough lab-02-oauth lab-02-down \
+	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-delegation lab-02-passthrough lab-02-oauth \
+	lab-02-cognito lab-02-cognito-config-check lab-02-down \
 	lab-03-check lab-03-fixture lab-03-live
 
 lab-01-up:
@@ -62,6 +63,19 @@ lab-02-passthrough:
 
 lab-02-oauth:
 	uv run --directory "$(LAB02)" identity-boundary oauth --artifact-root "$(LAB02)/artifacts"
+
+lab-02-cognito:
+	uv run --directory "$(LAB02)" identity-boundary cognito --artifact-root "$(LAB02)/artifacts"
+
+lab-02-cognito-config-check:
+	terraform -chdir="$(LAB02)/configs/cognito-terraform" fmt -check
+	terraform -chdir="$(LAB02)/configs/cognito-terraform" init -backend=false
+	terraform -chdir="$(LAB02)/configs/cognito-terraform" validate
+	docker run --rm \
+		-v "$(LAB02)/configs:/config:ro" \
+		cr.agentgateway.dev/agentgateway@sha256:efd79355b89094a8225a9db465d9a01dc656b377f0bab458761b935a13231d29 \
+		--file /config/agentgateway-cognito.yaml \
+		--validate-only
 
 lab-02-down:
 	uv run --directory "$(LAB02)" identity-boundary clean --lab-root "$(LAB02)"

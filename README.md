@@ -17,6 +17,7 @@
 - [閱讀 Day 9 文章](articles/day-09/article.md)
 - [閱讀 Day 10 文章](articles/day-10/article.md)
 - [閱讀 Day 11 文章](articles/day-11/article.md)
+- [閱讀 Day 12 文章](articles/day-12/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -26,11 +27,13 @@
 - [下載 Day 9 Delegation Context Field Guide](articles/day-09/delegation-context-field-guide.md)
 - [下載 Day 10 Token Passthrough Audit Reading Guide](articles/day-10/token-passthrough-audit-guide.md)
 - [下載 Day 11 OAuth Flow 選擇與故障判讀表](articles/day-11/oauth-flow-selection-guide.md)
+- [下載 Day 12 Human／M2M 雙路徑盤點表](articles/day-12/cognito-dual-path-checklist.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 10 Token Passthrough Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 11 OAuth Flow Lab](labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果)
+- [直接執行 Day 12 Cognito 雙路徑 Lab](labs/02-identity-boundary/README.md#day-12-cognito-dual-path-執行結果)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 
@@ -54,6 +57,8 @@ make lab-02-check
 make lab-02-demo
 make lab-02-delegation
 make lab-02-passthrough
+make lab-02-oauth
+make lab-02-cognito
 ```
 
-需要 live model 或 container 的步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。
+`make lab-02-cognito-config-check` 另外需要 Terraform 與 Docker。它只驗證 Terraform provider schema 及 agentgateway 設定，不會建立 AWS 資源，也不會啟動 MCP target。需要 live model 或 container 的其他步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。

@@ -1,0 +1,31 @@
+{
+  "clients": [
+    {
+      "allowed_resources": [
+        "https://observability.lab.example/mcp"
+      ],
+      "allowed_scopes": [
+        "openid",
+        "platform/observability.query"
+      ],
+      "client_id": "sre-console",
+      "grant": "authorization_code",
+      "kind": "HUMAN_PUBLIC",
+      "redirect_uris": [
+        "http://127.0.0.1:8765/callback"
+      ],
+      "secret_stored": "none-public-client"
+    },
+    {
+      "allowed_resources": [],
+      "allowed_scopes": [
+        "platform/observability.query"
+      ],
+      "client_id": "sre-scheduler",
+      "grant": "client_credentials",
+      "kind": "M2M_CONFIDENTIAL",
+      "redirect_uris": [],
+      "secret_stored": "scrypt-verifier-only"
+    }
+  ]
+}

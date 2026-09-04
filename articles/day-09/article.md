@@ -4,7 +4,7 @@ Day 8 的 Gateway 已經能驗證 issuer、audience、scope 與 policy claim，�
 
 同一筆 Tool Call 走過不同觀測點時，各自會留下合理但不完整的答案：Gateway 看見 `sub=user/sre-oncaller`，Agent runtime 知道目前執行的是 `sre-investigator@v1`，Pod spec 則指定 `serviceAccountName=sre-agent`。三個值都可能是真的，卻不能互相取代。
 
-我在整理 Cognito Human SSO、M2M credential 與 Agent runtime 的 audit 欄位時，最難處理的是這段責任該怎麼留下來。只記 Human，Agent 如何選 Tool、改參數或繼續委派會消失。只記 ServiceAccount，所有請求又會像 workload 自己發起的。這不是 production incident 回放，而是實作期間形成的 actor-model 判斷。以下用合成身分與 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11/labs/02-identity-boundary/README.md) 的 `delegation` command 固定資料結構。
+我在整理 Cognito Human SSO、M2M credential 與 Agent runtime 的 audit 欄位時，最難處理的是這段責任該怎麼留下來。只記 Human，Agent 如何選 Tool、改參數或繼續委派會消失。只記 ServiceAccount，所有請求又會像 workload 自己發起的。這不是 production incident 回放，而是實作期間形成的 actor-model 判斷。以下用合成身分與 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/labs/02-identity-boundary/README.md) 的 `delegation` command 固定資料結構。
 
 我先用七組測試把規則釘死：角色身分可以明確標成 `UNKNOWN`，需要存在的 slot 卻不能直接消失。
 
@@ -20,9 +20,9 @@ actor_only               REJECT  REQUIRED_FIELD_MISSING
 
 `a2a_unknown_workload` 把 Human 與 Workload 寫成 `UNKNOWN`，validator 仍然接受，因為事件已經明說這條 flow 理應有這兩個角色，只是目前沒有足夠證據。`missing_workload_slot` 和 `human_null` 則被拒絕。欄位消失或塞入 `null` 時，事後無法判斷它代表角色不存在、上游沒傳，還是 parser 失敗。
 
-![Delegation Context Lab 的實際 CLI 結果：三組完整或明確 UNKNOWN 的 context 被接受，缺 slot、null、重複 Agent sequence 與 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11/assets/screenshots/day-09/01-delegation-context-results.png)
+![Delegation Context Lab 的實際 CLI 結果：三組完整或明確 UNKNOWN 的 context 被接受，缺 slot、null、重複 Agent sequence 與 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/screenshots/day-09/01-delegation-context-results.png)
 
-> `Lab` 圖片由 `make lab-02-delegation` 的實際輸出重新排版。完整指令、JSON summary、JSONL event 與 hash 保存在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11/assets/screenshots/day-09/evidence.md)，不用從圖片抄指令。
+> `Lab` 圖片由 `make lab-02-delegation` 的實際輸出重新排版。完整指令、JSON summary、JSONL event 與 hash 保存在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/assets/screenshots/day-09/evidence.md)，不用從圖片抄指令。
 
 ## 各觀測點只能看見責任鏈的一段
 
@@ -43,13 +43,13 @@ Workload   ServiceAccount lab/sre-agent
 
 我沒有再把四個值壓成一條更長的 actor 字串，而是讓 Delegation Context 分別保存 actor chain、credential、target 與 correlation 欄位。下圖先看 request 經過哪些角色，再看事件需要留下哪些證據：
 
-![值班工程師委派 SRE Copilot，Copilot 再委派 Investigator Agent，由 Kubernetes ServiceAccount workload 呼叫 MCP。Delegation Context 保存完整 actor chain、credential、target 與 correlation 欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11/assets/diagrams/day-09/delegation-sequence.png)
+![值班工程師委派 SRE Copilot，Copilot 再委派 Investigator Agent，由 Kubernetes ServiceAccount workload 呼叫 MCP。Delegation Context 保存完整 actor chain、credential、target 與 correlation 欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-09/delegation-sequence.png)
 
 這份 Context 保存證據，不自動宣告委派合法。授權規則仍要判斷值班工程師能否使用這個 Agent、Agent 能否執行 `query_logs`，以及 workload 是否受信任。
 
 ## Delegation Context v0.1
 
-完整 schema 放在 [`delegation-context-v0.1.schema.json`](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11/labs/02-identity-boundary/src/identity_boundary/schemas/delegation-context-v0.1.schema.json)，使用 [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12)。下面是正向案例的主要結構：
+完整 schema 放在 [`delegation-context-v0.1.schema.json`](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/labs/02-identity-boundary/src/identity_boundary/schemas/delegation-context-v0.1.schema.json)，使用 [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12)。下面是正向案例的主要結構：
 
 ```json
 {
@@ -111,7 +111,7 @@ Workload   ServiceAccount lab/sre-agent
 
 這份 JSON 可以直接通過 v0.1 validator。Raw bearer token 不在 schema 允許的欄位中，Lab evidence 也會掃描 compact JWT 與 private-key marker。
 
-每個欄位的用途、查詢方式與升版規則整理在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11/articles/day-09/delegation-context-field-guide.md)。這份 v0.1 是本系列的 audit contract，不是我替 RFC 或 A2A 發明的新標準。
+每個欄位的用途、查詢方式與升版規則整理在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-09/delegation-context-field-guide.md)。這份 v0.1 是本系列的 audit contract，不是我替 RFC 或 A2A 發明的新標準。
 
 ## Evidence level 與身分可信度
 

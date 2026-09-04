@@ -15,9 +15,9 @@ mcp:
         # this with <Cognito issuer>/.well-known/jwks.json and tests rotation.
         file: /config/cognito-jwks.json
       jwtValidationOptions:
-        # Human tokens carry aud/sub. Cognito Client Credentials cannot use
-        # resource binding, so the shared authentication layer requires only
-        # claims common to both paths. CEL below applies the conditional rules.
+        # requiredClaims supports registered claims only. token_use is checked
+        # in both CEL branches below because Cognito uses it to distinguish
+        # access tokens from ID tokens.
         requiredClaims:
           - exp
           - iss
@@ -29,8 +29,9 @@ mcp:
           - header
     mcpAuthorization:
       rules:
-        # Human: public PKCE client, resource-bound token, and team claim.
+        # Human: public PKCE client and resource-bound token.
         - >-
+          jwt.token_use == "access" &&
           jwt.client_id == "sre-console" &&
           has(jwt.sub) &&
           jwt.aud == "https://observability.lab.example/mcp" &&
@@ -38,6 +39,7 @@ mcp:
         # M2M: confidential app client. client_id is the machine actor;
         # any sub-like claim must never be reclassified as a Human identity.
         - >-
+          jwt.token_use == "access" &&
           jwt.client_id == "sre-scheduler" &&
           !has(jwt.aud) &&
           jwt.scope.split(" ").exists(s, s == "platform/observability.query")

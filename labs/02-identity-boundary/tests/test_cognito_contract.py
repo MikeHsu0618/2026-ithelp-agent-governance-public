@@ -182,3 +182,19 @@ def test_agentgateway_config_keeps_audience_validation_in_the_human_rule() -> No
     assert "          - sub\n" not in config
     assert 'jwt.aud == "https://observability.lab.example/mcp"' in config
     assert "!has(jwt.aud)" in config
+
+
+def test_agentgateway_config_requires_access_tokens_on_both_paths() -> None:
+    config = (Path(__file__).parents[1] / "configs" / "agentgateway-cognito.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert config.count('jwt.token_use == "access"') == 2
+
+
+def test_agentgateway_config_does_not_advertise_unenforced_team_claim() -> None:
+    config = (Path(__file__).parents[1] / "configs" / "agentgateway-cognito.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "and team claim" not in config

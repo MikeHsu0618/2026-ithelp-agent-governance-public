@@ -1,0 +1,11 @@
+{
+  "aud": "https://observability.lab.example/mcp",
+  "client_id": "sre-console",
+  "exp": 1788422929,
+  "iat": 1788422629,
+  "iss": "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_LabPool",
+  "scope": "platform/observability.query",
+  "sub": "user/sre-oncaller",
+  "team": "platform",
+  "token_use": "access"
+}

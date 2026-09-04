@@ -1,0 +1,21 @@
+{
+  "agentgateway": {
+    "config": "labs/02-identity-boundary/configs/agentgateway-cognito.yaml",
+    "config_sha256": "sha256:8eda175774685781d32bf60d332d5c23798a94c761488645c0f5655725a83bc9",
+    "image": "cr.agentgateway.dev/agentgateway@sha256:efd79355b89094a8225a9db465d9a01dc656b377f0bab458761b935a13231d29",
+    "version": "v1.4.1",
+    "image_digest": "sha256:efd79355b89094a8225a9db465d9a01dc656b377f0bab458761b935a13231d29",
+    "jwks_sha256": "sha256:3f5ca4d80ab4523f5359bc97a0fb67153c40bb7e2a03c97a96c3acde95d3095a",
+    "live_cognito_token_tested": false,
+    "result": "Configuration is valid!",
+    "target_package": "@modelcontextprotocol/server-everything@2026.8.18"
+  },
+  "aws_apply_performed": false,
+  "tested_at": "2026-09-03",
+  "terraform": {
+    "config": "labs/02-identity-boundary/configs/cognito-terraform",
+    "provider": "hashicorp/aws 6.61.0",
+    "result": "Success! The configuration is valid.",
+    "version": "1.8.2"
+  }
+}
