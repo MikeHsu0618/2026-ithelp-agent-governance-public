@@ -66,7 +66,7 @@ Day 1 留下 trace ID、ordered events、summary 與 replay command，並且真�
 
 ## Reference Architecture v0.1
 
-![Agent action path 由 Caller 經 Agent Runtime 與 Policy Checkpoint 到 Tool／Resource。四個治理問題分別補上 principal 與 delegation、artifact 版本與信任、policy decision，以及可重建的執行證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-05/reference-architecture-v0.1.png)
+![Agent action path 由 Caller 經 Agent Runtime 與 Policy Checkpoint 到 Tool／Resource。四個治理問題分別補上 principal 與 delegation、artifact 版本與信任、policy decision，以及可重建的執行證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-05/reference-architecture-v0.1.png)
 
 這張圖沒有放 Cognito、Keycloak、agentgateway、kagent、Registry 或 Grafana Logo。v0.1 先固定責任與 evidence，等實作時再決定哪個元件承接：
 
@@ -87,7 +87,7 @@ Day 1 留下 trace ID、ordered events、summary 與 replay command，並且真�
 
 ## Day 1–4 盤點結果
 
-我把目前的 evidence 填進 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-05/governance-four-question-checklist.md)：
+我把目前的 evidence 填進 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-05/governance-four-question-checklist.md)：
 
 | 治理問題 | 現有 evidence | 狀態 | 下一個最小缺口 |
 | --- | --- | --- | --- |

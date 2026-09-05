@@ -15,7 +15,7 @@ Day 11 比較的三種 OAuth flow 中，Cognito 可以直接接住 Human 與 M2M
 
 ## 先拆 App Client，再談 Gateway
 
-<img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/third-party/aws/amazon-cognito-architecture-icon.png" alt="Amazon Cognito 官方 AWS Architecture Icon" width="96">
+<img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/third-party/aws/amazon-cognito-architecture-icon.png" alt="Amazon Cognito 官方 AWS Architecture Icon" width="96">
 
 Day 6 已交代 Keycloak 與 Cognito 的選型過程。Keycloak 的 federated login、role claim、Gateway 與 MCP RBAC 都曾在 Kubernetes 跑通。最後改用 Cognito，考量的是組織既有身分生命週期、跨團隊 ownership 與維運人力，而不是 Keycloak 接不起來。
 
@@ -119,7 +119,7 @@ M2M：  client_id + scope，預期沒有 aud，Human 不適用
 
 下圖把兩種 app client、Token shape 與 Gateway policy 放在同一張圖裡。閱讀重點是中間那條 issuer boundary：JWKS 與 issuer trust 可以共用，兩側的 authorization input 仍然不同。
 
-![同一個 Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-12/cognito-dual-path.png)
+![同一個 Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-12/cognito-dual-path.png)
 
 AWS 保證的是 Client Credentials 不能要求 resource binding，不是「任何客製過的 M2M Token 永遠不會出現 `aud`」。本篇 registration 沒有使用 pre-token trigger 改寫 `aud`，所以 Gateway 明確拒絕帶有意外 audience 的 M2M Token。若平台日後自行加入 `aud`，Token contract、Gateway policy 與回歸測試也要一起修改，不能只改 IdP。
 
@@ -151,7 +151,7 @@ Scope 在 Cognito access token 裡是 space-delimited string，CEL 要檢查 mem
 
 九組 Offline Lab 另外保留了 `team` 缺失的 `CLAIM_MISSING` case，用來示範「Token 驗過，policy input 仍可能不夠」。公開 agentgateway YAML 沒有檢查 `team`，因為 Terraform 範例也沒有配置 pre-token Lambda。這個 case 不算成已完成的 Cognito claim customization。
 
-完整設定在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。Pinned image 實際載入 committed JWKS、YAML 與 CEL 後得到：
+完整設定在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。Pinned image 實際載入 committed JWKS、YAML 與 CEL 後得到：
 
 ```text
 agentgateway v1.4.1
@@ -179,7 +179,7 @@ resource "aws_cognito_user_pool_client" "m2m" {
 }
 ```
 
-完整範例還包含 user pool、managed-login domain、resource server、custom scope、token lifetime 與 outputs，放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-12/labs/02-identity-boundary/configs/cognito-terraform/)。本次執行範圍如下：
+完整範例還包含 user pool、managed-login domain、resource server、custom scope、token lifetime 與 outputs，放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-13/labs/02-identity-boundary/configs/cognito-terraform/)。本次執行範圍如下：
 
 ```text
 Terraform 1.8.2
@@ -194,7 +194,7 @@ AWS apply: NOT PERFORMED
 
 下圖是 `make lab-02-cognito` 的實際輸出。兩條成功路徑之外，另外七個 case 分別卡在 authorization、client authentication、token 與 policy stage，排錯時不會只剩一句含糊的「Cognito 401」。
 
-![Day 12 Cognito 雙路徑 Lab 的實際 CLI 結果。Human 與 M2M 各有一條成功 path，callback、scope、policy claim、public client、client secret 與 M2M resource binding 錯誤都被分階段拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/screenshots/day-12/01-cognito-dual-path-results.png)
+![Day 12 Cognito 雙路徑 Lab 的實際 CLI 結果。Human 與 M2M 各有一條成功 path，callback、scope、policy claim、public client、client secret 與 M2M resource binding 錯誤都被分階段拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/screenshots/day-12/01-cognito-dual-path-results.png)
 
 | Case | Path | Decision | Code | Stage |
 | --- | --- | --- | --- | --- |
@@ -217,7 +217,7 @@ make lab-02-cognito
 make lab-02-cognito-config-check
 ```
 
-九組結果是 9/9 matched，完整 Lab 共有 75 tests，branch coverage 90.81%，Ruff lint／format clean。Terraform 與 agentgateway config validation 也另外通過。Compact JWT、PKCE verifier、client secret 與 private key 都不落盤，Artifact 只保存合成 claims、safe registration、SHA-256 fingerprint、decision 與 manifest。故障時可以配合 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-12/cognito-dual-path-checklist.md)逐層檢查，完整的驗證紀錄則收在 [Day 12 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/assets/screenshots/day-12/evidence.md)。
+九組結果是 9/9 matched，完整 Lab 共有 75 tests，branch coverage 90.81%，Ruff lint／format clean。Terraform 與 agentgateway config validation 也另外通過。Compact JWT、PKCE verifier、client secret 與 private key 都不落盤，Artifact 只保存合成 claims、safe registration、SHA-256 fingerprint、decision 與 manifest。故障時可以配合 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-12/cognito-dual-path-checklist.md)逐層檢查，完整的驗證紀錄則收在 [Day 12 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/assets/screenshots/day-12/evidence.md)。
 
 公開 Lab 沒有執行 AWS apply、managed-login browser flow、真實 JWKS rotation、上游 IdP federation 或 secret rotation 演練。這些項目需要 disposable AWS environment 才能升級成 integration evidence，不能由 fixture 或 `terraform validate` 代替。
 

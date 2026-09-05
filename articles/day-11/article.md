@@ -4,7 +4,7 @@ Day 10 把值班工程師的入口 Token 原樣送到第二個 MCP Server，結�
 
 值班工程師從 CLI 發起查詢時，人還在線上。凌晨執行固定報表時，只剩 Scheduler 自己工作。Investigator runtime 代表值班工程師呼叫 Observability MCP 時，Human 與目前執行者又得同時留下來。如果三種情境共用同一份 client credential，API 也許都能回 `200`，Token 卻會開始代表錯的人。
 
-這次 [Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 分別跑 Authorization Code + PKCE、Client Credentials 與 RFC 8693 Token Exchange，再故意放入 callback、scope、registration、client type、target 與 audience 錯誤。九組結果都符合預期，三枚成功 Token 則留下三種不同的 principal：
+這次 [Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 分別跑 Authorization Code + PKCE、Client Credentials 與 RFC 8693 Token Exchange，再故意放入 callback、scope、registration、client type、target 與 audience 錯誤。九組結果都符合預期，三枚成功 Token 則留下三種不同的 principal：
 
 | 工作 | 成功 Token 代表誰 | OAuth flow |
 | --- | --- | --- |
@@ -12,9 +12,9 @@ Day 10 把值班工程師的入口 Token 原樣送到第二個 MCP Server，結�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | `user/sre-oncaller` via `client/sre-investigator-runtime` | RFC 8693 Token Exchange |
 
-![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/screenshots/day-11/01-oauth-flow-results.png)
 
-圖片是 `make lab-02-oauth` 的實際結果重新排版，指令與完整表格都留在正文。Manifest、decision event 與合成 Token claims 收在 [Day 11 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/assets/screenshots/day-11/evidence.md)，不需要從圖片抄字。
+圖片是 `make lab-02-oauth` 的實際結果重新排版，指令與完整表格都留在正文。Manifest、decision event 與合成 Token claims 收在 [Day 11 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/assets/screenshots/day-11/evidence.md)，不需要從圖片抄字。
 
 ## 三份工作先分清楚，再選 Flow
 
@@ -28,7 +28,7 @@ Token 要交給哪個服務？       resource / audience
 
 這三項有任何一項沒對齊，換 grant type 通常只會把錯誤往後推。更麻煩的是，即使 Token 成功發出，principal 也可能已經選錯。下面這張圖把 protocol round trip 收掉，只保留每條路徑最關鍵的輸入與最後的 Token 語意。
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-11/three-oauth-flows.png)
 
 ## Human CLI：Authorization Code + PKCE
 
@@ -149,7 +149,7 @@ Raw credential persisted: no
 
 目前完整 Lab 02 共 73 個 tests，branch coverage 90.81%，Ruff lint／format 也已通過。Day 11 的九組 fixture 只保存 safe registration snapshot、合成 claims、SHA-256 fingerprint、expected result 與 JSONL decision events。Authorization code、PKCE verifier、client credential、compact JWT 與 RSA private key 都不落盤。
 
-如果要快速查是哪一層拒絕，或只比較三條成功 flow 的 principal，可以直接用 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-11/oauth-flow-selection-guide.md) 裡的 `jq` 指令。這份 Lab 是 offline policy simulation，不是 Authorization Server 相容性測試。Browser、consent、TLS、CIMD fetch、DCR、refresh token 與 production client authentication 都不在 PASS 範圍。
+如果要快速查是哪一層拒絕，或只比較三條成功 flow 的 principal，可以直接用 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-11/oauth-flow-selection-guide.md) 裡的 `jq` 指令。這份 Lab 是 offline policy simulation，不是 Authorization Server 相容性測試。Browser、consent、TLS、CIMD fetch、DCR、refresh token 與 production client authentication 都不在 PASS 範圍。
 
 ## 兩條 Flow 能落到 Cognito，第三條仍是平台缺口
 

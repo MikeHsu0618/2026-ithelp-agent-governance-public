@@ -16,7 +16,7 @@ Day 1 的 SRE Investigation Agent 做了一件不該做的事。它讀到一段�
 
 Day 2 就沿用這個 Agent 與 `trace_id=a281375fdcb5516c8983eada8ff11c9b`。我要把同一次執行拆成 trust boundary，找出每個元件接手之前，原本應該做、卻沒有做的決策。
 
-這篇沿用 Day 1 的合成 Lab，不是真實事故。Threat Model 的邊界來自這筆 [公開的 ordered events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/assets/screenshots/day-01/evidence/live-events.jsonl)。OWASP 與 NIST 的官方資料則用來確認威脅名稱，沒有拿來代替 Lab 證據。
+這篇沿用 Day 1 的合成 Lab，不是真實事故。Threat Model 的邊界來自這筆 [公開的 ordered events](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/assets/screenshots/day-01/evidence/live-events.jsonl)。OWASP 與 NIST 的官方資料則用來確認威脅名稱，沒有拿來代替 Lab 證據。
 
 ## 一條 Trace，七道信任邊界
 
@@ -52,7 +52,7 @@ Day 2 就沿用這個 Agent 與 `trace_id=a281375fdcb5516c8983eada8ff11c9b`。�
 
 下圖把兩條路徑放在一起。流程語意標在箭頭上方，不必靠顏色猜意思：Agent path 多了不可信資料進入 Context、模型提出 action proposal、獨立 policy 決策，以及 Tool result 回到下一輪的 loop。
 
-![一般 Web request 依程式碼固定路徑執行，Agent run 則加入外部資料、模型 action proposal、獨立授權與 Tool result 回饋迴圈。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
+![一般 Web request 依程式碼固定路徑執行，Agent run 則加入外部資料、模型 action proposal、獨立授權與 Tool result 回饋迴圈。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
 
 圖裡最麻煩的地方，是 Agent 把 data path 和 action path 接在一起了。它剛從 Log 讀到的內容，下一步可能就拿來選 Tool。Tool 回傳的結果，又會被放回 context 影響下一輪。傳統 Web 的輸入驗證當然還要做，但光守住入口，已經不足以處理這種會反覆執行的流程。
 
@@ -76,7 +76,7 @@ Day 1 的合成 Log 就是這種形狀。不過我刻意把 Agent instruction �
 
 ## 把 Threat Model 寫成可審查的 Worksheet
 
-架構圖適合找邊界，真正進 design review 時，還是需要一份能填寫、能留下 `UNKNOWN` 的盤點表。我把 Day 1 的拆解整理成 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-02/threat-model-worksheet.md)，內容分成六組：
+架構圖適合找邊界，真正進 design review 時，還是需要一份能填寫、能留下 `UNKNOWN` 的盤點表。我把 Day 1 的拆解整理成 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-02/threat-model-worksheet.md)，內容分成六組：
 
 - Task boundary：誰能啟動、代表誰、何時停止。
 - Context inventory：哪些資料會進模型，來源由誰控制。

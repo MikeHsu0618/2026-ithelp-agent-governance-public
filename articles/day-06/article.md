@@ -38,7 +38,7 @@ MCP request             PASS
 
 |  | Keycloak | Amazon Cognito User Pools |
 | --- | --- | --- |
-| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 定位 | 開源的 Identity and Access Management server，由採用者部署與操作 | AWS 受管的 user directory 與 OIDC provider |
 | 控制面 | realm、client、role、group、session、identity brokering、user federation、protocol mapper 與 authentication flow | user pool、app client、federation、attribute mapping、resource server 與 OAuth scope |
 | Runtime 責任 | 團隊管理服務、資料庫、cache、HA、升級與復原 | AWS 管理服務 runtime，團隊仍管設定、整合、監控與退出方案 |
@@ -116,7 +116,7 @@ Keycloak 可以先從單一叢集開始，但 database、cache、backup、upgrad
 
 下面這張圖不是在比較誰的功能比較多。兩條技術路徑都已經通過，閱讀重點是 JML 的 owner 有沒有移動，以及平台團隊少了哪些 runtime 工作。
 
-![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12/assets/diagrams/day-06/identity-center-before-after.png)
+![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-06/identity-center-before-after.png)
 
 換成 Amazon Cognito User Pools 後，request path 仍然要經過 issuer、Gateway 與 MCP Server：
 
@@ -147,7 +147,7 @@ Cognito 負責簽發帶有 role／scope 的 token，Gateway 仍依 action 與 re
 
 ## Decision Record：不做功能加權總分
 
-完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12/articles/day-06/identity-center-decision-matrix.md) 放在 repo。文章裡保留最影響這次決策的六列：
+完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-06/identity-center-decision-matrix.md) 放在 repo。文章裡保留最影響這次決策的六列：
 
 | 決策面 | Keycloak | Cognito | 本次判斷 |
 | --- | --- | --- | --- |
