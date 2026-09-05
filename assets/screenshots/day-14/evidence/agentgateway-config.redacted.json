@@ -1,0 +1,152 @@
+{
+  "gateways": {
+    "lab": {
+      "port": 3000,
+      "protocol": "HTTP"
+    }
+  },
+  "routes": [
+    {
+      "backends": [
+        {
+          "host": "host.docker.internal:55066",
+          "policies": {
+            "backendAuth": {
+              "key": {
+                "location": {
+                  "header": {
+                    "name": "authorization",
+                    "prefix": "Bearer "
+                  }
+                },
+                "value": "<redacted>"
+              }
+            }
+          }
+        }
+      ],
+      "gateways": [
+        "lab"
+      ],
+      "matches": [
+        {
+          "headers": [
+            {
+              "name": "x-demo-credential",
+              "value": {
+                "exact": "api-key"
+              }
+            }
+          ],
+          "path": {
+            "exact": "/v1/chat/completions"
+          }
+        }
+      ],
+      "name": "api-key",
+      "policies": {
+        "apiKey": {
+          "keys": [
+            {
+              "key": "<redacted>",
+              "metadata": {
+                "consumer": "key/human-sre-oncaller",
+                "human": "user/sre-oncaller",
+                "kind": "HUMAN_VIRTUAL_KEY",
+                "workload": "NOT_APPLICABLE"
+              }
+            },
+            {
+              "key": "<redacted>",
+              "metadata": {
+                "consumer": "key/runtime-a",
+                "human": "NOT_APPLICABLE",
+                "kind": "WORKLOAD_CONSUMER_KEY",
+                "workload": "workload/runtime-a"
+              }
+            }
+          ],
+          "mode": "strict"
+        },
+        "transformations": {
+          "request": {
+            "set": {
+              "x-audit-consumer": "apiKey.consumer",
+              "x-audit-human": "apiKey.human",
+              "x-audit-kind": "apiKey.kind",
+              "x-audit-workload": "apiKey.workload"
+            }
+          }
+        }
+      }
+    },
+    {
+      "backends": [
+        {
+          "host": "host.docker.internal:55066",
+          "policies": {
+            "backendAuth": {
+              "key": {
+                "location": {
+                  "header": {
+                    "name": "authorization",
+                    "prefix": "Bearer "
+                  }
+                },
+                "value": "<redacted>"
+              }
+            }
+          }
+        }
+      ],
+      "gateways": [
+        "lab"
+      ],
+      "matches": [
+        {
+          "headers": [
+            {
+              "name": "x-demo-credential",
+              "value": {
+                "exact": "jwt"
+              }
+            }
+          ],
+          "path": {
+            "exact": "/v1/chat/completions"
+          }
+        }
+      ],
+      "name": "jwt",
+      "policies": {
+        "authorization": {
+          "rules": [
+            {
+              "allow": "jwt.token_use == \"access\" && jwt.scope == \"llm.invoke\""
+            }
+          ]
+        },
+        "jwtAuth": {
+          "audiences": [
+            "agentgateway-lab"
+          ],
+          "issuer": "https://identity.lab.example/",
+          "jwks": {
+            "file": "/config/jwks.json"
+          },
+          "mode": "strict"
+        },
+        "transformations": {
+          "request": {
+            "set": {
+              "x-audit-consumer": "jwt.client_id",
+              "x-audit-human": "jwt.sub",
+              "x-audit-kind": "\"JWT_PRINCIPAL\"",
+              "x-audit-workload": "\"NOT_APPLICABLE\""
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+| Case | Gateway | Control | Code | Human | Workload | Upstream |
+| --- | --- | --- | --- | --- | --- | --- |
+| human-key-active | ALLOW | CONTROL_OK | KEY_MAPPING_ACTIVE | user/sre-oncaller | NOT_APPLICABLE | MATCHED |
+| human-key-after-offboarding | ALLOW | RISK_EXPOSED | STALE_MAPPING_ALLOWED | user/sre-oncaller | NOT_APPLICABLE | MATCHED |
+| workload-key | ALLOW | CONTROL_OK | WORKLOAD_KEY_ISOLATED | NOT_APPLICABLE | workload/runtime-a | MATCHED |
+| retired-workload-key | DENY | CONTROL_OK | OLD_KEY_REJECTED | NOT_OBSERVED | NOT_OBSERVED | NOT_REACHED |
+| jwt-human | ALLOW | CONTROL_OK | JWT_PRINCIPAL_VERIFIED | user/sre-oncaller | NOT_APPLICABLE | MATCHED |
+| jwt-wrong-issuer | DENY | CONTROL_OK | JWT_ISSUER_REJECTED | NOT_OBSERVED | NOT_OBSERVED | NOT_REACHED |
+| jwt-wrong-audience | DENY | CONTROL_OK | JWT_AUDIENCE_REJECTED | NOT_OBSERVED | NOT_OBSERVED | NOT_REACHED |
+| jwt-missing-issuer | DENY | CONTROL_OK | JWT_ISSUER_REQUIRED | NOT_OBSERVED | NOT_OBSERVED | NOT_REACHED |
+| jwt-missing-audience | DENY | CONTROL_OK | JWT_AUDIENCE_REQUIRED | NOT_OBSERVED | NOT_OBSERVED | NOT_REACHED |

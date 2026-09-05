@@ -8,7 +8,7 @@ LiteLLM 並沒有在評估途中突然少掉哪項功能，改變的是我們手
 
 ## LiteLLM 的 LLM management 優勢
 
-![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/third-party/litellm/litellm-logo.jpg)
+![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/third-party/litellm/litellm-logo.jpg)
 
 [LiteLLM](https://www.litellm.ai/) 是 LLM Gateway，也是一層多 provider 的 translation／routing layer。應用程式只要更換 `base_url`，就能用接近一致的介面呼叫不同模型。真正的 provider key 留在 Proxy，應用 repository 不必各自保存一份。再加上 virtual key、rate limit、budget、spend tracking、fallback 和 UI，它很自然會進入共用模型入口的候選名單。
 
@@ -45,7 +45,7 @@ Inventory 最底下的 API + Terraform management glue 是我們自己加上的�
 
 最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看起來很客觀，實際上很容易等答案出來後才回頭調權重。我們後來把比較方式改成十個決策面，每一列都要寫出產品外的 owner，並標明證據來自實際操作、當時 snapshot、官方文件或架構判斷。
 
-完整的 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-13/gateway-selection-scorecard.md) 可以直接複製到自己的 ADR 或 Architecture Review。下面先保留最影響這次結果的六列：
+完整的 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/articles/day-13/gateway-selection-scorecard.md) 可以直接複製到自己的 ADR 或 Architecture Review。下面先保留最影響這次結果的六列：
 
 | 決策面 | Application Team 常先看 | Platform Team 還要補的問題 |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ Inventory 最底下的 API + Terraform management glue 是我們自己加上的�
 
 ## agentgateway control plane
 
-![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/third-party/agentgateway/agentgateway-logo.png)
+![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/third-party/agentgateway/agentgateway-logo.png)
 
 [agentgateway](https://agentgateway.dev/) 的 data plane 可以代理 HTTP、gRPC、LLM、MCP 與 A2A 流量，Kubernetes 模式另外有 controller。依照官方的 [Kubernetes architecture](https://agentgateway.dev/docs/kubernetes/latest/about/architecture/)，controller 會 watch Gateway API 與 agentgateway resources，產生 runtime config，再透過 xDS 送給 data plane。
 
@@ -105,7 +105,7 @@ MCP client → agentgateway → JWT / Tool policy → MCP server
 
 下圖把兩條時間線分開。上半部是當時真的影響選型的 operating model 與 identity mapping。下半部則是轉向 agentgateway 後，LiteLLM 才發生的供應鏈事件，以及後續 Security Working Group 和 Rust staging 的改善方向。
 
-![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-13/selection-timeline.png)
+![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/diagrams/day-13/selection-timeline.png)
 
 ### 2026 年 3 月 LiteLLM 供應鏈事件
 

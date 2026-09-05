@@ -1,0 +1,13 @@
+DAY 14 / CREDENTIAL BOUNDARY
+
+human-key-active                ALLOW  KEY_MAPPING_ACTIVE
+human-key-after-offboarding     ALLOW  STALE_MAPPING_ALLOWED
+workload-key                    ALLOW  WORKLOAD_KEY_ISOLATED
+retired-workload-key            DENY   OLD_KEY_REJECTED
+jwt-human                       ALLOW  JWT_PRINCIPAL_VERIFIED
+jwt-wrong-issuer                DENY   JWT_ISSUER_REJECTED
+jwt-wrong-audience              DENY   JWT_AUDIENCE_REJECTED
+jwt-missing-issuer              DENY   JWT_ISSUER_REQUIRED
+jwt-missing-audience            DENY   JWT_AUDIENCE_REQUIRED
+
+matched 9/9

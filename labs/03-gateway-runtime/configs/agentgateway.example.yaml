@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+#
+# Readable equivalent of the runtime-generated config. The checked-in values are
+# synthetic and exist for schema validation only. `make lab-03-runtime-run`
+# creates fresh keys and a fresh signing key in a temporary directory.
+
+gateways:
+  lab:
+    port: 3000
+    protocol: HTTP
+
+routes:
+- name: api-key
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /v1/chat/completions
+    headers:
+    - name: x-demo-credential
+      value:
+        exact: api-key
+  policies:
+    apiKey:
+      mode: strict
+      keys:
+      - key: lab-human-key-replace-me
+        metadata:
+          kind: HUMAN_VIRTUAL_KEY
+          human: user/sre-oncaller
+          workload: NOT_APPLICABLE
+          consumer: key/human-sre-oncaller
+      - key: lab-workload-key-replace-me
+        metadata:
+          kind: WORKLOAD_CONSUMER_KEY
+          human: NOT_APPLICABLE
+          workload: workload/runtime-a
+          consumer: key/runtime-a
+    transformations:
+      request:
+        set:
+          x-audit-kind: apiKey.kind
+          x-audit-human: apiKey.human
+          x-audit-workload: apiKey.workload
+          x-audit-consumer: apiKey.consumer
+  backends:
+  - host: localhost:18080
+    policies:
+      backendAuth:
+        key:
+          value: lab-provider-key-replace-me
+          location:
+            header:
+              name: authorization
+              prefix: "Bearer "
+
+- name: jwt
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /v1/chat/completions
+    headers:
+    - name: x-demo-credential
+      value:
+        exact: jwt
+  policies:
+    jwtAuth:
+      mode: strict
+      issuer: https://identity.lab.example/
+      audiences: [agentgateway-lab]
+      jwks:
+        file: /config/jwks.example.json
+    authorization:
+      rules:
+      - allow: 'jwt.token_use == "access" && jwt.scope == "llm.invoke"'
+    transformations:
+      request:
+        set:
+          x-audit-kind: '"JWT_PRINCIPAL"'
+          x-audit-human: jwt.sub
+          x-audit-workload: '"NOT_APPLICABLE"'
+          x-audit-consumer: jwt.client_id
+  backends:
+  - host: localhost:18080
+    policies:
+      backendAuth:
+        key:
+          value: lab-provider-key-replace-me
+          location:
+            header:
+              name: authorization
+              prefix: "Bearer "

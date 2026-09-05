@@ -4,7 +4,7 @@ Day 9 把一次 Agent 任務裡的 Human、Agent 與 Workload 都放回 Delegati
 
 這條路徑不必另外取得下游 Token，也少了一組 OAuth client 與 credential flow。只看功能測試，它很可能一次就通過。可是把 caller 逐跳寫在架構圖上，問題就藏不住了。第一跳確實是值班工程師發起任務，第二跳真正送出 `query_logs` 的卻是 Agent runtime。如果兩跳都拿同一枚 Human Token，下游 Audit 還有辦法分辨是誰動用了查詢權限嗎？
 
-我把這個疑問做成 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/labs/02-identity-boundary/README.md) 的離線 policy simulation。它沒有啟動兩個 HTTP MCP Server，也沒有假裝接上 Cognito，而是以本機 ephemeral issuer、兩個合成 protected resource 與七組正負向 case，驗證 audience、credential attribution 和 Delegation Context binding。最關鍵的四筆結果如下：
+我把這個疑問做成 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/labs/02-identity-boundary/README.md) 的離線 policy simulation。它沒有啟動兩個 HTTP MCP Server，也沒有假裝接上 Cognito，而是以本機 ephemeral issuer、兩個合成 protected resource 與七組正負向 case，驗證 audience、credential attribution 和 Delegation Context binding。最關鍵的四筆結果如下：
 
 ```text
 user_to_entry_resource        ALLOW  ALLOW                 TOKEN_SUBJECT_AT_ENTRY
@@ -15,9 +15,9 @@ audience_bound_downstream     ALLOW  ALLOW                 FULL_CHAIN
 
 值班工程師的 Token 在入口可以使用，原樣送到第二個 resource 時被 audience validation 擋下。接著我故意讓下游接受入口 audience，Request 果然變成 `ALLOW`，但是 Agent 與 Workload 也一起從 Audit 消失。第四筆改用只發給下游的 runtime Token，再帶上 Day 9 的 Delegation Context，三種身分才重新出現在同一筆事件裡。
 
-![Day 10 Lab 實際 CLI 結果。嚴格的下游驗證拒絕 Human Token passthrough，接受共用 audience 雖然允許 Request，attribution 卻塌縮成 Token subject。下游專用 Token 與綁定過的 Context 才得到 FULL_CHAIN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/screenshots/day-10/01-passthrough-results.png)
+![Day 10 Lab 實際 CLI 結果。嚴格的下游驗證拒絕 Human Token passthrough，接受共用 audience 雖然允許 Request，attribution 卻塌縮成 Token subject。下游專用 Token 與綁定過的 Context 才得到 FULL_CHAIN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/screenshots/day-10/01-passthrough-results.png)
 
-圖片由 `make lab-02-passthrough` 的實際輸出重新排版。可複製指令、完整 JSONL 與 run manifest 都保留在 [Day 10 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/assets/screenshots/day-10/evidence.md)，讀者不必從圖片抄字。
+圖片由 `make lab-02-passthrough` 的實際輸出重新排版。可複製指令、完整 JSONL 與 run manifest 都保留在 [Day 10 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/assets/screenshots/day-10/evidence.md)，讀者不必從圖片抄字。
 
 ## 第一版常見的 Token Passthrough 捷徑
 
@@ -90,7 +90,7 @@ Lab 以 SHA-256 fingerprint 關聯每一跳。前三個 case 的 fingerprint 完
 - Downstream credential 表示目前這一跳由誰呼叫，以及它能使用哪一個 resource。
 - Delegation Context 保存最初由誰提出要求、經過哪些 Agent，以及目前由哪個 Workload 執行。
 
-![Token Passthrough 在第二跳的兩種結果，以及 resource-bound downstream Token 搭配 Delegation Context 後保留下來的 Human、Agent 與 Workload attribution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13/assets/diagrams/day-10/passthrough-vs-bound-token.png)
+![Token Passthrough 在第二跳的兩種結果，以及 resource-bound downstream Token 搭配 Delegation Context 後保留下來的 Human、Agent 與 Workload attribution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/diagrams/day-10/passthrough-vs-bound-token.png)
 
 Lab 另外簽出一枚下游專用的合成 Token：
 
@@ -169,7 +169,7 @@ Same Human token reused across passthrough hops: yes (fingerprint only)
 Raw credential persisted: no
 ```
 
-若想直接比較兩條 `ALLOW` path，可以使用 [Token Passthrough Audit Reading Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13/articles/day-10/token-passthrough-audit-guide.md) 裡的 `jq` 指令。每次執行都會保存 manifest、summary、JSONL events、合成 issuer-input claims、Context 與 Token fingerprints，圖片只是閱讀輔助，不是唯一證據。
+若想直接比較兩條 `ALLOW` path，可以使用 [Token Passthrough Audit Reading Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/articles/day-10/token-passthrough-audit-guide.md) 裡的 `jq` 指令。每次執行都會保存 manifest、summary、JSONL events、合成 issuer-input claims、Context 與 Token fingerprints，圖片只是閱讀輔助，不是唯一證據。
 
 Day 10 slice 完成時，共用 Lab 當時有 46 tests，branch coverage 為 91.33%。因為同一個 Lab 後來又加入 Day 11 與 Day 12 的 OAuth case，發稿前重新執行整包測試的結果已變成 72 tests passed、branch coverage 91.17%。測試母體已經不同，這兩個 coverage 數字不能直接拿來解讀成上升或退步。最新 dependency audit 沒有找到已知漏洞，wheel 與 source distribution 也已實際 build。
 

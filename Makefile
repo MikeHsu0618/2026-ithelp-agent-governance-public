@@ -1,10 +1,14 @@
 LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
+LAB03 := $(CURDIR)/labs/03-gateway-runtime
+AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
 
 .PHONY: lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
 	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-delegation lab-02-passthrough lab-02-oauth \
 	lab-02-cognito lab-02-cognito-config-check lab-02-down \
-	lab-03-check lab-03-fixture lab-03-live
+	lab-03-check lab-03-fixture lab-03-live \
+	lab-03-runtime-up lab-03-runtime-check lab-03-runtime-config-check \
+	lab-03-runtime-run lab-03-runtime-traffic lab-03-runtime-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -79,3 +83,28 @@ lab-02-cognito-config-check:
 
 lab-02-down:
 	uv run --directory "$(LAB02)" identity-boundary clean --lab-root "$(LAB02)"
+
+lab-03-runtime-up:
+	uv sync --directory "$(LAB03)" --all-groups
+
+lab-03-runtime-check:
+	uv run --directory "$(LAB03)" pytest -q
+	uv run --directory "$(LAB03)" ruff check .
+	uv run --directory "$(LAB03)" ruff format --check .
+	$(MAKE) lab-03-runtime-config-check
+
+lab-03-runtime-config-check:
+	docker run --rm \
+		-v "$(LAB03)/configs:/config:ro" \
+		$(AGENTGATEWAY_IMAGE) \
+		--file /config/agentgateway.example.yaml \
+		--validate-only
+
+lab-03-runtime-run:
+	uv run --directory "$(LAB03)" gateway-runtime run --artifact-root "$(LAB03)/artifacts"
+
+lab-03-runtime-traffic:
+	uv run --directory "$(LAB03)" gateway-runtime traffic --artifact-root "$(LAB03)/artifacts"
+
+lab-03-runtime-down:
+	uv run --directory "$(LAB03)" gateway-runtime clean --lab-root "$(LAB03)"
