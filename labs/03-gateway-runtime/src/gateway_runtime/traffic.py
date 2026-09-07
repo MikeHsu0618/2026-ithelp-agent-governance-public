@@ -27,12 +27,7 @@ def run_traffic_lab(artifact_root: Path) -> dict[str, Any]:
 
     material = EphemeralCredentials.create()
     invalid_caller_key = secrets.token_urlsafe(32)
-    raw_credentials = {
-        material.human_virtual_key,
-        material.workload_consumer_key,
-        material.provider_key,
-        invalid_caller_key,
-    }
+    raw_credentials = set(material.raw_secrets()) | {invalid_caller_key}
     run_id = datetime.now(UTC).strftime("day15-%Y%m%dT%H%M%SZ")
     store = ArtifactStore(artifact_root, run_id)
 

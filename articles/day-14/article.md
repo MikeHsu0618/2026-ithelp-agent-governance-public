@@ -44,11 +44,11 @@ Static bearer key 仍然有明顯限制。它可能被複製，無法證明是�
 
 ## Lab 03：同一個 Gateway 比較三種 credential
 
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/labs/03-gateway-runtime/README.md) 只有一個 agentgateway 與一個 synthetic OpenAI-compatible backend。Human key、workload key 與 Human JWT 都呼叫 `/v1/chat/completions`，成功的 request 再由 backend authentication 換成 provider key。
+[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/labs/03-gateway-runtime/README.md) 只有一個 agentgateway 與一個 synthetic OpenAI-compatible backend。Human key、workload key 與 Human JWT 都呼叫 `/v1/chat/completions`，成功的 request 再由 backend authentication 換成 provider key。
 
 這裡要先釐清產品名稱。LiteLLM 的 virtual key 是前面那段實務選型的對象，Lab 使用的是 agentgateway API key policy 加上 metadata，用來重現相同的 identity mapping 問題。`consumer key` 是本文為了區分用途採用的名稱，並不是 agentgateway 另一種正式 credential type。
 
-![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/diagrams/day-14/credential-boundary.png)
+![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15/assets/diagrams/day-14/credential-boundary.png)
 
 API key route 採用 strict mode，把兩把有效 key 對到不同 metadata。官方 [API Key authentication](https://agentgateway.dev/docs/standalone/latest/documentation/configuration/security/apikey-authn/) 文件對這項能力的描述，也是先驗 key，再讓後續 policy 使用 associated metadata。Metadata 可以做 attribution，但它仍是 Gateway 內的 mapping，不是企業目錄的即時狀態。
 
@@ -68,7 +68,7 @@ apiKey:
       workload: workload/runtime-a
 ```
 
-JWT route 會用 JWKS 驗 RSA signature，並檢查 issuer、audience、`token_use` 與 scope。完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/labs/03-gateway-runtime/configs/agentgateway.example.yaml)，讀者可以直接複製，不必從文章片段拼回去。
+JWT route 會用 JWKS 驗 RSA signature，並檢查 issuer、audience、`token_use` 與 scope。完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/labs/03-gateway-runtime/configs/agentgateway.example.yaml)，讀者可以直接複製，不必從文章片段拼回去。
 
 ```bash
 make lab-03-runtime-up
@@ -144,9 +144,9 @@ Synthetic provider 會檢查收到的 `Authorization` 必須等於本次 ephemer
 
 ## 九組結果與 credential 決策表
 
-![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14/assets/screenshots/day-14/01-credential-boundary-results.png)
+![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15/assets/screenshots/day-14/01-credential-boundary-results.png)
 
-圖片來自本次 `make lab-03-runtime-run` 的真實輸出。可複製指令、machine-readable report 與 hash 保存在 [Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/assets/screenshots/day-14/evidence.md)，因此讀者不必從圖片手動抄字。
+圖片來自本次 `make lab-03-runtime-run` 的真實輸出。可複製指令、machine-readable report 與 hash 保存在 [Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/assets/screenshots/day-14/evidence.md)，因此讀者不必從圖片手動抄字。
 
 | Case | Gateway | Control | Human | Workload | Upstream |
 | --- | --- | --- | --- | --- | --- |
@@ -160,7 +160,7 @@ Synthetic provider 會檢查收到的 `Authorization` 必須等於本次 ephemer
 | Missing-issuer JWT | DENY | `CONTROL_OK` | `NOT_OBSERVED` | `NOT_OBSERVED` | backend 未抵達 |
 | Missing-audience JWT | DENY | `CONTROL_OK` | `NOT_OBSERVED` | `NOT_OBSERVED` | backend 未抵達 |
 
-若要帶進自己的架構 review，可以直接複製完整的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14/articles/day-14/credential-decision-table.md)。除了產品支援哪種 credential，表裡還要填 authoritative source、lifecycle owner、rotation、delegation evidence 與 fallback behavior。
+若要帶進自己的架構 review，可以直接複製完整的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/articles/day-14/credential-decision-table.md)。除了產品支援哪種 credential，表裡還要填 authoritative source、lifecycle owner、rotation、delegation evidence 與 fallback behavior。
 
 ## Production 還需要補的控制
 

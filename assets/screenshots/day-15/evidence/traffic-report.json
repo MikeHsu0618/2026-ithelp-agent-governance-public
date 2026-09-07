@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "case_id": "normal-json",
+      "content_type": "application/json",
+      "http_status": 200,
+      "matched": true,
+      "result": "lab-ok"
+    },
+    {
+      "case_id": "sse-stream",
+      "content_type": "text/event-stream",
+      "events": [
+        "lab-",
+        "ok",
+        "[DONE]"
+      ],
+      "first_event_before_upstream_complete": true,
+      "http_status": 200,
+      "matched": true
+    },
+    {
+      "case_id": "missing-caller-credential",
+      "http_status": 401,
+      "matched": true,
+      "upstream_requests": 0
+    },
+    {
+      "case_id": "invalid-caller-credential",
+      "http_status": 401,
+      "matched": true,
+      "upstream_requests": 0
+    },
+    {
+      "case_id": "upstream-rate-limit",
+      "http_status": 429,
+      "matched": true,
+      "retry_after": "7",
+      "upstream_code": "synthetic_rate_limit",
+      "upstream_requests": 1
+    },
+    {
+      "case_id": "backend-credential-isolation",
+      "http_status": 200,
+      "incoming_credential_forwarded": false,
+      "matched": true,
+      "provider_auth": "MATCHED"
+    }
+  ],
+  "generated_at": "2026-09-05T13:14:13.929297+00:00",
+  "runtime": {
+    "backend": "synthetic-openai-compatible-provider",
+    "gateway_count": 1,
+    "gateway_image": "cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896",
+    "retry_policy": "disabled"
+  },
+  "schema": "ithelp.gateway-runtime.traffic-report.v1",
+  "summary": {
+    "matched": 6,
+    "total": 6
+  }
+}

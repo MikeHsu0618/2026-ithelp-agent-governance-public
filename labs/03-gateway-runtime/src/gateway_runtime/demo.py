@@ -40,7 +40,7 @@ def run_lab(artifact_root: Path) -> dict[str, Any]:
         missing_issuer_jwt,
         missing_audience_jwt,
     }
-    raw_credentials = incoming_credentials | {material.provider_key}
+    raw_credentials = incoming_credentials | set(material.raw_secrets())
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     store = ArtifactStore(artifact_root, run_id)

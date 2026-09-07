@@ -1,0 +1,12 @@
+DAY 15 / TRAFFIC BOUNDARY
+
+one agentgateway / retry disabled
+
+normal-json                     HTTP 200  PASS
+sse-stream                      HTTP 200  PASS
+missing-caller-credential       HTTP 401  PASS
+invalid-caller-credential       HTTP 401  PASS
+upstream-rate-limit             HTTP 429  PASS
+backend-credential-isolation    HTTP 200  PASS
+
+matched 6/6

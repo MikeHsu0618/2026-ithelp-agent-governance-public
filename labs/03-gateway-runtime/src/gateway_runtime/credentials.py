@@ -11,6 +11,8 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
+PEM_PRIVATE_KEY_MARKER = "-----BEGIN " + "PRIVATE KEY-----"
+
 
 @dataclass(frozen=True)
 class EphemeralCredentials:
@@ -72,11 +74,17 @@ class EphemeralCredentials:
         return {"keys": [public_jwk]}
 
     def raw_secrets(self) -> tuple[str, ...]:
+        private_jwk = RSAAlgorithm.to_jwk(self.private_key, as_dict=True)
+        private_fields = tuple(
+            str(private_jwk[field]) for field in ("d", "p", "q", "dp", "dq", "qi")
+        )
         return (
             self.human_virtual_key,
             self.workload_consumer_key,
             self.retired_workload_key,
             self.provider_key,
+            PEM_PRIVATE_KEY_MARKER,
+            *private_fields,
         )
 
     @staticmethod

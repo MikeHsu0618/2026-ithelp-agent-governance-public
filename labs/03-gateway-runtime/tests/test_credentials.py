@@ -1,6 +1,7 @@
 import jwt
+from jwt.algorithms import RSAAlgorithm
 
-from gateway_runtime.credentials import EphemeralCredentials
+from gateway_runtime.credentials import PEM_PRIVATE_KEY_MARKER, EphemeralCredentials
 
 
 def test_ephemeral_credentials_issue_day12_shaped_human_jwt() -> None:
@@ -58,3 +59,14 @@ def test_public_jwks_never_contains_private_rsa_parameters() -> None:
         )
         == 4
     )
+
+
+def test_raw_secrets_include_private_signing_material_markers() -> None:
+    material = EphemeralCredentials.create()
+    private_jwk = RSAAlgorithm.to_jwk(material.private_key, as_dict=True)
+
+    raw_secrets = set(material.raw_secrets())
+
+    assert PEM_PRIVATE_KEY_MARKER in raw_secrets
+    for field in ("d", "p", "q", "dp", "dq", "qi"):
+        assert private_jwk[field] in raw_secrets

@@ -1,0 +1,11 @@
+{
+  "files": [
+    "evidence/agentgateway-config.redacted.json",
+    "evidence/config-validation.json",
+    "evidence/traffic-decision-table.md",
+    "evidence/traffic-report.json",
+    "evidence/traffic-terminal.txt"
+  ],
+  "raw_credentials_persisted": false,
+  "run_id": "day15-20260905T131412Z"
+}
