@@ -1,0 +1,26 @@
+{
+  "model": {
+    "type": "openai",
+    "model": "synthetic-model",
+    "base_url": "http://agentgateway-proxy.agentgateway-system.svc.cluster.local:80/v1",
+    "reasoning_effort": "low",
+    "api_format": "chatCompletions"
+  },
+  "http_tools": [
+    {
+      "params": {
+        "url": "http://agentgateway-proxy.agentgateway-system.svc.cluster.local:80/mcp",
+        "headers": {
+          "Authorization": "<redacted>",
+          "x-kagent-host": "mcp-everything.day16-lab.svc.cluster.local"
+        },
+        "timeout": 30,
+        "terminate_on_close": true
+      },
+      "tools": [
+        "echo"
+      ]
+    }
+  ],
+  "stream": false
+}

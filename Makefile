@@ -2,13 +2,22 @@ LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
 LAB03 := $(CURDIR)/labs/03-gateway-runtime
 AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+DAY16_CONFIG := $(LAB03)/configs/day-16
+DAY16_MCP_FIXTURE := $(LAB03)/fixtures/day-16-mcp
+DAY16_KIND_NAME := ithelp-day16
+DAY16_CONTEXT := kind-ithelp-day16
+DAY16_KUBECONFIG ?= $(LAB03)/.runtime/day-16/kubeconfig
+KIND_BIN ?= kind
+KUBECTL_BIN ?= kubectl
 
 .PHONY: lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
 	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-delegation lab-02-passthrough lab-02-oauth \
 	lab-02-cognito lab-02-cognito-config-check lab-02-down \
 	lab-03-check lab-03-fixture lab-03-live \
 	lab-03-runtime-up lab-03-runtime-check lab-03-runtime-config-check \
-	lab-03-runtime-run lab-03-runtime-traffic lab-03-runtime-down
+	lab-03-runtime-run lab-03-runtime-traffic lab-03-runtime-kagent-plan \
+	lab-03-runtime-kagent-up lab-03-runtime-kagent-invoke lab-03-runtime-kagent-down \
+	lab-03-runtime-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -105,6 +114,83 @@ lab-03-runtime-run:
 
 lab-03-runtime-traffic:
 	uv run --directory "$(LAB03)" gateway-runtime traffic --artifact-root "$(LAB03)/artifacts"
+
+lab-03-runtime-kagent-plan:
+	uv run --directory "$(LAB03)" gateway-runtime kagent-boundary \
+		--config-dir "$(DAY16_CONFIG)" \
+		--artifact-root "$(LAB03)/artifacts"
+
+lab-03-runtime-kagent-up:
+	@command -v "$(KIND_BIN)" >/dev/null
+	@command -v "$(KUBECTL_BIN)" >/dev/null
+	@command -v helm >/dev/null
+	@"$(KIND_BIN)" version | grep -q '^kind v0.30.0 '
+	@"$(KUBECTL_BIN)" version --client -o json | grep -q '"gitVersion": "v1.34\.'
+	@mkdir -p "$(dir $(DAY16_KUBECONFIG))"
+	@if "$(KIND_BIN)" get clusters | grep -Fxq "$(DAY16_KIND_NAME)"; then \
+		test -f "$(DAY16_KUBECONFIG)"; \
+		test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"; \
+	else \
+		existing_context="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context 2>/dev/null || true)"; \
+		test -z "$$existing_context" -o "$$existing_context" = "$(DAY16_CONTEXT)"; \
+		KUBECONFIG="$(DAY16_KUBECONFIG)" "$(KIND_BIN)" create cluster \
+			--name "$(DAY16_KIND_NAME)" --kubeconfig "$(DAY16_KUBECONFIG)" --wait 90s; \
+	fi
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"
+	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \
+		--kubeconfig "$(DAY16_KUBECONFIG)" --context "$(DAY16_CONTEXT)"
+	docker build -f "$(DAY16_MCP_FIXTURE)/Containerfile" \
+		-t ithelp/day16-mcp:2026.8.31 "$(DAY16_MCP_FIXTURE)"
+	"$(KIND_BIN)" load docker-image ithelp/day16-mcp:2026.8.31 --name "$(DAY16_KIND_NAME)"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply --server-side \
+		-f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml
+	helm upgrade --install agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds \
+		--version v1.5.0 --namespace agentgateway-system --create-namespace \
+		--kubeconfig "$(DAY16_KUBECONFIG)" --wait --timeout 3m
+	helm upgrade --install agentgateway oci://cr.agentgateway.dev/charts/agentgateway \
+		--version v1.5.0 --namespace agentgateway-system \
+		--kubeconfig "$(DAY16_KUBECONFIG)" --wait --timeout 5m
+	helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+		--version 0.10.0 --namespace kagent --create-namespace \
+		--kubeconfig "$(DAY16_KUBECONFIG)" \
+		--set kmcp.enabled=false --set substrate.enabled=false --wait --timeout 3m
+	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		-f "$(DAY16_CONFIG)/kagent-values.yaml" --wait --timeout 6m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY16_CONFIG)/kagent-resources.yaml"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY16_CONFIG)/agentgateway-resources.yaml"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab rollout status \
+		deployment/synthetic-llm --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab rollout status \
+		deployment/mcp-everything --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n agentgateway-system rollout status \
+		deployment/agentgateway-proxy --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab wait \
+		--for=condition=Accepted modelconfig/day16-model --timeout=2m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab wait \
+		--for=condition=Accepted remotemcpserver/day16-tools --timeout=2m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab wait \
+		--for=condition=Ready agent/day16-agent --timeout=3m
+
+lab-03-runtime-kagent-invoke:
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab exec deployment/synthetic-llm \
+		-- python /app/client.py
+	@count="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab \
+		get remotemcpserver day16-tools -o jsonpath='{.status.discoveredTools[*].name}' | wc -w | tr -d ' ')"; \
+		printf 'discovered-tools=%s\n' "$$count"; test "$$count" -eq 14
+	@count="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n agentgateway-system \
+		logs deployment/agentgateway-proxy | grep -c 'route=day16-lab/synthetic-llm' || true)"; \
+		printf 'gateway-llm-requests=%s\n' "$$count"; test "$$count" -gt 0
+	@count="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n agentgateway-system \
+		logs deployment/agentgateway-proxy | grep -c 'route=day16-lab/mcp-everything' || true)"; \
+		printf 'gateway-mcp-requests=%s\n' "$$count"; test "$$count" -gt 0
+
+lab-03-runtime-kagent-down:
+	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \
+		--kubeconfig "$(DAY16_KUBECONFIG)" \
+		--context "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)"
+	"$(KIND_BIN)" delete cluster --name "$(DAY16_KIND_NAME)" --kubeconfig "$(DAY16_KUBECONFIG)"
 
 lab-03-runtime-down:
 	uv run --directory "$(LAB03)" gateway-runtime clean --lab-root "$(LAB03)"

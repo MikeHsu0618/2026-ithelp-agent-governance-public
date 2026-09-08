@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: day16-lab
+  labels:
+    ithelp.dev/day16-gateway-access: "true"
+---
+# These are public fixture values for a synthetic backend, not reusable credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: day16-model-credential
+  namespace: day16-lab
+type: Opaque
+stringData:
+  api-key: synthetic-provider-does-not-validate-this-value
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: day16-mcp-credential
+  namespace: day16-lab
+type: Opaque
+stringData:
+  authorization: Bearer synthetic-mcp-fixture
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: day16-model
+  namespace: day16-lab
+spec:
+  provider: OpenAI
+  model: synthetic-model
+  apiKeySecret: day16-model-credential
+  apiKeySecretKey: api-key
+  openAI:
+    baseUrl: http://agentgateway-proxy.agentgateway-system.svc.cluster.local:80/v1
+    reasoningEffort: low
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: day16-tools
+  namespace: day16-lab
+spec:
+  description: Synthetic tools used to observe kagent proxy URL rewriting
+  protocol: STREAMABLE_HTTP
+  url: http://mcp-everything.day16-lab.svc.cluster.local:3001/mcp
+  headersFrom:
+  - name: Authorization
+    valueFrom:
+      type: Secret
+      name: day16-mcp-credential
+      key: authorization
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: day16-agent
+  namespace: day16-lab
+spec:
+  type: Declarative
+  description: Minimal declarative Agent for the Day 16 ownership experiment
+  declarative:
+    runtime: go
+    modelConfig: day16-model
+    stream: false
+    systemMessage: |-
+      You are a test fixture. Keep every response short and use only read-only tools.
+    tools:
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: day16-tools
+        toolNames:
+        - echo

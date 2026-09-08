@@ -21,6 +21,7 @@
 - [閱讀 Day 13 文章](articles/day-13/article.md)
 - [閱讀 Day 14 文章](articles/day-14/article.md)
 - [閱讀 Day 15 文章](articles/day-15/article.md)
+- [閱讀 Day 16 文章](articles/day-16/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -34,6 +35,7 @@
 - [下載 Day 13 AI Gateway 平台選型 Scorecard](articles/day-13/gateway-selection-scorecard.md)
 - [下載 Day 14 Credential Decision Table](articles/day-14/credential-decision-table.md)
 - [下載 Day 15 Edge／Ingress 與 Agent Gateway 責任矩陣](articles/day-15/proxy-responsibility-matrix.md)
+- [下載 Day 16 Runtime／Control Plane／Traffic Path 責任矩陣](articles/day-16/responsibility-matrix.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
@@ -41,6 +43,7 @@
 - [直接執行 Day 11 OAuth Flow Lab](labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果)
 - [直接執行 Day 12 Cognito 雙路徑 Lab](labs/02-identity-boundary/README.md#day-12-cognito-dual-path-執行結果)
 - [直接執行 Day 14 Credential Boundary Lab](labs/03-gateway-runtime/README.md)
+- [直接執行 Day 16 kagent Boundary Lab](labs/03-gateway-runtime/README.md)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 - [查看 Gateway Runtime Lab source code](labs/03-gateway-runtime/src/gateway_runtime/)
@@ -51,7 +54,7 @@
 
 - [Day 1–5｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization、Delegation evidence 與治理四問盤點。
 - [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
-- [Day 14｜Gateway Runtime](labs/03-gateway-runtime/README.md)：用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，重現 offboarding gap、key rotation、issuer／audience validation 與 provider credential isolation。
+- [Day 14–16｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
@@ -70,6 +73,7 @@ make lab-02-oauth
 make lab-02-cognito
 make lab-03-runtime-check
 make lab-03-runtime-run
+make lab-03-runtime-kagent-plan
 ```
 
 `make lab-02-cognito-config-check` 另外需要 Terraform 與 Docker。它只驗證 Terraform provider schema 及 agentgateway 設定，不會建立 AWS 資源，也不會啟動 MCP target。需要 live model 或 container 的其他步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。

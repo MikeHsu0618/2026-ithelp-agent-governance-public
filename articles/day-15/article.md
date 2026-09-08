@@ -38,13 +38,13 @@ Retry 的風險要分成架構模型和產品預設來看。如果兩層都設�
 | Retry | AI route 不設定應用層 retry | 只有具 idempotency contract 的 operation 才考慮開啟 |
 | Telemetry | TLS、connection、host、request ID | identity、policy、model／Tool decision、backend outcome |
 
-這張表要逼每個行為留下唯一 owner，不代表所有環境都要照著同一套拓撲部署。完整版本收在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/articles/day-15/proxy-responsibility-matrix.md)，裡面還有 timeout、SSE、error propagation 與 fail-closed，設計審查時可以直接逐列填入 owner 與驗收方法。
+這張表要逼每個行為留下唯一 owner，不代表所有環境都要照著同一套拓撲部署。完整版本收在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16/articles/day-15/proxy-responsibility-matrix.md)，裡面還有 timeout、SSE、error propagation 與 fail-closed，設計審查時可以直接逐列填入 owner 與驗收方法。
 
 ## 雙層 traffic path 的責任邊界
 
 下面這張圖來自去識別化的實務 topology。它拿掉內部 host、namespace、帳號與 deployment 細節，只保留 request 必須穿過的邊界，以及每一層可以改動哪些資料。
 
-![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15/assets/diagrams/day-15/ingress-boundary.png)
+![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16/assets/diagrams/day-15/ingress-boundary.png)
 
 Backend 在網路與 routing 上都不接受 edge 直接打進來。Agentgateway 掛掉時，request 必須明確失敗。如果 edge 還藏著一條 fallback route 可以直連 MCP Server 或 LLM provider，最需要治理的時候反而會繞過治理點。
 
@@ -64,7 +64,7 @@ Timeout 則要當成一份完整 budget 來看。[Agentgateway Timeouts](https:/
 
 ## 公開 Lab 只驗單層 traffic contract
 
-公開 Lab 沒有複製完整的 production topology。Production 的既有入口負責 TLS、public host 與通用 routing。[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/labs/03-gateway-runtime/README.md)省略這一層，只啟動一個 pinned agentgateway 與一個 synthetic OpenAI-compatible provider：
+公開 Lab 沒有複製完整的 production topology。Production 的既有入口負責 TLS、public host 與通用 routing。[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16/labs/03-gateway-runtime/README.md)省略這一層，只啟動一個 pinned agentgateway 與一個 synthetic OpenAI-compatible provider：
 
 ```text
 Lab client → one agentgateway → synthetic provider
@@ -93,9 +93,9 @@ Lab route 沒有啟用 retry。[Agentgateway Retries](https://agentgateway.dev/d
 
 發稿前又把完整 Lab 跑了一次，27 tests 全數通過，branch coverage 維持在 85% 以上，Ruff lint／format 與公開設定檔驗證也都通過。下圖保存的是六組 traffic case 的實際輸出，最後得到 `6/6 matched`。
 
-![Day 15 實際 Lab terminal card。單一 agentgateway 1.5.0 且 retry disabled，一般 JSON 與 SSE 得到 200，缺少或錯誤 caller credential 得到 401，上游 rate limit 保留 429，backend credential isolation 通過，六組結果皆符合預期。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15/assets/screenshots/day-15/01-traffic-boundary-results.png)
+![Day 15 實際 Lab terminal card。單一 agentgateway 1.5.0 且 retry disabled，一般 JSON 與 SSE 得到 200，缺少或錯誤 caller credential 得到 401，上游 rate limit 保留 429，backend credential isolation 通過，六組結果皆符合預期。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16/assets/screenshots/day-15/01-traffic-boundary-results.png)
 
-圖片由同一次 live run 的 terminal output 重新排版。可複製指令、原始 terminal、JSON report、redacted config 與 hash 都放在 [Day 15 Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15/assets/screenshots/day-15/evidence.md)，不需要從圖片抄字。
+圖片由同一次 live run 的 terminal output 重新排版。可複製指令、原始 terminal、JSON report、redacted config 與 hash 都放在 [Day 15 Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16/assets/screenshots/day-15/evidence.md)，不需要從圖片抄字。
 
 | Case | 實際結果 | 這次能確認的邊界 |
 | --- | --- | --- |

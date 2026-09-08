@@ -1,0 +1,14 @@
+DAY 16 / KAGENT x AGENTGATEWAY
+
+kagent 0.10.0  |  agentgateway 1.5.0
+kind 0.30.0    |  Kubernetes / kubectl 1.34.0
+
+MODEL CONFIG       Accepted=True
+REMOTE MCP         Accepted=True   tools=14
+AGENT              Accepted=True   Ready=True   runtime=go
+A2A INVOCATION     completed       reply=boundary-ok
+LLM ROUTE          observed        HTTP 200
+MCP ROUTE          observed        HTTP 200 / 202
+PROXY REWRITE      /mcp via agentgateway + x-kagent-host
+
+STATIC CHECK       PASS 4 / PARTIAL 2 / FAIL 0

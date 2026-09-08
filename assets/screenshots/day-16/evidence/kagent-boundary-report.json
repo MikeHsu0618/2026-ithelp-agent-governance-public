@@ -1,0 +1,44 @@
+{
+  "schema": "ithelp.gateway-runtime.kagent-boundary-report.v1",
+  "versions": {
+    "kagent": "0.10.0",
+    "agentgateway": "1.5.0",
+    "gateway_api": "1.6.0",
+    "kind": "0.30.0",
+    "kubernetes": "1.34.0",
+    "kubectl": "1.34.0"
+  },
+  "live_observations": {
+    "model_config_accepted": true,
+    "remote_mcp_accepted": true,
+    "discovered_tools": 14,
+    "agent_accepted": true,
+    "agent_ready": true,
+    "runtime": "go",
+    "a2a_state": "completed",
+    "a2a_reply": "boundary-ok",
+    "a2a_path": "direct Agent service; Gateway A2A is deferred to Day 17",
+    "llm_route_observed": true,
+    "mcp_route_observed": true,
+    "proxy_rewrite_observed": true,
+    "gateway_routes_accepted": true,
+    "gateway_route_references_resolved": true,
+    "fixture_security": {
+      "synthetic_llm_uid": 65532,
+      "mcp_uid": 1000,
+      "read_only_root_filesystem": true
+    }
+  },
+  "static_summary": {
+    "pass": 4,
+    "partial": 2,
+    "fail": 0,
+    "total": 6
+  },
+  "non_claims": [
+    "A single synthetic task does not prove arbitrary workflow support.",
+    "A Secret-backed header does not prove token acquisition or refresh.",
+    "OpenAI reasoningEffort does not prove provider parity.",
+    "The public Lab does not reproduce an existing Ingress or a production topology."
+  ]
+}

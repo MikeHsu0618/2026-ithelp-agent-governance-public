@@ -1,0 +1,3 @@
+route=day16-lab/mcp-everything method=POST host=agentgateway-proxy.agentgateway-system.svc.cluster.local path=/mcp status=200
+route=day16-lab/synthetic-llm method=POST host=agentgateway-proxy.agentgateway-system.svc.cluster.local path=/v1/chat/completions status=200
+route=day16-lab/mcp-everything method=POST host=agentgateway-proxy.agentgateway-system.svc.cluster.local path=/mcp status=202

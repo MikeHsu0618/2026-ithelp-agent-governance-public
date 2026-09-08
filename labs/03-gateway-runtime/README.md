@@ -48,6 +48,62 @@ matched 6/6
 
 這些結果不等於 production 雙層 proxy、Kubernetes controller、HA、MCP session 或 A2A streaming 已通過。Day 15 用單層 Lab 驗 traffic contract，實務 topology 則另用責任矩陣說明。
 
+## Day 16：kagent control plane 與 agentgateway traffic path
+
+Day 16 在獨立 kind cluster 安裝 kagent `0.10.0` 與 agentgateway `1.5.0`。Lab 不複製既有 Ingress，也不需要 Gemini／OpenAI key，只有一個 declarative Agent、一個固定回覆的 OpenAI-compatible backend，以及一個 read-only MCP fixture。
+
+先跑不接觸 cluster 的靜態責任檢查：
+
+```bash
+make lab-03-runtime-up
+make lab-03-runtime-kagent-plan
+```
+
+預期得到四項 `PASS`、兩項 `PARTIAL`。`PARTIAL` 是刻意保留的產品邊界：Secret-backed header 沒有證明 Token acquisition／refresh，單步 Agent 也沒有證明任意多步 workflow。
+
+Live Kubernetes slice 需要 Docker Engine、Helm、kind `0.30.0` 與 kubectl `1.34.x`。它使用 `labs/03-gateway-runtime/.runtime/day-16/kubeconfig`，current context 必須精確等於 `kind-ithelp-day16`，不會讀取預設的 `~/.kube/config`：
+
+```bash
+make lab-03-runtime-kagent-up
+make lab-03-runtime-kagent-invoke
+```
+
+若 kind 或 kubectl 不在預設 PATH，可以指定完整路徑：
+
+```bash
+make lab-03-runtime-kagent-up \
+  KIND_BIN=/path/to/kind-v0.30.0 \
+  KUBECTL_BIN=/path/to/kubectl-v1.34.0
+```
+
+實際 A2A 呼叫的預期摘要如下。Gateway request counter 會隨同一個 cluster 的重跑次數增加，因此驗收只要求大於零，不把累積數字當固定 fixture：
+
+```text
+a2a-state=completed
+agent-reply=boundary-ok
+discovered-tools=14
+gateway-llm-requests=<positive integer>
+gateway-mcp-requests=<positive integer>
+```
+
+Live slice 同時確認：
+
+- `ModelConfig`、`RemoteMCPServer` 與 `Agent` 狀態被 kagent 接受，Agent deployment 進入 Ready。
+- 生成的 model base URL 指向 agentgateway `/v1`，`reasoning_effort=low` 保留下來。
+- 生成的 MCP URL 被改寫成 agentgateway `/mcp`，並帶有原始 Service 的 `x-kagent-host`。
+- A2A 呼叫回覆 `boundary-ok`，agentgateway access log 同時看到 LLM 與 MCP route。
+- 公開 evidence 只保存 redacted runtime config、狀態摘要與安全的 route 結果，不保存 raw header value。
+
+MCP fixture 的 package version 與 base image digest 都在 `fixtures/day-16-mcp/` 固定。Image 會先在本機依 lockfile build，再載入 kind node，Pod 啟動時不會另外執行 `npx` 下載依賴。
+
+完成後刪除這個 Lab 自己建立的 cluster：
+
+```bash
+make lab-03-runtime-kagent-down
+```
+
+Cleanup 會先核對獨立 kubeconfig 的 context，再刪除名稱精確等於 `ithelp-day16` 的 kind cluster。
+
 ## 這個 Lab 刻意只放一層 Gateway
 
 ```text

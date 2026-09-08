@@ -1,0 +1,255 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway-proxy
+  namespace: agentgateway-system
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector:
+          matchLabels:
+            ithelp.dev/day16-gateway-access: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synthetic-llm
+  namespace: day16-lab
+data:
+  client.py: |-
+    import json
+    import urllib.request
+    import uuid
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "day16-lab",
+        "method": "message/send",
+        "params": {
+            "message": {
+                "role": "user",
+                "parts": [{
+                    "kind": "text",
+                    "text": "Reply with boundary-ok and do not call a tool."
+                }],
+                "messageId": str(uuid.uuid4())
+            }
+        }
+    }
+    request = urllib.request.Request(
+        "http://day16-agent.day16-lab.svc.cluster.local:8080/",
+        data=json.dumps(payload).encode(),
+        headers={"content-type": "application/json"},
+        method="POST"
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)["result"]
+    print("a2a-state=" + result["status"]["state"])
+    print("agent-reply=" + result["artifacts"][0]["parts"][0]["text"])
+
+  server.py: |-
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("content-length", "0"))
+            self.rfile.read(length)
+            body = json.dumps({
+                "id": "chatcmpl-day16",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "synthetic-model",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "boundary-ok"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            print(format % args, flush=True)
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synthetic-llm
+  namespace: day16-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synthetic-llm
+  template:
+    metadata:
+      labels:
+        app: synthetic-llm
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: server
+        image: python:3.14.5-alpine3.23@sha256:5a824eb82cc75361f98611f3cfc5091ea33f10a6ccea4d4ebdabbc523b9a1614
+        command: [python, /app/server.py]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+          runAsUser: 65532
+          runAsGroup: 65532
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 2
+        volumeMounts:
+        - name: source
+          mountPath: /app
+          readOnly: true
+      volumes:
+      - name: source
+        configMap:
+          name: synthetic-llm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synthetic-llm
+  namespace: day16-lab
+spec:
+  selector:
+    app: synthetic-llm
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-everything
+  namespace: day16-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-everything
+  template:
+    metadata:
+      labels:
+        app: mcp-everything
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: mcp
+        image: ithelp/day16-mcp:2026.8.31
+        imagePullPolicy: Never
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        ports:
+        - name: mcp
+          containerPort: 3001
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 5
+          periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-everything
+  namespace: day16-lab
+spec:
+  selector:
+    app: mcp-everything
+  ports:
+  - name: http
+    port: 3001
+    targetPort: mcp
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: synthetic-llm
+  namespace: day16-lab
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1
+    backendRefs:
+    - name: synthetic-llm
+      port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-everything
+  namespace: day16-lab
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - headers:
+      - name: x-kagent-host
+        type: Exact
+        value: mcp-everything.day16-lab.svc.cluster.local
+      path:
+        type: PathPrefix
+        value: /mcp
+    backendRefs:
+    - name: mcp-everything
+      port: 3001

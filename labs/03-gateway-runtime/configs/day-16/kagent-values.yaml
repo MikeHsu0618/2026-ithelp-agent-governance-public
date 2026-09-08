@@ -1,0 +1,55 @@
+# Minimal kagent values for the disposable Day 16 kind cluster.
+# The chart version is pinned by the Makefile; this file intentionally disables
+# every bundled agent and tool that is unrelated to the ownership experiment.
+
+controller:
+  auth:
+    # The UI is never exposed outside the disposable local cluster.
+    mode: unsecure
+
+database:
+  postgres:
+    bundled:
+      # Development/evaluation only. Production must use an operated database.
+      enabled: true
+
+providers:
+  default: ollama
+  ollama:
+    provider: Ollama
+    model: synthetic-model
+    config:
+      host: synthetic-llm.day16-lab.svc.cluster.local:8080
+
+proxy:
+  # kagent rewrites internal Agent-to-Agent and Agent-to-MCP URLs to this service.
+  url: http://agentgateway-proxy.agentgateway-system.svc.cluster.local:80
+
+kmcp:
+  enabled: false
+substrate:
+  enabled: false
+kagent-tools:
+  enabled: false
+grafana-mcp:
+  enabled: false
+k8s-agent:
+  enabled: false
+kgateway-agent:
+  enabled: false
+istio-agent:
+  enabled: false
+promql-agent:
+  enabled: false
+observability-agent:
+  enabled: false
+argo-rollouts-agent:
+  enabled: false
+helm-agent:
+  enabled: false
+cilium-policy-agent:
+  enabled: false
+cilium-manager-agent:
+  enabled: false
+cilium-debug-agent:
+  enabled: false
