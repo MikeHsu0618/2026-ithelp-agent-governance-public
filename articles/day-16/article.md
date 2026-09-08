@@ -2,21 +2,21 @@
 
 Day 15 把既有 Ingress 與 agentgateway 的流量責任切開之後，還有一大塊工作沒有人接：Agent 要用哪個 Runtime、如何部署、怎麼被其他 Agent 找到，以及版本更新後由誰重新驗證。Gateway 能管住一筆 request，卻不會替團隊把 Agent 生出來。這也是我們當初把 kagent 裝進 Kubernetes 的原因。
 
-實際使用 `0.9.9` 時，ModelConfig 已經能把 LLM request 送進 agentgateway，RemoteMCPServer 也接過 Gateway 後面的 read-only MCP Server，連 A2A Agent Card 都曾經從外部 route 讀到。單看 connectivity，這幾條路都不是紙上談兵。
+這篇直接用 kagent `0.10.0`。在 Kubernetes Lab 裡，`ModelConfig` 已經能把 LLM request 送進 agentgateway，`RemoteMCPServer` 也能走 Gateway 後面的 MCP route，A2A invocation 則由 kagent 產生的 Agent Service 接住。三條路都有實際結果，不靠產品架構圖猜。
 
-真正讓選型卡住的事，反而發生在線路跑通以後。kagent 和 agentgateway 都會出現在 LLM、MCP、A2A 的架構圖上，很容易被看成互相替代的產品。到了真正寫 Agent 的時候，declarative runtime 能暴露多少 model 參數、workflow 和 credential lifecycle，又會直接影響團隊願不願意採用。Day 16 因此不比功能數量，而是把同一筆 request 拆成 Runtime、Control Plane 與 Traffic Path，再用目前的 kagent `0.10.0` 重跑一次。
+我們之前確實踩過 provider 設定面不一致的坑：某條 model path 能調的參數，換一個 provider 就未必有同等欄位。新版已經補掉一部分，現在選型時，修好的缺口就不該繼續扣分。真正要驗收的是 declarative runtime 能不能承載團隊想寫的 Agent，以及 kagent 和 agentgateway 各自該接哪一段責任。Day 16 因此不比功能數量，而是把同一筆 request 拆成 Runtime、Control Plane 與 Traffic Path。
 
-![kagent 官方 Logo](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r1/assets/third-party/kagent/kagent-horizontal-color.png)
+![kagent 官方 Logo](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r2/assets/third-party/kagent/kagent-horizontal-color.png)
 
 > kagent Logo 取自 [CNCF artwork repository](https://github.com/cncf/artwork/tree/main/projects/kagent/horizontal/color)，僅用來識別本文討論的專案。本文與 CNCF、kagent 或 agentgateway 均無隸屬或贊助關係。
 
-## 0.9.9 跑得通，仍沒有跨過採用門檻
+## 路徑跑得通，仍沒有跨過採用門檻
 
-當時的 Kubernetes 路徑大致長這樣：kagent 的 `ModelConfig` 把 OpenAI-compatible base URL 指向 agentgateway，Agent 引用 `RemoteMCPServer`，再由 Gateway 連到 Grafana MCP。沒有 consumer key 時，LLM path 回 `401`，帶著指定的 workload key 才得到 `200`。MCP path 也能列出 read-only tools，證明 routing、header 與 backend 都接對了。
+這次的 Kubernetes 路徑大致長這樣：kagent 的 `ModelConfig` 把 OpenAI-compatible base URL 指向 agentgateway，Agent 引用 `RemoteMCPServer`，再由 Gateway 連到 MCP fixture。實跑時，LLM 與 MCP request 都出現在 agentgateway access log，A2A invocation 也得到合成模型回覆的 `boundary-ok`。Routing、header 與 backend 已經接對，問題不在 connectivity。
 
-這些結果解決的是「能不能連」，沒有回答「平台能不能承載我們想寫的 Agent」。我們需要的並不只有 description、system prompt 和 tool list，還包括 provider-specific thinking 設定、較複雜的 workflow、長任務的狀態，以及不靠長效靜態 JWT 的 credential 取得與更新。
+這些結果先回答了「能不能連」。要判斷平台能不能承載我們想寫的 Agent，還得繼續檢查 provider-specific thinking 設定、較複雜的 workflow、長任務狀態，以及不靠長效靜態 JWT 的 credential 取得與更新。
 
-寫初稿時，我一度想把當年的問題簡化成「`0.9.9` 沒有 thinking 設定」，回頭對 source 才發現這樣會寫錯：OpenAI `ModelConfig` 當時已經有 `reasoningEffort`。真正卡住我們的，是主要使用的 Google ADK／Gemini 路徑沒有因此得到同等設定面。產品裡有一個欄位，不等於團隊實際採用的 provider 與 runtime 已經能表達同一件事。
+舊坑有修好就算修好，我不打算拿它繼續扣分。`0.10.0` 的 OpenAI path 已能保存 `reasoningEffort`，這項直接記 PASS。後面要看的，是現行設定與實跑仍回答不了的部分：MCP credential 要怎麼取得與更新，以及多步 workflow 的狀態由誰保存。
 
 這正是我對 kagent 一直有點「又恨又癢」的地方。它替 Kubernetes 團隊準備了 Agent deployment、UI、discovery 與 A2A 入口，確實省掉不少平台工作。可是 declarative surface 一旦接不住需求，開發團隊最後還是得改成自己寫 Runtime。此時留下 kagent 的價值，就不能再用「有沒有 Agent」判斷，而要看它還接走了哪些 control-plane 工作。
 
@@ -28,7 +28,7 @@ Day 15 把既有 Ingress 與 agentgateway 的流量責任切開之後，還有�
 
 **Traffic Path** 才是 request 實際經過的地方。agentgateway 在這裡處理 LLM、MCP 或 A2A route，以及共用的 authentication、authorization、rate limit、backend credential 與 telemetry。它可以看見並管住流量，卻不負責決定 Agent 下一步要呼叫哪個 Tool。
 
-![kagent 管理 Agent CR、Deployment 與 discovery，應用團隊負責 Agent runtime 邏輯。Agent 發出的 LLM 與 MCP request 經同一個 agentgateway 進入 backend。Runtime、Control Plane、Traffic Path 各有自己的 source of truth。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r1/assets/diagrams/day-16/runtime-control-traffic-boundary.png)
+![kagent 管理 Agent CR、Deployment 與 discovery，應用團隊負責 Agent runtime 邏輯。Agent 發出的 LLM 與 MCP request 經同一個 agentgateway 進入 backend。Runtime、Control Plane、Traffic Path 各有自己的 source of truth。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r2/assets/diagrams/day-16/runtime-control-traffic-boundary.png)
 
 這個拆法也解釋了為什麼公開 Lab 不需要兩層 proxy。Day 15 的既有 Ingress 是實務環境背景，Day 16 只需要一個 agentgateway data plane。kagent 管理 Agent workload，agentgateway 接住它產生的 LLM 與 MCP traffic，已經足以驗證兩者的交界。
 
@@ -68,9 +68,9 @@ Agent 真正拿到的 runtime config 則已經變成：
 
 前一份 YAML 是 kagent control plane 的期望狀態，後一份 JSON 是 Agent runtime 的實際連線設定，Gateway 的 `HTTPRoute` 才是 traffic path 的轉送規則。三份設定都有用途，但不能讓三邊同時宣稱自己是同一項 routing policy 的 owner。
 
-## 0.10.0 重測：設定面變大了，邊界問題還在
+## 直接驗收 0.10.0：四項通過，兩項仍待補
 
-kagent `0.10.0` 在 2026 年 9 月 4 日發佈。這版持續擴充 Go／Python declarative runtime、Agent Card、model config 與其他平台能力，完整變更可以看 [v0.10.0 release](https://github.com/kagent-dev/kagent/releases/tag/v0.10.0)。我沒有拿新版欄位回頭改寫當年的經驗，而是把相同需求重新放進驗收表。
+kagent `0.10.0` 在 2026 年 9 月 4 日發佈，完整變更可以看 [v0.10.0 release](https://github.com/kagent-dev/kagent/releases/tag/v0.10.0)。本次六項驗收全部以這個版本的 API 與實跑結果為準。
 
 目前的 OpenAI `ModelConfig` 可以設定 `reasoningEffort`，本次 CRD 與生成的 Go runtime config 也都保留了 `low`。不過這項 PASS 只適用於被實測的 OpenAI-compatible path，不代表每個 provider 都暴露相同的 thinking surface。依 `0.10.0` API，Gemini config 目前主要是 `maxOutputTokens`，Bedrock 和 OpenAI 則各有不同的 provider-specific 欄位。做平台評估時，不能看到「有 reasoning」就替所有 provider 一起打勾。
 
@@ -91,7 +91,7 @@ Declarative Agent 也成功產生 Deployment、Service、Agent Card，並回覆�
 
 ## 公開 Lab 在獨立 kind cluster 重跑
 
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r1/labs/03-gateway-runtime/README.md) 新增 Day 16 Kubernetes slice。這次使用 kind `0.30.0` 建立 Kubernetes `1.34.0` 叢集，操作端的 kubectl 同樣鎖在 `1.34.x`，其餘元件則是 Gateway API `1.6.0`、kagent `0.10.0` 與 agentgateway `1.5.0`。所有 bundled agents、kmcp、kagent-tools 與 Grafana MCP 都關閉，只留下 kagent controller、UI、開發用 PostgreSQL、一個 declarative Agent、一個 synthetic LLM 和一個 MCP fixture。
+[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r2/labs/03-gateway-runtime/README.md) 新增 Day 16 Kubernetes slice。這次使用 kind `0.30.0` 建立 Kubernetes `1.34.0` 叢集，操作端的 kubectl 同樣鎖在 `1.34.x`，其餘元件則是 Gateway API `1.6.0`、kagent `0.10.0` 與 agentgateway `1.5.0`。所有 bundled agents、kmcp、kagent-tools 與 Grafana MCP 都關閉，只留下 kagent controller、UI、開發用 PostgreSQL、一個 declarative Agent、一個 synthetic LLM 和一個 MCP fixture。
 
 Lab 會建立自己的 `kind-ithelp-day16` context，所有 `kubectl` 與 Helm command 都強制使用獨立 kubeconfig。Runner 若看到其他 context 或 `~/.kube/config` 就拒絕執行，因此不會沿用讀者目前指向 UAT／production 的 context。
 
@@ -104,7 +104,7 @@ make lab-03-runtime-kagent-invoke
 
 MCP fixture image 在本機依 lockfile build，再載入 kind node，不會在 Pod 啟動時臨時抓一串浮動的 npm dependencies。Synthetic LLM 只回 OpenAI-compatible 固定結果，不需要 Gemini 或 OpenAI key，也不會呼叫外部服務。kagent 與 agentgateway 的 Helm chart version、Gateway API release URL、Node／Python base image digest，以及 MCP package version 都固定在設定檔或 Makefile。
 
-![Day 16 實際 Lab terminal card。ModelConfig、RemoteMCPServer 與 Agent 狀態通過，Agent 回覆 boundary-ok，RemoteMCPServer 發現 14 個工具，agentgateway log 同時看到 LLM 與 MCP route。靜態驗收表為四項 PASS、兩項 PARTIAL。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r1/assets/screenshots/day-16/01-kagent-boundary-results.png)
+![Day 16 實際 Lab terminal card。ModelConfig、RemoteMCPServer 與 Agent 狀態通過，Agent 回覆 boundary-ok，RemoteMCPServer 發現 14 個工具，agentgateway log 同時看到 LLM 與 MCP route。靜態驗收表為四項 PASS、兩項 PARTIAL。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r2/assets/screenshots/day-16/01-kagent-boundary-results.png)
 
 實跑結果中，ModelConfig `Accepted=True`，RemoteMCPServer `Accepted=True` 並發現 14 個 tools，Agent 也同時是 `Accepted=True` 與 `Ready=True`。透過 A2A 呼叫 Agent 後，合成模型回覆 `boundary-ok`，agentgateway access log 也分別留下 `synthetic-llm` 與 `mcp-everything` route。圖片只是方便閱讀，完整 command、原始文字、redacted runtime config 和 machine-readable report 都跟著 repo 一起提供。
 
@@ -131,7 +131,7 @@ Cleanup 先驗證 kubeconfig 的 current context 必須精確等於 `kind-ithelp
 | Runtime telemetry | kagent／Application Team | runtime span 與 action event |
 | Traffic telemetry | agentgateway | access log、metric 與 trace |
 
-完整版本放在 [Day 16 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r1/articles/day-16/responsibility-matrix.md)，每一列都附有驗收方法。這份表也保留一個不漂亮但很重要的事實：同一個 Agent 可能同時有 kagent CR、生成的 runtime config 和 agentgateway route。沒有 owner 與 source of truth，宣告式平台越多，drift 只會更難查。
+完整版本放在 [Day 16 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r2/articles/day-16/responsibility-matrix.md)，每一列都附有驗收方法。這份表也保留一個不漂亮但很重要的事實：同一個 Agent 可能同時有 kagent CR、生成的 runtime config 和 agentgateway route。沒有 owner 與 source of truth，宣告式平台越多，drift 只會更難查。
 
 ## A2A 接通，不代表 Runtime 突然變強
 
