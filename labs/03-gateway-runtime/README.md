@@ -104,6 +104,60 @@ make lab-03-runtime-kagent-down
 
 Cleanup 會先核對獨立 kubeconfig 的 context，再刪除名稱精確等於 `ithelp-day16` 的 kind cluster。
 
+## Day 17：A2A Discovery、Routing 與 Runtime Execution
+
+Day 17 沿用同一個 disposable cluster，加入兩條通往 kagent controller 的 route。一般 HTTP backend 保留 controller 原始 Agent Card，用來重現 `controller.a2aBaseUrl` 重複 prefix；A2A-aware backend 則把 Card 的 interface URL 改寫成 Gateway 公開路徑 `/agents/day16`。
+
+一條命令會先重現壞路徑，再恢復 host-only base URL 並驗證 A2A `1.0`：
+
+```bash
+make lab-03-runtime-a2a
+```
+
+負向案例的預期輸出：
+
+```text
+DAY 17 / A2A PATH
+
+Agent Card                     HTTP 200 PASS
+A2A 1.0 / SendMessage          HTTP 404 EXPECTED_FAIL
+A2A 1.0 / SSE stream           HTTP 404 EXPECTED_FAIL
+
+advertised-url=.../api/a2a/api/a2a/day16-lab/day16-agent
+stream-events=NOT_REACHED
+
+matched 3/3
+```
+
+正向案例除了 HTTP status，還要求一般 invocation 的 Task 進入 `TASK_STATE_COMPLETED`，SSE stream 使用同一組 task／context、出現最後一個 artifact chunk，並走到 completed：
+
+```text
+DAY 17 / A2A PATH
+
+Agent Card                     HTTP 200 PASS
+A2A 1.0 / SendMessage          HTTP 200 PASS
+A2A 1.0 / SSE stream           HTTP 200 PASS
+
+advertised-url=.../agents/day16
+task-state=TASK_STATE_COMPLETED
+agent-reply=boundary-ok
+stream-events=SUBMITTED > WORKING > AGENT_MESSAGE > ARTIFACT(last) > COMPLETED
+stream-last-chunk=true
+
+matched 3/3
+```
+
+Probe 會明確送出 `A2A-Version: 1.0`，使用 `SendMessage` 與 `SendStreamingMessage`，並依 A2A `1.0` 的 `result.task`／SSE update shape 解析結果。Gateway log 還必須分別出現兩個 method，且一般 invocation 有 success outcome 與 completed task state。
+
+若需要分步觀察，可依序執行：
+
+```bash
+make lab-03-runtime-a2a-reproduce
+make lab-03-runtime-a2a-run
+```
+
+兩個 target 都會先確認 Day 16 cluster 與 route 狀態，因此分開呼叫會重跑 Helm reconciliation；要一次完成請優先使用組合 target。Day 17 沒有把 `INPUT_REQUIRED`／`AUTH_REQUIRED` 當成 live PASS，也沒有驗證 BYO Agent 或 HITL resume，這些留給 Day 18。
+
 ## 這個 Lab 刻意只放一層 Gateway
 
 ```text

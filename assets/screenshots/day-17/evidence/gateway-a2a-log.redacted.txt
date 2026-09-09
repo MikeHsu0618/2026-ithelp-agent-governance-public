@@ -1,0 +1,2 @@
+request route=day16-lab/day17-kagent-a2a http.method=POST http.path=/agents/day16 http.status=200 protocol=a2a a2a.method=SendMessage a2a.response.outcome=success a2a.result.kind=task a2a.task.state=TASK_STATE_COMPLETED a2a.context.id=<generated>
+request route=day16-lab/day17-kagent-a2a http.method=POST http.path=/agents/day16 http.status=200 protocol=a2a a2a.method=SendStreamingMessage

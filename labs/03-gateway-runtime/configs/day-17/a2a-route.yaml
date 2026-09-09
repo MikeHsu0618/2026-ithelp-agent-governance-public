@@ -1,0 +1,68 @@
+# The first route mirrors the author's original pass-through setup. It preserves the
+# kagent controller path so an incorrect controller.a2aBaseUrl remains visible in the
+# Agent Card instead of being repaired by the Gateway.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: day17-kagent-http
+  namespace: day16-lab
+spec:
+  static:
+    host: kagent-controller.kagent.svc.cluster.local
+    port: 8083
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: day17-kagent-http
+  namespace: day16-lab
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api/a2a/day16-lab/day16-agent
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: day17-kagent-http
+---
+# The second route uses the current A2A backend. It rewrites the public prefix once,
+# repairs Agent Card interface URLs, and enables A2A-specific access-log fields.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: day17-kagent-a2a
+  namespace: day16-lab
+spec:
+  a2a:
+    host: kagent-controller.kagent.svc.cluster.local
+    port: 8083
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: day17-kagent-a2a
+  namespace: day16-lab
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /agents/day16
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /api/a2a/day16-lab/day16-agent
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: day17-kagent-a2a

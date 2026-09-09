@@ -1,0 +1,16 @@
+DAY 17 / A2A PATH
+
+Agent Card                     HTTP 200 PASS
+A2A 1.0 / SendMessage          HTTP 200 PASS
+A2A 1.0 / SSE stream           HTTP 200 PASS
+
+advertised-url=http://agentgateway-proxy.agentgateway-system.svc.cluster.local/agents/day16
+task-state=TASK_STATE_COMPLETED
+context-id=<generated>
+agent-reply=boundary-ok
+stream-events=SUBMITTED > WORKING > AGENT_MESSAGE > ARTIFACT(last) > COMPLETED
+stream-last-chunk=true
+stream-task-id=<generated>
+stream-context-id=<generated>
+
+matched 3/3

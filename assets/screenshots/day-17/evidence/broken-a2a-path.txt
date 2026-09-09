@@ -1,0 +1,16 @@
+DAY 17 / A2A PATH
+
+Agent Card                     HTTP 200 PASS
+A2A 1.0 / SendMessage          HTTP 404 EXPECTED_FAIL
+A2A 1.0 / SSE stream           HTTP 404 EXPECTED_FAIL
+
+advertised-url=http://agentgateway-proxy.agentgateway-system.svc.cluster.local/api/a2a/api/a2a/day16-lab/day16-agent
+task-state=NOT_REACHED
+context-id=NOT_AVAILABLE
+agent-reply=NOT_AVAILABLE
+stream-events=NOT_REACHED
+stream-last-chunk=false
+stream-task-id=NOT_AVAILABLE
+stream-context-id=NOT_AVAILABLE
+
+matched 3/3

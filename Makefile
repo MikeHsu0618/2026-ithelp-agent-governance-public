@@ -4,9 +4,11 @@ LAB03 := $(CURDIR)/labs/03-gateway-runtime
 AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
 DAY16_CONFIG := $(LAB03)/configs/day-16
 DAY16_MCP_FIXTURE := $(LAB03)/fixtures/day-16-mcp
+DAY17_CONFIG := $(LAB03)/configs/day-17
 DAY16_KIND_NAME := ithelp-day16
 DAY16_CONTEXT := kind-ithelp-day16
 DAY16_KUBECONFIG ?= $(LAB03)/.runtime/day-16/kubeconfig
+DAY17_GATEWAY_HOST := http://agentgateway-proxy.agentgateway-system.svc.cluster.local
 KIND_BIN ?= kind
 KUBECTL_BIN ?= kubectl
 
@@ -17,6 +19,7 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-up lab-03-runtime-check lab-03-runtime-config-check \
 	lab-03-runtime-run lab-03-runtime-traffic lab-03-runtime-kagent-plan \
 	lab-03-runtime-kagent-up lab-03-runtime-kagent-invoke lab-03-runtime-kagent-down \
+	lab-03-runtime-a2a lab-03-runtime-a2a-up lab-03-runtime-a2a-reproduce lab-03-runtime-a2a-run \
 	lab-03-runtime-down
 
 lab-01-up:
@@ -185,6 +188,65 @@ lab-03-runtime-kagent-invoke:
 	@count="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n agentgateway-system \
 		logs deployment/agentgateway-proxy | grep -c 'route=day16-lab/mcp-everything' || true)"; \
 		printf 'gateway-mcp-requests=%s\n' "$$count"; test "$$count" -gt 0
+
+lab-03-runtime-a2a-up: lab-03-runtime-kagent-up
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY17_CONFIG)/a2a-route.yaml"
+	@for backend in day17-kagent-http day17-kagent-a2a; do \
+		"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab wait \
+			--for=condition=Accepted "agentgatewaybackend/$$backend" --timeout=2m; \
+	done
+	@for route in day17-kagent-http day17-kagent-a2a; do \
+		accepted=""; \
+		for attempt in $$(seq 1 30); do \
+			accepted="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab \
+				get httproute "$$route" \
+				-o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}')"; \
+			test "$$accepted" = "True" && break; \
+			sleep 1; \
+		done; \
+		printf '%s-accepted=%s\n' "$$route" "$$accepted"; test "$$accepted" = "True"; \
+	done
+
+lab-03-runtime-a2a: lab-03-runtime-a2a-reproduce lab-03-runtime-a2a-run
+
+lab-03-runtime-a2a-reproduce: lab-03-runtime-a2a-up
+	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		-f "$(DAY16_CONFIG)/kagent-values.yaml" \
+		--set-string controller.a2aBaseUrl="$(DAY17_GATEWAY_HOST)/api/a2a" \
+		--wait --timeout 6m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n kagent rollout status \
+		deployment/kagent-controller --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab exec -i \
+		deployment/synthetic-llm -- python - \
+		--gateway-base "$(DAY17_GATEWAY_HOST)/api/a2a/day16-lab/day16-agent" \
+		--expect-routing-failure \
+		< "$(LAB03)/src/gateway_runtime/a2a_path.py"
+
+lab-03-runtime-a2a-run: lab-03-runtime-a2a-up
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"
+	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		-f "$(DAY16_CONFIG)/kagent-values.yaml" \
+		--set-string controller.a2aBaseUrl="$(DAY17_GATEWAY_HOST)" \
+		--wait --timeout 6m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n kagent rollout status \
+		deployment/kagent-controller --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab exec -i \
+		deployment/synthetic-llm -- python - \
+		--gateway-base "$(DAY17_GATEWAY_HOST)/api/a2a/day16-lab/day16-agent" \
+		< "$(LAB03)/src/gateway_runtime/a2a_path.py"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab exec -i \
+		deployment/synthetic-llm -- python - \
+		--gateway-base "$(DAY17_GATEWAY_HOST)/agents/day16" \
+		< "$(LAB03)/src/gateway_runtime/a2a_path.py"
+	@logs="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n agentgateway-system \
+		logs deployment/agentgateway-proxy --since=5m)"; \
+	printf '%s\n' "$$logs" | grep 'a2a.method=SendMessage' | tail -n 1; \
+	printf '%s\n' "$$logs" | grep 'a2a.method=SendStreamingMessage' | tail -n 1; \
+	printf '%s\n' "$$logs" | grep -q 'a2a.response.outcome=success'; \
+	printf '%s\n' "$$logs" | grep -q 'a2a.task.state=TASK_STATE_COMPLETED'; \
+	printf 'gateway-a2a-telemetry=PASS\n'
 
 lab-03-runtime-kagent-down:
 	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \
