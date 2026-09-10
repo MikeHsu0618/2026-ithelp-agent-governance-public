@@ -1,0 +1,19 @@
+{
+  "name": "day18_byo_agent",
+  "description": "A deterministic BYO Agent for testing nested HITL and synthetic actor propagation.",
+  "url": "http://day18-byo.day18-lab.svc.cluster.local:8080/",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false
+  },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {
+      "id": "change-demo-resource",
+      "name": "Change demo resource",
+      "description": "Returns a deterministic action receipt after explicit approval.",
+      "tags": ["hitl", "identity", "fixture"]
+    }
+  ]
+}

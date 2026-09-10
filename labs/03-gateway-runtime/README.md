@@ -158,6 +158,54 @@ make lab-03-runtime-a2a-run
 
 兩個 target 都會先確認 Day 16 cluster 與 route 狀態，因此分開呼叫會重跑 Helm reconciliation；要一次完成請優先使用組合 target。Day 17 沒有把 `INPUT_REQUIRED`／`AUTH_REQUIRED` 當成 live PASS，也沒有驗證 BYO Agent 或 HITL resume，這些留給 Day 18。
 
+## Day 18：BYO Agent、Agent-as-Tool 與 HITL
+
+Day 18 把 Google ADK Agent 打成自己的 image，再以 `type: BYO` 註冊到 kagent。另一個 declarative parent 將 BYO Agent 當成 Tool，兩者的 A2A traffic 經 agentgateway route。版本固定為 kagent／`kagent-adk` `0.10.1` 與 agentgateway `1.5.0`。
+
+BYO Tool 只回傳 action receipt，不會修改 Kubernetes 或外部服務。Parent model 也是 deterministic OpenAI-compatible fixture，因此不需要外部 LLM API key：
+
+```bash
+make lab-03-runtime-byo
+```
+
+預期輸出：
+
+```text
+DAY 18 / BYO PLATFORM BOUNDARY
+
+BYO Agent Card                       PASS
+Declarative Agent -> BYO Agent       PASS
+Nested HITL approve/resume           PASS
+Nested HITL reject/resume            PASS
+Synthetic actor propagation          PASS
+
+approve-reply=parent-complete ACTION_EXECUTED resource=demo/cache actor=sre-oncaller
+reject-reply=parent-complete ACTION_SKIPPED decision=rejected
+rejected-without-execution=true
+matched 5/5
+```
+
+這五項只驗證 discovery、同 namespace Agent-as-Tool、HITL pause／resume 與 synthetic actor propagation。Probe 會核對前後 task ID、context ID 與狀態，但沒有驗證 approver 是否有權批准。它們也不代表跨 namespace policy、長期 memory、skills materialization 或獨立 Tool execution sandbox 已通過。
+
+若要保留 cluster 觀察 Agent CR、Pod、UI 與 Gateway log，可分兩步執行：
+
+```bash
+make lab-03-runtime-byo-up
+make lab-03-runtime-byo-run
+```
+
+`byo-up` 會從一開始就以 kagent `0.10.1` 建立共用 runtime，不會先安裝舊版再升級。BYO base image 同時鎖定 `0.10.1` tag 與 manifest digest。Deployment 保留 read-only root filesystem，另掛載限制為 `64Mi` 的 `/tmp`。三個 workload 都透過預先建立的 ServiceAccount 停用預設 Kubernetes API token automount，兩個 Agent 仍保留 controller 所需、audience 為 `kagent` 的 projected token。
+
+Agent-as-Tool 產生的 remote Agent URL 指向 agentgateway proxy，並帶 `x-kagent-host: day18-byo.day18-lab`。`configs/day-18/kagent-resources.yaml` 內的 `HTTPRoute` 會依這個 header 導到 BYO A2A backend。缺少 route 時，parent 讀取 Agent Card 會得到 `404`，這是本 Lab 保留在 evidence 裡的負向部署紀錄。
+
+本機 `x-user-id: sre-oncaller` 是為了觀察 propagation 而送出的合成 header。Lab 的 kagent 使用 unsecure auth，這條 route 也沒有 AuthenticationPolicy，不能把結果解讀成 caller 已完成 authentication。正式環境必須先在可信入口驗證 credential，再建立不能由外部任意覆寫的 identity context。
+
+完成後仍使用同一個 context guard 清除 disposable cluster：
+
+```bash
+make lab-03-runtime-kagent-down
+```
+
 ## 這個 Lab 刻意只放一層 Gateway
 
 ```text

@@ -1,3 +1,6 @@
+SHELL := /bin/bash
+SELF_MAKEFILE := $(abspath $(firstword $(MAKEFILE_LIST)))
+
 LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
 LAB03 := $(CURDIR)/labs/03-gateway-runtime
@@ -5,6 +8,11 @@ AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def
 DAY16_CONFIG := $(LAB03)/configs/day-16
 DAY16_MCP_FIXTURE := $(LAB03)/fixtures/day-16-mcp
 DAY17_CONFIG := $(LAB03)/configs/day-17
+DAY18_CONFIG := $(LAB03)/configs/day-18
+DAY18_BYO_FIXTURE := $(LAB03)/fixtures/day-18-byo
+DAY18_BYO_IMAGE := ithelp/day18-byo:2026.9.10
+DAY18_KAGENT_VERSION := 0.10.1
+KAGENT_VERSION ?= 0.10.0
 DAY16_KIND_NAME := ithelp-day16
 DAY16_CONTEXT := kind-ithelp-day16
 DAY16_KUBECONFIG ?= $(LAB03)/.runtime/day-16/kubeconfig
@@ -20,6 +28,7 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-run lab-03-runtime-traffic lab-03-runtime-kagent-plan \
 	lab-03-runtime-kagent-up lab-03-runtime-kagent-invoke lab-03-runtime-kagent-down \
 	lab-03-runtime-a2a lab-03-runtime-a2a-up lab-03-runtime-a2a-reproduce lab-03-runtime-a2a-run \
+	lab-03-runtime-byo lab-03-runtime-byo-up lab-03-runtime-byo-run \
 	lab-03-runtime-down
 
 lab-01-up:
@@ -154,11 +163,11 @@ lab-03-runtime-kagent-up:
 		--version v1.5.0 --namespace agentgateway-system \
 		--kubeconfig "$(DAY16_KUBECONFIG)" --wait --timeout 5m
 	helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
-		--version 0.10.0 --namespace kagent --create-namespace \
+		--version "$(KAGENT_VERSION)" --namespace kagent --create-namespace \
 		--kubeconfig "$(DAY16_KUBECONFIG)" \
 		--set kmcp.enabled=false --set substrate.enabled=false --wait --timeout 3m
 	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
-		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		--version "$(KAGENT_VERSION)" --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
 		-f "$(DAY16_CONFIG)/kagent-values.yaml" --wait --timeout 6m
 	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY16_CONFIG)/kagent-resources.yaml"
 	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY16_CONFIG)/agentgateway-resources.yaml"
@@ -211,7 +220,7 @@ lab-03-runtime-a2a: lab-03-runtime-a2a-reproduce lab-03-runtime-a2a-run
 
 lab-03-runtime-a2a-reproduce: lab-03-runtime-a2a-up
 	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
-		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		--version "$(KAGENT_VERSION)" --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
 		-f "$(DAY16_CONFIG)/kagent-values.yaml" \
 		--set-string controller.a2aBaseUrl="$(DAY17_GATEWAY_HOST)/api/a2a" \
 		--wait --timeout 6m
@@ -226,7 +235,7 @@ lab-03-runtime-a2a-reproduce: lab-03-runtime-a2a-up
 lab-03-runtime-a2a-run: lab-03-runtime-a2a-up
 	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"
 	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
-		--version 0.10.0 --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
+		--version "$(KAGENT_VERSION)" --namespace kagent --kubeconfig "$(DAY16_KUBECONFIG)" \
 		-f "$(DAY16_CONFIG)/kagent-values.yaml" \
 		--set-string controller.a2aBaseUrl="$(DAY17_GATEWAY_HOST)" \
 		--wait --timeout 6m
@@ -247,6 +256,55 @@ lab-03-runtime-a2a-run: lab-03-runtime-a2a-up
 	printf '%s\n' "$$logs" | grep -q 'a2a.response.outcome=success'; \
 	printf '%s\n' "$$logs" | grep -q 'a2a.task.state=TASK_STATE_COMPLETED'; \
 	printf 'gateway-a2a-telemetry=PASS\n'
+
+lab-03-runtime-byo:
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-byo-up \
+		KIND_BIN="$(KIND_BIN)" KUBECTL_BIN="$(KUBECTL_BIN)" \
+		DAY16_KUBECONFIG="$(DAY16_KUBECONFIG)"
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-byo-run \
+		KIND_BIN="$(KIND_BIN)" KUBECTL_BIN="$(KUBECTL_BIN)" \
+		DAY16_KUBECONFIG="$(DAY16_KUBECONFIG)"
+
+lab-03-runtime-byo-up:
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-kagent-up KAGENT_VERSION="$(DAY18_KAGENT_VERSION)" \
+		KIND_BIN="$(KIND_BIN)" KUBECTL_BIN="$(KUBECTL_BIN)" \
+		DAY16_KUBECONFIG="$(DAY16_KUBECONFIG)"
+	docker build --pull=false -f "$(DAY18_BYO_FIXTURE)/Containerfile" \
+		-t "$(DAY18_BYO_IMAGE)" "$(DAY18_BYO_FIXTURE)"
+	"$(KIND_BIN)" load docker-image "$(DAY18_BYO_IMAGE)" --name "$(DAY16_KIND_NAME)"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" apply -f "$(DAY18_CONFIG)/kagent-resources.yaml"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab wait \
+		--for=condition=Accepted agentgatewaybackend/day18-byo-a2a --timeout=2m
+	@accepted=""; \
+	for attempt in $$(seq 1 30); do \
+		accepted="$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab \
+			get httproute day18-byo-a2a \
+			-o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}')"; \
+		test "$$accepted" = "True" && break; \
+		sleep 1; \
+	done; \
+	printf 'day18-byo-a2a-accepted=%s\n' "$$accepted"; test "$$accepted" = "True"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab rollout status \
+		deployment/day18-synthetic-llm --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab wait \
+		--for=condition=Accepted modelconfig/day18-parent-model --timeout=2m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab wait \
+		--for=condition=Ready agent/day18-byo --timeout=4m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab wait \
+		--for=condition=Ready agent/day18-parent --timeout=4m
+
+lab-03-runtime-byo-run:
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY16_KUBECONFIG)" config current-context)" = "$(DAY16_CONTEXT)"
+	@mkdir -p "$(LAB03)/artifacts/day18-live"
+	@set -o pipefail; "$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day16-lab exec -i \
+		deployment/synthetic-llm -- python - \
+		--parent-url http://day18-parent.day18-lab.svc.cluster.local:8080/ \
+		--byo-url http://day18-byo.day18-lab.svc.cluster.local:8080/ \
+		< "$(LAB03)/src/gateway_runtime/byo_boundary.py" \
+		| tee "$(LAB03)/artifacts/day18-live/terminal.txt"
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab get agents \
+		-o custom-columns='NAME:.metadata.name,TYPE:.spec.type,READY:.status.conditions[?(@.type=="Ready")].status' \
+		| tee "$(LAB03)/artifacts/day18-live/agent-status.txt"
 
 lab-03-runtime-kagent-down:
 	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \

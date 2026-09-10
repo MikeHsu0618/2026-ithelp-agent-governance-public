@@ -1,0 +1,8 @@
+ARG KAGENT_ADK_IMAGE=ghcr.io/kagent-dev/kagent/kagent-adk:0.10.1@sha256:f7f45b693177792c9e51f3cf944887d085a4957a67388a43d70a3632d17ff98d
+FROM ${KAGENT_ADK_IMAGE}
+
+WORKDIR /app
+
+COPY day18_byo/ day18_byo/
+
+CMD ["day18_byo"]

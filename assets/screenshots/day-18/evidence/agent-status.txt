@@ -1,0 +1,3 @@
+NAME           TYPE          READY
+day18-byo      BYO           True
+day18-parent   Declarative   True

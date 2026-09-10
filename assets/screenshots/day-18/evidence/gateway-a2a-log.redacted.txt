@@ -1,0 +1,9 @@
+# approve path
+route=day18-lab/day18-byo-a2a protocol=a2a http.method=GET http.path=/.well-known/agent-card.json http.status=200
+route=day18-lab/day18-byo-a2a protocol=a2a a2a.method=message/send http.status=200 a2a.response.outcome=success a2a.result.kind=task a2a.task.state=input-required a2a.context.id=<approve-context>
+route=day18-lab/day18-byo-a2a protocol=a2a a2a.method=message/send http.status=200 a2a.response.outcome=success a2a.result.kind=task a2a.task.state=completed a2a.context.id=<approve-context>
+
+# reject path
+route=day18-lab/day18-byo-a2a protocol=a2a http.method=GET http.path=/.well-known/agent-card.json http.status=200
+route=day18-lab/day18-byo-a2a protocol=a2a a2a.method=message/send http.status=200 a2a.response.outcome=success a2a.result.kind=task a2a.task.state=input-required a2a.context.id=<reject-context>
+route=day18-lab/day18-byo-a2a protocol=a2a a2a.method=message/send http.status=200 a2a.response.outcome=success a2a.result.kind=task a2a.task.state=completed a2a.context.id=<reject-context>

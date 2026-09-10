@@ -1,0 +1,306 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: day18-lab
+  labels:
+    ithelp.dev/day16-gateway-access: "true"
+---
+# Public fixture value for a synthetic OpenAI-compatible backend.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: day18-model-credential
+  namespace: day18-lab
+type: Opaque
+stringData:
+  api-key: not-used
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: day18-parent-model
+  namespace: day18-lab
+spec:
+  provider: OpenAI
+  model: day18-parent-fixture
+  apiKeySecret: day18-model-credential
+  apiKeySecretKey: api-key
+  openAI:
+    baseUrl: http://day18-synthetic-llm.day18-lab.svc.cluster.local:8080/v1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: day18-synthetic-llm
+  namespace: day18-lab
+data:
+  server.py: |-
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    def last_tool_result(messages):
+        for message in reversed(messages):
+            if message.get("role") == "tool":
+                return str(message.get("content", ""))
+        return None
+
+    def first_tool_name(tools):
+        for tool in tools:
+            function = tool.get("function", {})
+            if function.get("name"):
+                return function["name"]
+        raise RuntimeError("parent model request did not contain an Agent tool")
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("content-length", "0"))
+            request = json.loads(self.rfile.read(length))
+            tool_result = last_tool_result(request.get("messages", []))
+            if tool_result is None:
+                tool_name = first_tool_name(request.get("tools", []))
+                message = {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "day18-agent-call",
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "arguments": json.dumps({
+                                "request": "Change demo/cache and return the exact result."
+                            })
+                        }
+                    }]
+                }
+                finish_reason = "tool_calls"
+            else:
+                message = {
+                    "role": "assistant",
+                    "content": "parent-complete " + tool_result
+                }
+                finish_reason = "stop"
+
+            body = json.dumps({
+                "id": "chatcmpl-day18",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "day18-parent-fixture",
+                "choices": [{
+                    "index": 0,
+                    "message": message,
+                    "finish_reason": finish_reason
+                }],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2
+                }
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            print(format % args, flush=True)
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: day18-synthetic-llm
+  namespace: day18-lab
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: day18-synthetic-llm
+  namespace: day18-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: day18-synthetic-llm
+  template:
+    metadata:
+      labels:
+        app: day18-synthetic-llm
+    spec:
+      serviceAccountName: day18-synthetic-llm
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: server
+        image: python:3.14.5-alpine3.23@sha256:5a824eb82cc75361f98611f3cfc5091ea33f10a6ccea4d4ebdabbc523b9a1614
+        command: [python, /app/server.py]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+          runAsUser: 65532
+          runAsGroup: 65532
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 2
+        volumeMounts:
+        - name: source
+          mountPath: /app
+          readOnly: true
+      volumes:
+      - name: source
+        configMap:
+          name: day18-synthetic-llm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: day18-synthetic-llm
+  namespace: day18-lab
+spec:
+  selector:
+    app: day18-synthetic-llm
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: day18-byo-a2a
+  namespace: day18-lab
+spec:
+  a2a:
+    host: day18-byo.day18-lab.svc.cluster.local
+    port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: day18-byo-a2a
+  namespace: day18-lab
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - headers:
+      - name: x-kagent-host
+        type: Exact
+        value: day18-byo.day18-lab
+      path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: day18-byo-a2a
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: day18-byo
+  namespace: day18-lab
+automountServiceAccountToken: false
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: day18-byo
+  namespace: day18-lab
+spec:
+  type: BYO
+  description: BYO Google ADK Agent used to verify the kagent platform boundary
+  version: 0.1.0
+  provider:
+    organization: iT 邦幫忙 Lab
+    url: https://ithelp.ithome.com.tw/
+  byo:
+    deployment:
+      image: ithelp/day18-byo:2026.9.10
+      imagePullPolicy: Never
+      serviceAccountName: day18-byo
+      env:
+      - name: TMPDIR
+        value: /tmp
+      - name: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        readOnlyRootFilesystem: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: day18-parent
+  namespace: day18-lab
+automountServiceAccountToken: false
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: day18-parent
+  namespace: day18-lab
+spec:
+  type: Declarative
+  description: Declarative parent that invokes the registered BYO Agent as a tool
+  declarative:
+    runtime: python
+    deployment:
+      serviceAccountName: day18-parent
+    modelConfig: day18-parent-model
+    stream: false
+    systemMessage: |-
+      Delegate every resource change to the registered BYO Agent.
+      Return the child Agent result without paraphrasing it.
+    tools:
+    - type: Agent
+      agent:
+        apiGroup: kagent.dev
+        kind: Agent
+        name: day18-byo

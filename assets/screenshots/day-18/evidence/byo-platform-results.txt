@@ -1,0 +1,12 @@
+DAY 18 / BYO PLATFORM BOUNDARY
+
+BYO Agent Card                       PASS
+Declarative Agent -> BYO Agent       PASS
+Nested HITL approve/resume           PASS
+Nested HITL reject/resume            PASS
+Synthetic actor propagation          PASS
+
+approve-reply=parent-complete ACTION_EXECUTED resource=demo/cache actor=sre-oncaller
+reject-reply=parent-complete ACTION_SKIPPED decision=rejected
+rejected-without-execution=true
+matched 5/5

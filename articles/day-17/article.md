@@ -19,7 +19,7 @@ POST /api/a2a/api/a2a/day16-lab/day16-agent                     -> 404
 
 第二行不是手動亂接的 URL，而是 client 照著 Card 的 `supportedInterfaces[].url` 呼叫。也就是說，Discovery 本身成功了，Discovery 提供的下一站卻是錯的。
 
-![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
+![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
 
 ## 重複的 `/api/a2a` 來自兩邊都以為路徑還沒加
 
@@ -129,7 +129,7 @@ A2A `1.0` 的 task state 包含 `TASK_STATE_INPUT_REQUIRED` 與 `TASK_STATE_AUTH
 
 ## 公開 Lab 先重現錯誤，再用同一支 Probe 修回來
 
-[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 disposable kind cluster、kagent `0.10.0`、agentgateway `1.5.0` 與 synthetic LLM，不需要任何 LLM API key。下面一條命令會先放入錯誤 base URL，再恢復 host-only 設定並重跑正向路徑：
+[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 disposable kind cluster、kagent `0.10.0`、agentgateway `1.5.0` 與 synthetic LLM，不需要任何 LLM API key。下面一條命令會先放入錯誤 base URL，再恢復 host-only 設定並重跑正向路徑：
 
 ```bash
 make lab-03-runtime-a2a
@@ -164,9 +164,9 @@ stream-last-chunk=true
 matched 3/3
 ```
 
-![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17/assets/screenshots/day-17/01-a2a-path-results.png)
+![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18/assets/screenshots/day-17/01-a2a-path-results.png)
 
-圖片只用來快速比對，完整 command、[Gateway route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、probe source 與文字 evidence 都在 repo。我另外整理了一份可帶回其他環境使用的 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17/articles/day-17/a2a-checklist.md)，把 Agent Card、version、routing、streaming、identity、trace 與 HITL 分開勾選。驗收完成後，仍由 Day 16 的 cleanup target 刪除 Lab 自己建立的 cluster：
+圖片只用來快速比對，完整 command、[Gateway route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、probe source 與文字 evidence 都在 repo。我另外整理了一份可帶回其他環境使用的 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18/articles/day-17/a2a-checklist.md)，把 Agent Card、version、routing、streaming、identity、trace 與 HITL 分開勾選。驗收完成後，仍由 Day 16 的 cleanup target 刪除 Lab 自己建立的 cluster：
 
 ```bash
 make lab-03-runtime-kagent-down
