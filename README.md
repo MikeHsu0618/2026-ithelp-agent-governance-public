@@ -24,6 +24,7 @@
 - [閱讀 Day 16 文章](articles/day-16/article.md)
 - [閱讀 Day 17 文章](articles/day-17/article.md)
 - [閱讀 Day 18 文章](articles/day-18/article.md)
+- [閱讀 Day 19 文章](articles/day-19/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -40,6 +41,7 @@
 - [下載 Day 16 Runtime／Control Plane／Traffic Path 責任矩陣](articles/day-16/responsibility-matrix.md)
 - [下載 Day 17 A2A 路徑驗收清單](articles/day-17/a2a-checklist.md)
 - [下載 Day 18 BYO Agent 平台能力驗收表](articles/day-18/platform-capability-matrix.md)
+- [下載 Day 19 Agent Registry 採用盤點表](articles/day-19/registry-adoption-checklist.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
@@ -50,6 +52,7 @@
 - [直接執行 Day 16 kagent Boundary Lab](labs/03-gateway-runtime/README.md)
 - [直接執行 Day 17 A2A Path Lab](labs/03-gateway-runtime/README.md#day-17a2a-discoveryrouting-與-runtime-execution)
 - [直接執行 Day 18 BYO Agent／HITL Lab](labs/03-gateway-runtime/README.md#day-18byo-agentagent-as-tool-與-hitl)
+- [直接執行 Day 19 Agent Registry Lab](labs/03-gateway-runtime/README.md#day-19agent-registry-不是批准章)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 - [查看 Gateway Runtime Lab source code](labs/03-gateway-runtime/src/gateway_runtime/)
@@ -60,7 +63,7 @@
 
 - [Day 1–5｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization、Delegation evidence 與治理四問盤點。
 - [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
-- [Day 14–18｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。後續接著實測 A2A discovery、routing 與 invocation，並把 Google ADK BYO Agent 註冊回平台，驗證 Agent-as-Tool 與 HITL pause／resume。
+- [Day 14–19｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。後續接著實測 A2A、Google ADK BYO Agent 與 HITL，最後用 Agent Registry 驗證 catalog、reconciliation、undeploy 及 Artifact trust 邊界。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
@@ -82,6 +85,7 @@ make lab-03-runtime-run
 make lab-03-runtime-kagent-plan
 make lab-03-runtime-a2a
 make lab-03-runtime-byo
+make lab-03-runtime-registry
 ```
 
 `make lab-02-cognito-config-check` 另外需要 Terraform 與 Docker。它只驗證 Terraform provider schema 及 agentgateway 設定，不會建立 AWS 資源，也不會啟動 MCP target。需要 live model 或 container 的其他步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。

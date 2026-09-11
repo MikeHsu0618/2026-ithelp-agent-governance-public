@@ -12,6 +12,16 @@ DAY18_CONFIG := $(LAB03)/configs/day-18
 DAY18_BYO_FIXTURE := $(LAB03)/fixtures/day-18-byo
 DAY18_BYO_IMAGE := ithelp/day18-byo:2026.9.10
 DAY18_KAGENT_VERSION := 0.10.1
+DAY19_CONFIG := $(LAB03)/configs/day-19
+DAY19_KAGENT_VALUES := $(DAY19_CONFIG)/kagent-values.yaml
+DAY19_BYO_IMAGE_V1 := ithelp/day19-byo:1.0.0
+DAY19_BYO_IMAGE_V2 := ithelp/day19-byo:1.0.1
+DAY19_AGENTREGISTRY_VERSION := 0.4.0
+DAY19_KAGENT_VERSION := 0.10.1
+DAY19_KIND_NAME := ithelp-day19
+DAY19_CONTEXT := kind-ithelp-day19
+DAY19_KUBECONFIG ?= $(LAB03)/.runtime/day-19/kubeconfig
+DAY19_REGISTRY_URL := http://127.0.0.1:18121
 KAGENT_VERSION ?= 0.10.0
 DAY16_KIND_NAME := ithelp-day16
 DAY16_CONTEXT := kind-ithelp-day16
@@ -29,6 +39,8 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-kagent-up lab-03-runtime-kagent-invoke lab-03-runtime-kagent-down \
 	lab-03-runtime-a2a lab-03-runtime-a2a-up lab-03-runtime-a2a-reproduce lab-03-runtime-a2a-run \
 	lab-03-runtime-byo lab-03-runtime-byo-up lab-03-runtime-byo-run \
+	lab-03-runtime-registry lab-03-runtime-registry-up lab-03-runtime-registry-run \
+	lab-03-runtime-registry-down \
 	lab-03-runtime-down
 
 lab-01-up:
@@ -305,6 +317,91 @@ lab-03-runtime-byo-run:
 	"$(KUBECTL_BIN)" --kubeconfig "$(DAY16_KUBECONFIG)" -n day18-lab get agents \
 		-o custom-columns='NAME:.metadata.name,TYPE:.spec.type,READY:.status.conditions[?(@.type=="Ready")].status' \
 		| tee "$(LAB03)/artifacts/day18-live/agent-status.txt"
+
+lab-03-runtime-registry:
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-registry-up \
+		KIND_BIN="$(KIND_BIN)" KUBECTL_BIN="$(KUBECTL_BIN)" \
+		DAY19_KUBECONFIG="$(DAY19_KUBECONFIG)"
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-registry-run \
+		KIND_BIN="$(KIND_BIN)" KUBECTL_BIN="$(KUBECTL_BIN)" \
+		DAY19_KUBECONFIG="$(DAY19_KUBECONFIG)"
+
+lab-03-runtime-registry-up:
+	@command -v "$(KIND_BIN)" >/dev/null
+	@command -v "$(KUBECTL_BIN)" >/dev/null
+	@command -v helm >/dev/null
+	@command -v curl >/dev/null
+	@"$(KIND_BIN)" version | grep -q '^kind v0.30.0 '
+	@"$(KUBECTL_BIN)" version --client -o json | grep -q '"gitVersion": "v1.34\.'
+	@mkdir -p "$(dir $(DAY19_KUBECONFIG))"
+	@if "$(KIND_BIN)" get clusters | grep -Fxq "$(DAY19_KIND_NAME)"; then \
+		test -f "$(DAY19_KUBECONFIG)"; \
+		test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY19_KUBECONFIG)" config current-context)" = "$(DAY19_CONTEXT)"; \
+	else \
+		existing_context="$$($(KUBECTL_BIN) --kubeconfig "$(DAY19_KUBECONFIG)" config current-context 2>/dev/null || true)"; \
+		test -z "$$existing_context" -o "$$existing_context" = "$(DAY19_CONTEXT)"; \
+		KUBECONFIG="$(DAY19_KUBECONFIG)" "$(KIND_BIN)" create cluster \
+			--name "$(DAY19_KIND_NAME)" --kubeconfig "$(DAY19_KUBECONFIG)" --wait 90s; \
+	fi
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY19_KUBECONFIG)" config current-context)" = "$(DAY19_CONTEXT)"
+	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \
+		--kubeconfig "$(DAY19_KUBECONFIG)" --context "$(DAY19_CONTEXT)" \
+		--expected-context "$(DAY19_CONTEXT)"
+	docker build --pull=false -f "$(DAY18_BYO_FIXTURE)/Containerfile" \
+		-t "$(DAY19_BYO_IMAGE_V1)" "$(DAY18_BYO_FIXTURE)"
+	docker tag "$(DAY19_BYO_IMAGE_V1)" "$(DAY19_BYO_IMAGE_V2)"
+	"$(KIND_BIN)" load docker-image "$(DAY19_BYO_IMAGE_V1)" --name "$(DAY19_KIND_NAME)"
+	"$(KIND_BIN)" load docker-image "$(DAY19_BYO_IMAGE_V2)" --name "$(DAY19_KIND_NAME)"
+	helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+		--version "$(DAY19_KAGENT_VERSION)" --namespace kagent --create-namespace \
+		--kubeconfig "$(DAY19_KUBECONFIG)" \
+		--set kmcp.enabled=false --set substrate.enabled=false --wait --timeout 3m
+	helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+		--version "$(DAY19_KAGENT_VERSION)" --namespace kagent --kubeconfig "$(DAY19_KUBECONFIG)" \
+		-f "$(DAY19_KAGENT_VALUES)" --wait --timeout 6m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY19_KUBECONFIG)" create namespace day19-runtime \
+		--dry-run=client -o yaml | "$(KUBECTL_BIN)" --kubeconfig "$(DAY19_KUBECONFIG)" apply -f -
+	helm upgrade --install agentregistry \
+		oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+		--version "$(DAY19_AGENTREGISTRY_VERSION)" --namespace agentregistry --create-namespace \
+		--kubeconfig "$(DAY19_KUBECONFIG)" \
+		--set 'rbac.watchedNamespaces[0]=day19-runtime' --wait --timeout 6m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY19_KUBECONFIG)" -n kagent rollout status \
+		deployment/kagent-controller --timeout=3m
+	"$(KUBECTL_BIN)" --kubeconfig "$(DAY19_KUBECONFIG)" -n agentregistry rollout status \
+		deployment/agentregistry --timeout=3m
+
+lab-03-runtime-registry-run:
+	@test "$$($(KUBECTL_BIN) --kubeconfig "$(DAY19_KUBECONFIG)" config current-context)" = "$(DAY19_CONTEXT)"
+	@mkdir -p "$(LAB03)/artifacts/day19-live"
+	@set -euo pipefail; \
+		"$(KUBECTL_BIN)" --kubeconfig "$(DAY19_KUBECONFIG)" -n agentregistry \
+			port-forward service/agentregistry 18121:12121 \
+			>"$(LAB03)/artifacts/day19-live/port-forward.log" 2>&1 & \
+		port_forward_pid="$$!"; \
+		trap 'kill "$$port_forward_pid" >/dev/null 2>&1 || true' EXIT; \
+		ready=false; \
+		for attempt in $$(seq 1 30); do \
+			if curl --fail --silent "$(DAY19_REGISTRY_URL)/v0/agents?namespace=day19-lab" >/dev/null; then \
+				ready=true; break; \
+			fi; \
+			sleep 1; \
+		done; \
+		test "$$ready" = true; \
+		uv run --directory "$(LAB03)" python -m gateway_runtime.registry_boundary \
+			--registry-url "$(DAY19_REGISTRY_URL)" \
+			--config-dir "$(DAY19_CONFIG)" \
+			--artifact-root "$(LAB03)/artifacts/day19-live" \
+			--kubeconfig "$(DAY19_KUBECONFIG)" \
+			--context "$(DAY19_CONTEXT)" \
+			--kubectl-bin "$(KUBECTL_BIN)"
+
+lab-03-runtime-registry-down:
+	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \
+		--kubeconfig "$(DAY19_KUBECONFIG)" \
+		--context "$$($(KUBECTL_BIN) --kubeconfig "$(DAY19_KUBECONFIG)" config current-context)" \
+		--expected-context "$(DAY19_CONTEXT)"
+	"$(KIND_BIN)" delete cluster --name "$(DAY19_KIND_NAME)" --kubeconfig "$(DAY19_KUBECONFIG)"
 
 lab-03-runtime-kagent-down:
 	uv run --directory "$(LAB03)" gateway-runtime kagent-context-guard \

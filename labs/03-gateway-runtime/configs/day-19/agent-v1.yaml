@@ -1,0 +1,11 @@
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: day19-lab
+  name: day19byo
+  tag: approved
+spec:
+  title: Day 19 BYO Agent
+  description: Deterministic Agent Registry lifecycle fixture
+  source:
+    image: ithelp/day19-byo:1.0.0

@@ -18,23 +18,33 @@ from gateway_runtime.artifacts import ArtifactStore
 KAGENT_VERSION = "0.10.0"
 AGENTGATEWAY_VERSION = "1.5.0"
 LAB_CONTEXT = "kind-ithelp-day16"
+OWNED_LAB_CONTEXTS = frozenset({LAB_CONTEXT, "kind-ithelp-day19"})
 AGENTGATEWAY_HOST = "agentgateway-proxy.agentgateway-system.svc.cluster.local"
 
 
 class UnsafeKubeContextError(RuntimeError):
-    """Raised when a cluster command is not pinned to the disposable Day 16 cluster."""
+    """Raised when a cluster command is not pinned to a repository-owned Lab cluster."""
 
 
-def validate_kind_context(kubeconfig: Path, context: str) -> None:
-    """Refuse default kubeconfig and every context except the owned kind cluster."""
+def validate_kind_context(
+    kubeconfig: Path,
+    context: str,
+    *,
+    expected_context: str = LAB_CONTEXT,
+) -> None:
+    """Refuse the default kubeconfig and contexts outside the repository-owned allowlist."""
 
     default_kubeconfig = (Path.home() / ".kube" / "config").resolve()
     candidate = kubeconfig.expanduser().resolve()
     if candidate == default_kubeconfig:
-        raise UnsafeKubeContextError("the Day 16 Lab must not use ~/.kube/config")
-    if context != LAB_CONTEXT:
+        raise UnsafeKubeContextError("the Lab must not use ~/.kube/config")
+    if expected_context not in OWNED_LAB_CONTEXTS:
         raise UnsafeKubeContextError(
-            f"expected context {LAB_CONTEXT!r}, received {context!r}; refusing cluster access"
+            f"expected context {expected_context!r} is not an owned Lab context"
+        )
+    if context != expected_context:
+        raise UnsafeKubeContextError(
+            f"expected context {expected_context!r}, received {context!r}; refusing cluster access"
         )
 
 

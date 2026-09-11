@@ -1,0 +1,9 @@
+apiVersion: ar.dev/v1alpha1
+kind: Runtime
+metadata:
+  namespace: day19-lab
+  name: day19-kubernetes
+spec:
+  type: Kubernetes
+  config:
+    namespace: day19-runtime

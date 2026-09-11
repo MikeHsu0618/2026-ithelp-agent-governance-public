@@ -1,0 +1,13 @@
+DAY 19 / AGENT REGISTRY BOUNDARY
+
+Anonymous catalog write                  RISK_EXPOSED
+Tagged Agent readable                    PASS
+Deployment reached kagent                PASS
+Same approved tag changed image          RISK_EXPOSED
+Declarative undeploy removed Agent       PASS
+
+catalog-tag=approved
+image-before=ithelp/day19-byo:1.0.0
+image-after=ithelp/day19-byo:1.0.1
+observed=5/5
+risk-findings=2

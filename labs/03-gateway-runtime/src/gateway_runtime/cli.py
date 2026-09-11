@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     guard.add_argument("--kubeconfig", type=Path, required=True)
     guard.add_argument("--context", required=True)
+    guard.add_argument("--expected-context", default="kind-ithelp-day16")
     clean = subcommands.add_parser("clean", help="remove only marked Lab 03 artifacts")
     clean.add_argument("--lab-root", type=Path, default=Path.cwd())
     return parser
@@ -35,7 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
 def entrypoint() -> None:
     args = build_parser().parse_args()
     if args.command == "kagent-context-guard":
-        validate_kind_context(args.kubeconfig, args.context)
+        validate_kind_context(
+            args.kubeconfig,
+            args.context,
+            expected_context=args.expected_context,
+        )
         print(f"context-ok={args.context}")
         return
 

@@ -1,0 +1,16 @@
+{
+  "apiVersion": "ar.dev/v1alpha1",
+  "kind": "Deployment",
+  "metadata": {"namespace": "day19-lab", "name": "day19-agent"},
+  "spec": {
+    "targetRef": {"kind": "Agent", "name": "day19byo", "tag": "approved"},
+    "runtimeRef": {"kind": "Runtime", "name": "day19-kubernetes"}
+  },
+  "status": {
+    "conditions": [
+      {"type": "Progressing", "status": "True", "reason": "Applied", "message": "kagent resources reconciled; waiting for rollout", "lastTransitionTime": "2026-09-10T14:51:18.826557331Z"},
+      {"type": "RuntimeConfigured", "status": "True", "reason": "KubernetesRuntime", "message": "kubernetes runtime reachable", "lastTransitionTime": "2026-09-10T14:51:18.826557331Z"}
+    ],
+    "details": {"deploymentController": {"lastAppliedFingerprint": "sha256:3a4ed0aabc0e79fcf18c15a41586f59a9e7d1cfb76d1bac2178f23be4b055393"}}
+  }
+}

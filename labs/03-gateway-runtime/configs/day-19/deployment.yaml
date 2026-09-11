@@ -1,0 +1,13 @@
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  namespace: day19-lab
+  name: day19-agent
+spec:
+  targetRef:
+    kind: Agent
+    name: day19byo
+    tag: approved
+  runtimeRef:
+    kind: Runtime
+    name: day19-kubernetes

@@ -1,0 +1,13 @@
+{
+  "schema": "ithelp.agent-registry-boundary-report.v1",
+  "registry_namespace": "day19-lab",
+  "runtime_namespace": "day19-runtime",
+  "cases": [
+    {"case_id": "anonymous-write", "layer": "authorization", "label": "Anonymous catalog write", "status": "RISK_EXPOSED"},
+    {"case_id": "catalog-discovery", "layer": "catalog", "label": "Tagged Agent readable", "status": "PASS", "tag": "approved"},
+    {"case_id": "deployment-reconcile", "layer": "control-plane", "label": "Deployment reached kagent", "status": "PASS", "image": "ithelp/day19-byo:1.0.0"},
+    {"case_id": "mutable-approved-tag", "layer": "provenance", "label": "Same approved tag changed image", "status": "RISK_EXPOSED", "tag": "approved", "image_before": "ithelp/day19-byo:1.0.0", "image_after": "ithelp/day19-byo:1.0.1"},
+    {"case_id": "declarative-undeploy", "layer": "lifecycle", "label": "Declarative undeploy removed Agent", "status": "PASS"}
+  ],
+  "summary": {"observed": 5, "total": 5, "pass": 3, "risk_findings": 2}
+}

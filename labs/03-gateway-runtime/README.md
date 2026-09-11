@@ -206,6 +206,59 @@ Agent-as-Tool 產生的 remote Agent URL 指向 agentgateway proxy，並帶 `x-k
 make lab-03-runtime-kagent-down
 ```
 
+## Day 19：Agent Registry 不是批准章
+
+Day 19 另外建立一個 `ithelp-day19` kind cluster，安裝 Agent Registry `0.4.0` 與
+kagent `0.10.1`。Lab 直接使用 Agent Registry 的 declarative API，不放 Argo CD，也不在
+前面疊 Gateway。它要驗證的是 catalog 到 runtime 的 reconciliation，以及這條順暢路徑仍然
+缺少哪些 trust controls。
+
+需求為 Docker Engine、Helm、curl、kind `0.30.0` 與 kubectl `1.34.x`：
+
+```bash
+make lab-03-runtime-registry
+```
+
+也可以保留 cluster 分段觀察：
+
+```bash
+make lab-03-runtime-registry-up
+make lab-03-runtime-registry-run
+```
+
+Probe 先用未帶 credential 的 `POST /v0/apply` 寫入 `day19byo@approved`，再透過
+`Deployment` 將它轉成 kagent `Agent`。接著，Lab 不改 tag，只把 image reference 從
+`1.0.0` 改成 `1.0.1`。controller 正常把新 image reconcile 到 runtime，這在功能上是成功，
+在 provenance 上卻是一筆風險證據：`approved` 不是 immutable digest，也不是簽章。
+
+預期輸出：
+
+```text
+DAY 19 / AGENT REGISTRY BOUNDARY
+
+Anonymous catalog write                  RISK_EXPOSED
+Tagged Agent readable                    PASS
+Deployment reached kagent                PASS
+Same approved tag changed image          RISK_EXPOSED
+Declarative undeploy removed Agent       PASS
+
+catalog-tag=approved
+image-before=ithelp/day19-byo:1.0.0
+image-after=ithelp/day19-byo:1.0.1
+observed=5/5
+risk-findings=2
+```
+
+最後一個 apply 將 `desiredState` 改為 `undeployed`，並確認帶有
+`aregistry.ai/deployment-id=day19-agent` 的 kagent `Agent` 已經移除。公開 evidence 不包含
+PostgreSQL credential、Kubernetes token、Registry row UID 或完整 cluster dump。
+
+完成後刪除 Day 19 自己建立的 cluster：
+
+```bash
+make lab-03-runtime-registry-down
+```
+
 ## 這個 Lab 刻意只放一層 Gateway
 
 ```text

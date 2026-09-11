@@ -98,6 +98,29 @@ def test_kind_guard_accepts_only_the_owned_day16_context(tmp_path: Path) -> None
             validate_kind_context(kubeconfig, context)
 
 
+def test_kind_guard_accepts_an_explicitly_owned_day19_context(tmp_path: Path) -> None:
+    kubeconfig = tmp_path / "day19.kubeconfig"
+    kubeconfig.write_text("fixture\n", encoding="utf-8")
+
+    validate_kind_context(
+        kubeconfig,
+        "kind-ithelp-day19",
+        expected_context="kind-ithelp-day19",
+    )
+
+
+def test_kind_guard_rejects_an_arbitrary_self_declared_context(tmp_path: Path) -> None:
+    kubeconfig = tmp_path / "other.kubeconfig"
+    kubeconfig.write_text("fixture\n", encoding="utf-8")
+
+    with pytest.raises(UnsafeKubeContextError, match="not an owned Lab context"):
+        validate_kind_context(
+            kubeconfig,
+            "production-cluster",
+            expected_context="production-cluster",
+        )
+
+
 def test_kind_guard_refuses_the_default_kubeconfig() -> None:
     with pytest.raises(UnsafeKubeContextError):
         validate_kind_context(Path.home() / ".kube" / "config", "kind-ithelp-day16")
@@ -208,3 +231,20 @@ def test_cli_accepts_the_day16_context_guard(tmp_path: Path) -> None:
     assert args.command == "kagent-context-guard"
     assert args.kubeconfig == tmp_path / "day16.kubeconfig"
     assert args.context == "kind-ithelp-day16"
+    assert args.expected_context == "kind-ithelp-day16"
+
+
+def test_cli_accepts_an_explicit_day19_context_guard(tmp_path: Path) -> None:
+    args = build_parser().parse_args(
+        [
+            "kagent-context-guard",
+            "--kubeconfig",
+            str(tmp_path / "day19.kubeconfig"),
+            "--context",
+            "kind-ithelp-day19",
+            "--expected-context",
+            "kind-ithelp-day19",
+        ]
+    )
+
+    assert args.expected_context == "kind-ithelp-day19"

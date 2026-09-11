@@ -1,0 +1,51 @@
+# Only the kagent controller is needed for the Day 19 registry lifecycle Lab.
+# The generated Agent is a BYO image and does not call an external LLM.
+
+controller:
+  auth:
+    mode: unsecure
+
+database:
+  postgres:
+    bundled:
+      enabled: true
+
+providers:
+  default: ollama
+  ollama:
+    provider: Ollama
+    model: not-used-by-byo
+    config:
+      host: not-used.invalid:11434
+
+ui:
+  replicas: 0
+
+kmcp:
+  enabled: false
+substrate:
+  enabled: false
+kagent-tools:
+  enabled: false
+grafana-mcp:
+  enabled: false
+k8s-agent:
+  enabled: false
+kgateway-agent:
+  enabled: false
+istio-agent:
+  enabled: false
+promql-agent:
+  enabled: false
+observability-agent:
+  enabled: false
+argo-rollouts-agent:
+  enabled: false
+helm-agent:
+  enabled: false
+cilium-policy-agent:
+  enabled: false
+cilium-manager-agent:
+  enabled: false
+cilium-debug-agent:
+  enabled: false

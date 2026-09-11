@@ -17,6 +17,17 @@ from gateway_runtime.byo_boundary import (
 )
 
 
+def _public_makefile_source() -> Path:
+    repository_root = Path(__file__).parents[3]
+    for candidate in (
+        repository_root / "publication/Makefile.public",
+        repository_root / "Makefile",
+    ):
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("public Makefile not found in authoring or exported layout")
+
+
 def _load_day18_result_parser():
     parser_path = Path(__file__).parents[1] / "fixtures/day-18-byo/day18_byo/result_parser.py"
     spec = importlib.util.spec_from_file_location("day18_result_parser", parser_path)
@@ -339,8 +350,7 @@ def test_day18_manifest_keeps_platform_registration_and_runtime_ownership_distin
 
 
 def test_day18_bootstrap_uses_the_pinned_kagent_version_from_the_start() -> None:
-    makefile = Path(__file__).parents[3] / "publication/Makefile.public"
-    source = makefile.read_text()
+    source = _public_makefile_source().read_text()
     day18_target = source.split("lab-03-runtime-byo-up:", maxsplit=1)[1].split(
         "\nlab-03-runtime-byo-run:", maxsplit=1
     )[0]
@@ -356,9 +366,8 @@ def test_day18_bootstrap_uses_the_pinned_kagent_version_from_the_start() -> None
 
 
 def test_exported_root_makefile_can_plan_day18_without_private_paths(tmp_path: Path) -> None:
-    source = Path(__file__).parents[3] / "publication/Makefile.public"
     exported = tmp_path / "Makefile"
-    exported.write_text(source.read_text())
+    exported.write_text(_public_makefile_source().read_text())
 
     result = subprocess.run(
         ["make", "-n", "lab-03-runtime-byo-up"],
@@ -373,9 +382,8 @@ def test_exported_root_makefile_can_plan_day18_without_private_paths(tmp_path: P
 
 
 def test_day18_composite_target_is_serial_even_with_parallel_make(tmp_path: Path) -> None:
-    source = Path(__file__).parents[3] / "publication/Makefile.public"
     exported = tmp_path / "Makefile"
-    exported.write_text(source.read_text())
+    exported.write_text(_public_makefile_source().read_text())
 
     result = subprocess.run(
         ["make", "-n", "-j2", "lab-03-runtime-byo"],
