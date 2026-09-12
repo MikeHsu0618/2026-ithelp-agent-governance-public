@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ithelp.example/schemas/governed-action-v0.1.schema.json",
+  "title": "Governed Action Field Set v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "action_id",
+    "occurred_at",
+    "correlation",
+    "principal",
+    "delegation",
+    "workload",
+    "agent",
+    "target",
+    "policy",
+    "approval",
+    "result"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "event_id": {"type": "string", "pattern": "^evt-[a-z0-9-]{8,80}$"},
+    "action_id": {"type": "string", "pattern": "^act-[a-z0-9-]{8,80}$"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "span_id"],
+      "properties": {
+        "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "span_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
+      }
+    },
+    "principal": {"$ref": "#/$defs/identity"},
+    "delegation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["on_behalf_of", "actor_chain"],
+      "properties": {
+        "on_behalf_of": {"type": "string", "const": "user/sre-oncaller"},
+        "actor_chain": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "workload": {"$ref": "#/$defs/identity"},
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "artifact_digest"],
+      "properties": {
+        "name": {"type": "string", "const": "sre-investigation-agent"},
+        "version": {"type": "string", "const": "day20-fixture"},
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "resource"],
+      "properties": {
+        "tool": {"type": "string", "const": "delete_demo_database"},
+        "resource": {"type": "string", "const": "demo/database"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "decision", "enforcement_point"],
+      "properties": {
+        "id": {"type": "string", "const": "tool-boundary"},
+        "version": {"type": "string", "minLength": 1},
+        "decision": {"enum": ["ALLOW", "DENY"]},
+        "enforcement_point": {"type": "string", "const": "lab-authorizer"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["APPROVED", "REJECTED", "NOT_APPLICABLE", "UNKNOWN"]}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "effect"],
+      "properties": {
+        "status": {"type": "string", "const": "CANARY_TRIGGERED"},
+        "effect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "status", "count"],
+          "properties": {
+            "kind": {"type": "string", "const": "NO_OP_CANARY"},
+            "status": {"type": "string", "const": "SIMULATED"},
+            "count": {"type": "integer", "const": 0}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "assurance", "source"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["human", "workload"]},
+        "assurance": {"enum": ["VERIFIED", "ASSERTED", "UNKNOWN"]},
+        "source": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

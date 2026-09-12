@@ -1,0 +1,14 @@
+{
+  "action_id": "act-day20-a669406b17ca",
+  "actor_hint": "user/sre-oncaller",
+  "agent_name": "sre-investigation-agent",
+  "generation_id": "generation/day20-fixture",
+  "model": "deterministic-fixture",
+  "record_type": "application.action",
+  "session_id": "session/day20-fixture",
+  "tool_call": {
+    "arguments_summary": "target=demo/database",
+    "name": "delete_demo_database",
+    "result": "CANARY_TRIGGERED"
+  }
+}

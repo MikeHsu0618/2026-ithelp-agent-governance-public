@@ -1,0 +1,15 @@
+{
+  "spans": [
+    {
+      "name": "invoke_agent sre-investigation-agent",
+      "parent_span_id": null,
+      "span_id": "1fd4d2dce67ebc8f"
+    },
+    {
+      "name": "execute_tool delete_demo_database",
+      "parent_span_id": "1fd4d2dce67ebc8f",
+      "span_id": "533266dd93540f1e"
+    }
+  ],
+  "trace_id": "8e5bb2f2e7cd96e9f5fd0fd4fa30aebb"
+}

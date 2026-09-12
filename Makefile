@@ -4,6 +4,7 @@ SELF_MAKEFILE := $(abspath $(firstword $(MAKEFILE_LIST)))
 LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
 LAB03 := $(CURDIR)/labs/03-gateway-runtime
+LAB04 := $(CURDIR)/labs/04-telemetry-pipeline
 AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
 DAY16_CONFIG := $(LAB03)/configs/day-16
 DAY16_MCP_FIXTURE := $(LAB03)/fixtures/day-16-mcp
@@ -41,7 +42,8 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-byo lab-03-runtime-byo-up lab-03-runtime-byo-run \
 	lab-03-runtime-registry lab-03-runtime-registry-up lab-03-runtime-registry-run \
 	lab-03-runtime-registry-down \
-	lab-03-runtime-down
+	lab-03-runtime-down \
+	lab-04-up lab-04-check lab-04-run lab-04-negative lab-04-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -411,3 +413,40 @@ lab-03-runtime-kagent-down:
 
 lab-03-runtime-down:
 	uv run --directory "$(LAB03)" gateway-runtime clean --lab-root "$(LAB03)"
+
+lab-04-up:
+	uv sync --directory "$(LAB04)" --all-groups
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.yaml" up -d --wait
+
+lab-04-check:
+	uv run --directory "$(LAB04)" pytest -q
+	uv run --directory "$(LAB04)" ruff check .
+	uv run --directory "$(LAB04)" ruff format --check .
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.yaml" config --quiet
+	docker run --rm \
+		-v "$(LAB04)/config.alloy:/etc/alloy/config.alloy:ro" \
+		grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33 \
+		validate /etc/alloy/config.alloy
+
+lab-04-run:
+	@mkdir -p "$(LAB04)/.runtime"
+	@set -euo pipefail; \
+		uv run --directory "$(LAB04)" traceability-lab run \
+			--artifact-root "$(LAB04)/artifacts" \
+			--otlp-endpoint http://127.0.0.1:14318 \
+			| tee "$(LAB04)/.runtime/latest-run.json"; \
+		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+			< "$(LAB04)/.runtime/latest-run.json")"; \
+		uv run --directory "$(LAB04)" traceability-lab verify-backend \
+			--artifact-dir "$$artifact_dir" \
+			| tee "$(LAB04)/.runtime/backend-report.json"
+
+lab-04-negative:
+	uv run --directory "$(LAB04)" traceability-lab negative
+
+lab-04-down:
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.yaml" down --volumes
+	uv run --directory "$(LAB04)" traceability-lab clean --lab-root "$(LAB04)"

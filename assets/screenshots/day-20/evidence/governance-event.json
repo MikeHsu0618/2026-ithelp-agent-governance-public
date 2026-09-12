@@ -1,0 +1,56 @@
+{
+  "action_id": "act-day20-a669406b17ca",
+  "agent": {
+    "artifact_digest": "sha256:d20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20ad20a",
+    "name": "sre-investigation-agent",
+    "version": "day20-fixture"
+  },
+  "approval": {
+    "status": "NOT_APPLICABLE"
+  },
+  "correlation": {
+    "span_id": "533266dd93540f1e",
+    "trace_id": "8e5bb2f2e7cd96e9f5fd0fd4fa30aebb"
+  },
+  "delegation": {
+    "actor_chain": [
+      "user/sre-oncaller",
+      "agent/sre-investigation-agent",
+      "workload/sre-investigation-agent"
+    ],
+    "on_behalf_of": "user/sre-oncaller"
+  },
+  "event_id": "evt-day20-a669406b17ca",
+  "occurred_at": "2026-09-12T08:53:12.636911Z",
+  "policy": {
+    "decision": "ALLOW",
+    "enforcement_point": "lab-authorizer",
+    "id": "tool-boundary",
+    "version": "v3"
+  },
+  "principal": {
+    "assurance": "VERIFIED",
+    "id": "user/sre-oncaller",
+    "kind": "human",
+    "source": "lab-fixture-idp"
+  },
+  "result": {
+    "effect": {
+      "count": 0,
+      "kind": "NO_OP_CANARY",
+      "status": "SIMULATED"
+    },
+    "status": "CANARY_TRIGGERED"
+  },
+  "schema_version": "0.1",
+  "target": {
+    "resource": "demo/database",
+    "tool": "delete_demo_database"
+  },
+  "workload": {
+    "assurance": "ASSERTED",
+    "id": "workload/sre-investigation-agent",
+    "kind": "workload",
+    "source": "lab-fixture-runtime"
+  }
+}

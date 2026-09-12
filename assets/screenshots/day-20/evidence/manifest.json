@@ -1,0 +1,9 @@
+{
+  "action_id": "act-day20-a669406b17ca",
+  "export_mode": "otlp-http",
+  "occurred_at": "2026-09-12T08:53:12.636911Z",
+  "result": "CANARY_TRIGGERED",
+  "run_id": "day20-a669406b17ca",
+  "safe_effect": "NO_OP_CANARY",
+  "trace_id": "8e5bb2f2e7cd96e9f5fd0fd4fa30aebb"
+}

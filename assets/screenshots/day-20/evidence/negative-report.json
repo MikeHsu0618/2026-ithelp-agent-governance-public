@@ -1,0 +1,5 @@
+{
+  "case": "missing-policy-version",
+  "reason": "policy: 'version' is a required property",
+  "result": "REJECTED"
+}

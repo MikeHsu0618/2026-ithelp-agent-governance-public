@@ -1,0 +1,48 @@
+[project]
+name = "ithelp-traceability-lab"
+version = "0.1.0"
+description = "A safe Agent traceability lab that separates application, operational, and governance records."
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "jsonschema==4.26.0",
+  "opentelemetry-api==1.43.0",
+  "opentelemetry-exporter-otlp-proto-http==1.43.0",
+  "opentelemetry-sdk==1.43.0",
+]
+
+[project.scripts]
+traceability-lab = "traceability_lab.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/traceability_lab"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "--strict-markers",
+  "--cov=traceability_lab",
+  "--cov-report=term-missing",
+  "--cov-fail-under=80",
+]
+
+[tool.coverage.run]
+branch = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

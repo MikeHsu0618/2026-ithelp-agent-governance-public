@@ -20,7 +20,7 @@ kagent 的 [BYO Agent 文件](https://kagent.dev/docs/kagent/examples/a2a-byo/)�
 
 把 control plane 與 runtime path 分開畫，責任就清楚了。kagent 會依 Agent CR 建立 workload、Service 並完成平台註冊，Agent Card 的內容與實際回應仍由 BYO Runtime 提供。執行時，parent 透過 agentgateway 呼叫 BYO Agent，Tool 的 approval callback 也留在 BYO Runtime 裡。
 
-![kagent control plane 依 BYO Agent CR 建立 Deployment、Service、連接 ServiceAccount，並維護註冊與 Ready status。Agent Card 則由 BYO Runtime 提供。實際路徑由 A2A probe 呼叫 declarative parent，parent 以 Agent-as-Tool 經 agentgateway 到 Google ADK BYO Agent，再由 Runtime 的 Tool callback 處理 input-required 與 approve 或 reject。圖下方分開列出平台接手的 lifecycle、discovery、入口，以及 BYO 作者仍負責的 workflow、HITL callback、memory 與 Tool policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19/assets/diagrams/day-18/byo-platform-boundary.png)
+![kagent control plane 依 BYO Agent CR 建立 Deployment、Service、連接 ServiceAccount，並維護註冊與 Ready status。Agent Card 則由 BYO Runtime 提供。實際路徑由 A2A probe 呼叫 declarative parent，parent 以 Agent-as-Tool 經 agentgateway 到 Google ADK BYO Agent，再由 Runtime 的 Tool callback 處理 input-required 與 approve 或 reject。圖下方分開列出平台接手的 lifecycle、discovery、入口，以及 BYO 作者仍負責的 workflow、HITL callback、memory 與 Tool policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20/assets/diagrams/day-18/byo-platform-boundary.png)
 
 Probe 固定送出合成 principal `sre-oncaller`，先要求 parent 呼叫 BYO Agent，再分別回覆 approve 與 reject。五個驗收條件如下：
 
@@ -32,7 +32,7 @@ Probe 固定送出合成 principal `sre-oncaller`，先要求 parent 呼叫 BYO 
 
 本次使用 synthetic parent model 與 deterministic BYO model，整個 Lab 不需要 Gemini 或 OpenAI key。這樣可以把測試焦點留在 runtime boundary，而不是讓模型回答的隨機性干擾判讀。
 
-啟動 BYO Pod 時還碰到一個很能說明責任邊界的小插曲。Image 已設成 non-root、移除 Linux capabilities，Root Filesystem 也改成唯讀，`kagent-adk` 卻因為找不到可寫的暫存目錄而直接退出。最後保留 `readOnlyRootFilesystem: true`，只用限制為 `64Mi` 的 `emptyDir` 補上 `/tmp`。這不是本篇要教的 Kubernetes 技巧，完整 YAML 與 ServiceAccount token 設定會留在 Lab 的 [`kagent-resources.yaml`](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19/labs/03-gateway-runtime/configs/day-18/kagent-resources.yaml)。正文只留下它帶來的判斷：kagent 可以接手 rollout 與 readiness，BYO image 需要哪些 writable path，仍然得由 Runtime 作者說清楚。
+啟動 BYO Pod 時還碰到一個很能說明責任邊界的小插曲。Image 已設成 non-root、移除 Linux capabilities，Root Filesystem 也改成唯讀，`kagent-adk` 卻因為找不到可寫的暫存目錄而直接退出。最後保留 `readOnlyRootFilesystem: true`，只用限制為 `64Mi` 的 `emptyDir` 補上 `/tmp`。這不是本篇要教的 Kubernetes 技巧，完整 YAML 與 ServiceAccount token 設定會留在 Lab 的 [`kagent-resources.yaml`](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-20/labs/03-gateway-runtime/configs/day-18/kagent-resources.yaml)。正文只留下它帶來的判斷：kagent 可以接手 rollout 與 readiness，BYO image 需要哪些 writable path，仍然得由 Runtime 作者說清楚。
 
 ## Agent-as-Tool 經過 agentgateway 的路由
 
@@ -68,7 +68,7 @@ route 生效後，Agent Card 的 GET，以及 task 的 `input-required`、`compl
 
 這次 BYO Agent 的 HITL 確實走完整的 pause 與 resume 流程，parent 不只是在 Prompt 裡問一句「確定嗎」。Google ADK Tool callback 呼叫 `request_confirmation()`，BYO task 先回 `input-required`。Parent 的 Agent-as-Tool 收到狀態後，把 approval 傳回上層 task。使用者選擇 approve 或 reject，兩層 task 才一起續跑。
 
-![使用者先向 declarative parent 送出請求，parent 經 agentgateway 呼叫 BYO Agent。BYO Runtime 在 Tool callback 呼叫 request_confirmation，child 與 parent task 依序停在 input-required。使用者沿用同一組 task ID 與 context ID 回覆 approve 或 reject 後，請求再經 parent 與 Gateway 回到 BYO Runtime。Approve 會執行 Tool 並回傳 ACTION_EXECUTED，reject 不執行 Tool 並回傳 ACTION_SKIPPED，兩條路徑最後都進入 completed。圖中另標示 kagent-adk 負責傳遞 pause 與 resume，BYO Runtime 負責 approval callback，而 approver authorization 不在本次測試範圍。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19/assets/diagrams/day-18/hitl-pause-resume.png)
+![使用者先向 declarative parent 送出請求，parent 經 agentgateway 呼叫 BYO Agent。BYO Runtime 在 Tool callback 呼叫 request_confirmation，child 與 parent task 依序停在 input-required。使用者沿用同一組 task ID 與 context ID 回覆 approve 或 reject 後，請求再經 parent 與 Gateway 回到 BYO Runtime。Approve 會執行 Tool 並回傳 ACTION_EXECUTED，reject 不執行 Tool 並回傳 ACTION_SKIPPED，兩條路徑最後都進入 completed。圖中另標示 kagent-adk 負責傳遞 pause 與 resume，BYO Runtime 負責 approval callback，而 approver authorization 不在本次測試範圍。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20/assets/diagrams/day-18/hitl-pause-resume.png)
 
 kagent `0.10.1` 的 [release notes](https://github.com/kagent-dev/kagent/releases/tag/v0.10.1)剛好包含 Python Agent HITL resume 與 A2A user identity propagation 的修正，因此本次 Lab 直接鎖這一版。從 [`_remote_a2a_tool.py`](https://github.com/kagent-dev/kagent/blob/v0.10.1/python/packages/kagent-adk/src/kagent/adk/_remote_a2a_tool.py)也能看到 child Agent 回 `input_required` 後，parent 如何建立自己的 confirmation，再沿 task 與 context 續跑。
 
@@ -88,7 +88,7 @@ Action receipt 證明本次呼叫通過 parent、agentgateway 與 BYO child 後�
 
 ## 能力矩陣：平台接手與 Runtime 自理
 
-完整的 [BYO Agent 平台能力驗收表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19/articles/day-18/platform-capability-matrix.md)保留十二項結果。正文先列出對採用判斷最有影響的部分：
+完整的 [BYO Agent 平台能力驗收表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-20/articles/day-18/platform-capability-matrix.md)保留十二項結果。正文先列出對採用判斷最有影響的部分：
 
 | 能力 | 結果 | 責任邊界 |
 | --- | --- | --- |
@@ -105,7 +105,7 @@ Action receipt 證明本次呼叫通過 parent、agentgateway 與 BYO child 後�
 
 UI 畫面確實同時列出 BYO Agent 與 declarative parent。對使用者來說，這已經省掉手動找 URL、看 Agent Card 與接 client 的工作。回到 Runtime 作者這一側，程式碼、dependency、memory、Tool policy、filesystem 與 framework upgrade 一項都沒有消失。
 
-![kagent UI 的 Agents 頁面。day18-lab namespace 內同時顯示 BYO Google ADK Agent 與 declarative parent，BYO 卡片標出實際部署的 image。畫面也保留前一天 Lab 的 day16 Agent。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19/assets/screenshots/day-18/01-kagent-agents.png)
+![kagent UI 的 Agents 頁面。day18-lab namespace 內同時顯示 BYO Google ADK Agent 與 declarative parent，BYO 卡片標出實際部署的 image。畫面也保留前一天 Lab 的 day16 Agent。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20/assets/screenshots/day-18/01-kagent-agents.png)
 
 五項自動驗收的輸出如下。圖片方便快速讀結果，指令與文字 evidence 仍保留在 repo，Reject path 也明確檢查沒有 `ACTION_EXECUTED`。
 
@@ -124,11 +124,11 @@ rejected-without-execution=true
 matched 5/5
 ```
 
-![Day 18 Lab terminal card。BYO Agent Card、declarative parent 呼叫 BYO child、HITL approve、HITL reject 與 actor propagation 五項全部通過，下方保留 approve 與 reject 的實際 receipt。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19/assets/screenshots/day-18/02-byo-platform-results.png)
+![Day 18 Lab terminal card。BYO Agent Card、declarative parent 呼叫 BYO child、HITL approve、HITL reject 與 actor propagation 五項全部通過，下方保留 approve 與 reject 的實際 receipt。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20/assets/screenshots/day-18/02-byo-platform-results.png)
 
 ## 公開 Lab 的執行方式
 
-[Lab 03 的 Day 18 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19/labs/03-gateway-runtime/README.md)會建立 disposable kind cluster，部署 kagent、agentgateway、declarative parent 與 BYO Agent，再執行 approve／reject 兩條路徑。需要 Docker Engine、Helm、kind `0.30.0`、kubectl `1.34.x` 與 uv：
+[Lab 03 的 Day 18 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-20/labs/03-gateway-runtime/README.md)會建立 disposable kind cluster，部署 kagent、agentgateway、declarative parent 與 BYO Agent，再執行 approve／reject 兩條路徑。需要 Docker Engine、Helm、kind `0.30.0`、kubectl `1.34.x` 與 uv：
 
 ```bash
 make lab-03-runtime-byo

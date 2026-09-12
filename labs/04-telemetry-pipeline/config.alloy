@@ -1,0 +1,42 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+otelcol.receiver.otlp "lab" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    logs   = [otelcol.processor.memory_limiter.lab.input]
+    traces = [otelcol.processor.memory_limiter.lab.input]
+  }
+}
+
+otelcol.processor.memory_limiter "lab" {
+  check_interval = "1s"
+  limit          = "256MiB"
+  spike_limit    = "64MiB"
+
+  output {
+    logs   = [otelcol.processor.batch.lab.input]
+    traces = [otelcol.processor.batch.lab.input]
+  }
+}
+
+otelcol.processor.batch "lab" {
+  timeout         = "1s"
+  send_batch_size = 128
+
+  output {
+    logs   = [otelcol.exporter.otlphttp.lgtm.input]
+    traces = [otelcol.exporter.otlphttp.lgtm.input]
+  }
+}
+
+otelcol.exporter.otlphttp "lgtm" {
+  client {
+    endpoint = "http://lgtm:4318"
+  }
+}

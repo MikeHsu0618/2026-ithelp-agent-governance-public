@@ -1,0 +1,7 @@
+{
+  "action_id": "act-day20-a669406b17ca",
+  "resource": "demo/database",
+  "side_effects": 0,
+  "status": "CANARY_TRIGGERED",
+  "tool": "delete_demo_database"
+}
