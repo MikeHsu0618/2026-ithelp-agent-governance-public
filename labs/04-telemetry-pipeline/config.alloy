@@ -4,12 +4,17 @@ logging {
 }
 
 otelcol.receiver.otlp "lab" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
   http {
     endpoint = "0.0.0.0:4318"
   }
 
   output {
     logs   = [otelcol.processor.memory_limiter.lab.input]
+    metrics = [otelcol.processor.memory_limiter.lab.input]
     traces = [otelcol.processor.memory_limiter.lab.input]
   }
 }
@@ -21,6 +26,7 @@ otelcol.processor.memory_limiter "lab" {
 
   output {
     logs   = [otelcol.processor.batch.lab.input]
+    metrics = [otelcol.processor.batch.lab.input]
     traces = [otelcol.processor.batch.lab.input]
   }
 }
@@ -31,6 +37,7 @@ otelcol.processor.batch "lab" {
 
   output {
     logs   = [otelcol.exporter.otlphttp.lgtm.input]
+    metrics = [otelcol.exporter.otlphttp.lgtm.input]
     traces = [otelcol.exporter.otlphttp.lgtm.input]
   }
 }
@@ -38,5 +45,19 @@ otelcol.processor.batch "lab" {
 otelcol.exporter.otlphttp "lgtm" {
   client {
     endpoint = "http://lgtm:4318"
+  }
+}
+
+prometheus.scrape "agentgateway" {
+  targets = [{
+    "__address__" = "agentgateway:15020",
+    "job"         = "agentgateway-data-plane",
+  }]
+  forward_to = [prometheus.remote_write.lgtm.receiver]
+}
+
+prometheus.remote_write "lgtm" {
+  endpoint {
+    url = "http://lgtm:9090/api/v1/write"
   }
 }

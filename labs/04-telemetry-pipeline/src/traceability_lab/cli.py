@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from traceability_lab.artifacts import cleanup_artifacts, package_public_evidence
-from traceability_lab.backend import verify_backend
+from traceability_lab.backend import verify_backend, verify_suite_backend
 from traceability_lab.contract import (
     ContractError,
     build_action_context,
@@ -13,6 +13,7 @@ from traceability_lab.contract import (
     validate_governance_event,
 )
 from traceability_lab.runner import run_action
+from traceability_lab.suite import run_suite
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -23,12 +24,24 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     run_parser.add_argument("--otlp-endpoint")
 
+    suite_parser = subparsers.add_parser("run-suite")
+    suite_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    suite_parser.add_argument("--otlp-endpoint", default="http://127.0.0.1:14318")
+    suite_parser.add_argument("--gateway-url", default="http://127.0.0.1:18080")
+    suite_parser.add_argument("--drop-mcp-context", action="store_true")
+
     subparsers.add_parser("negative")
 
     verify_parser = subparsers.add_parser("verify-backend")
     verify_parser.add_argument("--artifact-dir", type=Path, required=True)
     verify_parser.add_argument("--tempo-url", default="http://127.0.0.1:13200")
     verify_parser.add_argument("--loki-url", default="http://127.0.0.1:13100")
+
+    verify_suite_parser = subparsers.add_parser("verify-suite")
+    verify_suite_parser.add_argument("--scenario-report", type=Path, required=True)
+    verify_suite_parser.add_argument("--tempo-url", default="http://127.0.0.1:13200")
+    verify_suite_parser.add_argument("--loki-url", default="http://127.0.0.1:13100")
+    verify_suite_parser.add_argument("--prometheus-url", default="http://127.0.0.1:19090")
 
     package_parser = subparsers.add_parser("package-evidence")
     package_parser.add_argument("--artifact-dir", type=Path, required=True)
@@ -87,6 +100,28 @@ def main() -> None:
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         if report["correlation"] != "PASS":
+            raise SystemExit(2)
+        return
+    if args.command == "verify-suite":
+        report = verify_suite_backend(
+            args.scenario_report,
+            tempo_url=args.tempo_url,
+            loki_url=args.loki_url,
+            prometheus_url=args.prometheus_url,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        if report["overall"] != "PASS":
+            raise SystemExit(2)
+        return
+    if args.command == "run-suite":
+        summary = run_suite(
+            artifact_root=args.artifact_root,
+            otlp_endpoint=args.otlp_endpoint,
+            gateway_url=args.gateway_url,
+            drop_mcp_context=args.drop_mcp_context,
+        )
+        print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        if any(item.status != "PASS" for item in summary.scenarios):
             raise SystemExit(2)
         return
     summary = run_action(artifact_root=args.artifact_root, otlp_endpoint=args.otlp_endpoint)

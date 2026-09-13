@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 traceability-lab = "traceability_lab.cli:main"
+traceability-service = "traceability_lab.service:main"
 
 [dependency-groups]
 dev = [

@@ -43,7 +43,7 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-registry lab-03-runtime-registry-up lab-03-runtime-registry-run \
 	lab-03-runtime-registry-down \
 	lab-03-runtime-down \
-	lab-04-up lab-04-check lab-04-run lab-04-negative lab-04-down
+	lab-04-up lab-04-check lab-04-run lab-04-broken-trace lab-04-negative lab-04-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -417,7 +417,7 @@ lab-03-runtime-down:
 lab-04-up:
 	uv sync --directory "$(LAB04)" --all-groups
 	docker compose --project-directory "$(LAB04)" \
-		-f "$(LAB04)/docker-compose.yaml" up -d --wait
+		-f "$(LAB04)/docker-compose.yaml" up -d --build --force-recreate --wait
 
 lab-04-check:
 	uv run --directory "$(LAB04)" pytest -q
@@ -426,6 +426,9 @@ lab-04-check:
 	docker compose --project-directory "$(LAB04)" \
 		-f "$(LAB04)/docker-compose.yaml" config --quiet
 	docker run --rm \
+		-v "$(LAB04)/agentgateway.yaml:/config.yaml:ro" \
+		$(AGENTGATEWAY_IMAGE) --file /config.yaml --validate-only
+	docker run --rm \
 		-v "$(LAB04)/config.alloy:/etc/alloy/config.alloy:ro" \
 		grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33 \
 		validate /etc/alloy/config.alloy
@@ -433,15 +436,37 @@ lab-04-check:
 lab-04-run:
 	@mkdir -p "$(LAB04)/.runtime"
 	@set -euo pipefail; \
-		uv run --directory "$(LAB04)" traceability-lab run \
+		uv run --directory "$(LAB04)" traceability-lab run-suite \
 			--artifact-root "$(LAB04)/artifacts" \
 			--otlp-endpoint http://127.0.0.1:14318 \
+			--gateway-url http://127.0.0.1:18080 \
 			| tee "$(LAB04)/.runtime/latest-run.json"; \
 		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
 			< "$(LAB04)/.runtime/latest-run.json")"; \
-		uv run --directory "$(LAB04)" traceability-lab verify-backend \
-			--artifact-dir "$$artifact_dir" \
+		uv run --directory "$(LAB04)" traceability-lab verify-suite \
+			--scenario-report "$$artifact_dir/scenario-report.json" \
 			| tee "$(LAB04)/.runtime/backend-report.json"
+
+lab-04-broken-trace:
+	@mkdir -p "$(LAB04)/.runtime"
+	@set -euo pipefail; \
+		uv run --directory "$(LAB04)" traceability-lab run-suite \
+			--artifact-root "$(LAB04)/artifacts" \
+			--otlp-endpoint http://127.0.0.1:14318 \
+			--gateway-url http://127.0.0.1:18080 \
+			--drop-mcp-context \
+			| tee "$(LAB04)/.runtime/broken-run.json"; \
+		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+			< "$(LAB04)/.runtime/broken-run.json")"; \
+		set +e; \
+		uv run --directory "$(LAB04)" traceability-lab verify-suite \
+			--scenario-report "$$artifact_dir/scenario-report.json" \
+			| tee "$(LAB04)/.runtime/broken-backend-report.json"; \
+		status=$$?; \
+		set -e; \
+		test $$status -eq 2; \
+		grep -q '"mcp-adapter"' "$(LAB04)/.runtime/broken-backend-report.json"; \
+		grep -q '"overall": "FAIL"' "$(LAB04)/.runtime/broken-backend-report.json"
 
 lab-04-negative:
 	uv run --directory "$(LAB04)" traceability-lab negative

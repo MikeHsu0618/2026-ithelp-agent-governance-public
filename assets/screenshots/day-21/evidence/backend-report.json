@@ -1,0 +1,56 @@
+{
+  "overall": "PASS",
+  "prometheus_agentgateway_metrics": "PASS",
+  "scenarios": [
+    {
+      "action_id": "act-normal-call-141052bb",
+      "correlation": "PASS",
+      "loki_event": "PASS",
+      "missing_services": [],
+      "scenario": "normal-call",
+      "tempo_trace": "PASS",
+      "trace_id": "ec7a1fbe3e67b7742704664a72ec0d69",
+      "trace_services": ["agent-runtime", "agentgateway", "ithelp-lab-client", "mcp-adapter"]
+    },
+    {
+      "action_id": "act-gateway-policy-deny-453eea14",
+      "correlation": "PASS",
+      "loki_event": "PASS",
+      "missing_services": [],
+      "scenario": "gateway-policy-deny",
+      "tempo_trace": "PASS",
+      "trace_id": "e7641e7988f4364cc82892c7acf66932",
+      "trace_services": ["agentgateway", "ithelp-lab-client"]
+    },
+    {
+      "action_id": "act-hitl-approved-c5c43544",
+      "correlation": "PASS",
+      "loki_event": "PASS",
+      "missing_services": [],
+      "scenario": "hitl-approved",
+      "tempo_trace": "PASS",
+      "trace_id": "6f85f0b4b4b0d59861ccea054f823dbb",
+      "trace_services": ["agent-runtime", "agentgateway", "ithelp-lab-client", "mcp-adapter"]
+    },
+    {
+      "action_id": "act-a2a-routing-failure-b4a4ecef",
+      "correlation": "PASS",
+      "loki_event": "PASS",
+      "missing_services": [],
+      "scenario": "a2a-routing-failure",
+      "tempo_trace": "PASS",
+      "trace_id": "f9bb1bae1cca68c123e3bb63c30374f9",
+      "trace_services": ["agent-runtime", "agentgateway", "ithelp-lab-client"]
+    },
+    {
+      "action_id": "act-llm-fallback-4ca97125",
+      "correlation": "PASS",
+      "loki_event": "PASS",
+      "missing_services": [],
+      "scenario": "llm-fallback",
+      "tempo_trace": "PASS",
+      "trace_id": "c7b478053128f5ce9c74967da51d4de3",
+      "trace_services": ["agent-runtime", "agentgateway", "ithelp-lab-client", "mcp-adapter"]
+    }
+  ]
+}

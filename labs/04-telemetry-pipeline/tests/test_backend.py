@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 
-from traceability_lab.backend import verify_backend
+from traceability_lab.backend import verify_backend, verify_suite_backend
 
 
 def write_manifest(path: Path) -> None:
@@ -89,3 +90,171 @@ def test_backend_verification_rejects_non_local_or_credentialed_urls(
 
     with pytest.raises(ValueError, match="backend URL"):
         verify_backend(tmp_path, tempo_url=tempo_url, loki_url=loki_url)
+
+
+def test_suite_backend_requires_expected_services_logs_and_gateway_metrics(tmp_path: Path) -> None:
+    report_path = tmp_path / "scenario-report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "normal-call",
+                        "action_id": "act-normal",
+                        "trace_id": "c" * 32,
+                        "expected_services": [
+                            "ithelp-lab-client",
+                            "agentgateway",
+                            "agent-runtime",
+                            "mcp-adapter",
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fetch_json(url: str) -> dict:
+        if "/api/v2/traces/" in url:
+            return {
+                "trace": {
+                    "resourceSpans": [
+                        {
+                            "resource": {
+                                "attributes": [
+                                    {
+                                        "key": "service.name",
+                                        "value": {"stringValue": name},
+                                    }
+                                ]
+                            }
+                        }
+                        for name in (
+                            "ithelp-lab-client",
+                            "agentgateway",
+                            "agent-runtime",
+                            "mcp-adapter",
+                        )
+                    ]
+                }
+            }
+        if "/api/v1/query?" in url:
+            return {"status": "success", "data": {"result": [{"value": ["1", "42"]}]}}
+        return {"data": {"result": [{"values": [["1", "act-normal"]]}]}}
+
+    report = verify_suite_backend(report_path, fetch_json=fetch_json, attempts=1)
+
+    assert report["prometheus_agentgateway_metrics"] == "PASS"
+    assert report["scenarios"][0]["trace_services"] == [
+        "agent-runtime",
+        "agentgateway",
+        "ithelp-lab-client",
+        "mcp-adapter",
+    ]
+    assert report["overall"] == "PASS"
+
+
+def test_suite_backend_exposes_a_broken_mcp_trace(tmp_path: Path) -> None:
+    report_path = tmp_path / "scenario-report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "normal-call",
+                        "action_id": "act-broken",
+                        "trace_id": "d" * 32,
+                        "expected_services": ["ithelp-lab-client", "mcp-adapter"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fetch_json(url: str) -> dict:
+        if "/api/v2/traces/" in url:
+            return {
+                "trace": {
+                    "resourceSpans": [
+                        {
+                            "resource": {
+                                "attributes": [
+                                    {
+                                        "key": "service.name",
+                                        "value": {"stringValue": "ithelp-lab-client"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        return {"data": {"result": [{"value": ["1", "1"]}]}}
+
+    report = verify_suite_backend(report_path, fetch_json=fetch_json, attempts=1)
+
+    assert report["scenarios"][0]["missing_services"] == ["mcp-adapter"]
+    assert report["overall"] == "FAIL"
+
+
+def test_suite_backend_retries_when_backends_are_still_starting(tmp_path: Path) -> None:
+    report_path = tmp_path / "scenario-report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "normal-call",
+                        "action_id": "act-eventual",
+                        "trace_id": "e" * 32,
+                        "expected_services": ["ithelp-lab-client"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {}
+
+    def fetch_json(url: str) -> dict:
+        if "/api/v2/traces/" in url:
+            backend = "tempo"
+        elif "/api/v1/query?" in url:
+            backend = "metrics"
+        else:
+            backend = "loki"
+        calls[backend] = calls.get(backend, 0) + 1
+        if calls[backend] == 1:
+            raise URLError("backend is starting")
+        if backend == "tempo":
+            return {
+                "trace": {
+                    "resourceSpans": [
+                        {
+                            "resource": {
+                                "attributes": [
+                                    {
+                                        "key": "service.name",
+                                        "value": {"stringValue": "ithelp-lab-client"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        if backend == "metrics":
+            return {"data": {"result": [{"value": ["1", "1"]}]}}
+        return {"data": {"result": [{"values": [["1", "act-eventual"]]}]}}
+
+    report = verify_suite_backend(
+        report_path,
+        fetch_json=fetch_json,
+        sleep=lambda _: None,
+        attempts=2,
+    )
+
+    assert report["overall"] == "PASS"
+    assert calls == {"tempo": 2, "loki": 2, "metrics": 2}

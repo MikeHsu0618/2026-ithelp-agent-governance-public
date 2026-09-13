@@ -29,12 +29,74 @@ services:
       - /etc/alloy/config.alloy
     ports:
       - 127.0.0.1:12345:12345
+      - 127.0.0.1:14317:4317
       - 127.0.0.1:14318:4318
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
       - alloy-data:/var/lib/alloy/data
     depends_on:
       lgtm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  runtime:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["--role", "runtime"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      LAB_GATEWAY_URL: http://agentgateway:3000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["--role", "mcp"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  agentgateway:
+    image: cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+    command: ["--file", "/etc/agentgateway/config.yaml"]
+    ports:
+      - 127.0.0.1:18080:3000
+    volumes:
+      - ./agentgateway.yaml:/etc/agentgateway/config.yaml:ro
+    depends_on:
+      runtime:
+        condition: service_healthy
+      mcp:
         condition: service_healthy
     restart: unless-stopped
 

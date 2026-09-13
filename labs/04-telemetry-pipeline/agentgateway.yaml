@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+gateways:
+  lab:
+    port: 3000
+    protocol: HTTP
+
+frontendPolicies:
+  tracing:
+    host: alloy:4317
+    protocol: grpc
+    randomSampling: true
+  accessLog:
+    otlp:
+      host: alloy:4317
+
+routes:
+- name: gateway-policy-deny
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /agent/denied
+  policies:
+    authorization:
+      rules:
+      - allow: "false"
+  backends:
+  - host: runtime:8080
+
+- name: agent-runtime
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /agent/run
+  backends:
+  - host: runtime:8080
+
+- name: mcp-adapter
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /mcp/execute
+  backends:
+  - host: mcp:8080
+
+- name: missing-a2a-agent
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /a2a/missing
+  backends:
+  - host: missing-agent:8080
