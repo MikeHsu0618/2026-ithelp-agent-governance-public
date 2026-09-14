@@ -1,0 +1,23 @@
+{
+  "conversation_count": 90,
+  "finished_at": "2026-09-14T15:52:43.793865+00:00",
+  "gateway_variants": [
+    "bounded",
+    "user",
+    "conversation"
+  ],
+  "metric_under_test": "agentgateway_requests_total",
+  "missing_token_status": 401,
+  "requests_per_variant": 90,
+  "run_id": "day23-5907dd4628bb",
+  "sample_conversation_id": "conv-000-00",
+  "sample_principal": "user/sre-oncaller-000",
+  "sample_trace_id": "16814ec30a7e46eba6e151d052cbfd04",
+  "source_of_identity": "agentgateway-validated-jwt",
+  "started_at": "2026-09-14T15:52:41.505183+00:00",
+  "successful_requests": 270,
+  "team_count": 3,
+  "traffic_generator_role": "signed-request-client-only",
+  "user_count": 30,
+  "wrong_audience_status": 401
+}

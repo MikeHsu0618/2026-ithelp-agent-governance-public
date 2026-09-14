@@ -1,0 +1,41 @@
+{
+  "authentication_guards": "PASS",
+  "expected_series": {
+    "bounded": 3,
+    "conversation": 90,
+    "user": 30
+  },
+  "gateway_identity_log": "PASS",
+  "gateway_jwt_trace": "PASS",
+  "growth_vs_bounded": {
+    "conversation": 30.0,
+    "user": 10.0
+  },
+  "loki_identity_not_indexed": "PASS",
+  "loki_index_labels": [
+    "service_name"
+  ],
+  "loki_selector": "{service_name=\"agentgateway\"}",
+  "loki_stream_count": 1,
+  "metric": "agentgateway_requests_total",
+  "observed_series": {
+    "bounded": 3,
+    "conversation": 90,
+    "user": 30
+  },
+  "overall": "PASS",
+  "prometheus_queries": {
+    "bounded": "count(agentgateway_requests_total{job=\"agentgateway-bounded\",route=\"default/cardinality-run\",status=\"200\"})",
+    "conversation": "count(agentgateway_requests_total{job=\"agentgateway-conversation\",route=\"default/cardinality-run\",status=\"200\"})",
+    "user": "count(agentgateway_requests_total{job=\"agentgateway-user\",route=\"default/cardinality-run\",status=\"200\"})"
+  },
+  "query_window": {
+    "finished_at": "2026-09-14T15:52:43.793865+00:00",
+    "margin_seconds": 2,
+    "started_at": "2026-09-14T15:52:41.505183+00:00"
+  },
+  "requests_per_variant": 90,
+  "series_match_executed_traffic": "PASS",
+  "tempo_matched_principal": "user/sre-oncaller-000",
+  "tempo_trace_id": "16814ec30a7e46eba6e151d052cbfd04"
+}

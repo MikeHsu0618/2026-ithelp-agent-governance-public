@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -92,6 +93,17 @@ def _prometheus_has_samples(payload: dict[str, Any]) -> bool:
         except (IndexError, TypeError, ValueError):
             continue
     return False
+
+
+def _prometheus_scalar(payload: dict[str, Any]) -> int | None:
+    result = payload.get("data", {}).get("result", [])
+    if not result:
+        return None
+    value = result[0].get("value", [None, None])
+    try:
+        return int(float(value[1]))
+    except (IndexError, TypeError, ValueError):
+        return None
 
 
 def verify_suite_backend(
@@ -263,5 +275,153 @@ def verify_identity_backend(
         "loki_principal_not_indexed": "PASS" if loki_principal_not_indexed else "FAIL",
         "prometheus_bounded_labels": "PASS" if metrics_bounded else "FAIL",
         "forbidden_fields_absent": "PASS" if forbidden_absent else "FAIL",
+        "overall": "PASS" if overall else "FAIL",
+    }
+
+
+def verify_cardinality_backend(
+    run_report: Path,
+    *,
+    prometheus_url: str = "http://127.0.0.1:29090",
+    loki_url: str = "http://127.0.0.1:23100",
+    tempo_url: str = "http://127.0.0.1:23200",
+    fetch_json: Callable[[str], dict[str, Any]] = fetch_json,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = 20,
+) -> dict[str, Any]:
+    """Compare observed gateway series with the exact request matrix that was executed."""
+
+    source = json.loads(run_report.read_text(encoding="utf-8"))
+    prometheus_base = validate_backend_url(prometheus_url)
+    loki_base = validate_backend_url(loki_url)
+    tempo_base = validate_backend_url(tempo_url)
+    expected = {
+        "bounded": int(source["team_count"]),
+        "user": int(source["user_count"]),
+        "conversation": int(source["conversation_count"]),
+    }
+    authentication_guards = (
+        int(source.get("missing_token_status", 0)) == 401
+        and int(source.get("wrong_audience_status", 0)) == 401
+    )
+    jobs = {
+        "bounded": "agentgateway-bounded",
+        "user": "agentgateway-user",
+        "conversation": "agentgateway-conversation",
+    }
+    query_margin = timedelta(seconds=2)
+    started_at = datetime.fromisoformat(str(source["started_at"]))
+    finished_at = datetime.fromisoformat(str(source["finished_at"]))
+    query_started_at = started_at - query_margin
+    query_finished_at = finished_at + query_margin
+    start_ns = str(int(query_started_at.timestamp() * 1_000_000_000))
+    end_ns = str(int(query_finished_at.timestamp() * 1_000_000_000))
+    metrics_endpoints = {}
+    metrics_queries = {}
+    for variant, job in jobs.items():
+        query = (
+            'count(agentgateway_requests_total{job="'
+            + job
+            + '",route="default/cardinality-run",status="200"})'
+        )
+        metrics_queries[variant] = query
+        metrics_endpoints[variant] = f"{prometheus_base}/api/v1/query?{urlencode({'query': query})}"
+
+    match = '{service_name="agentgateway"}'
+    series_params = [("match[]", match), ("start", start_ns), ("end", end_ns)]
+    series_endpoint = f"{loki_base}/loki/api/v1/series?{urlencode(series_params)}"
+    log_params = {"query": match, "start": start_ns, "end": end_ns, "limit": 5000}
+    log_endpoint = f"{loki_base}/loki/api/v1/query_range?{urlencode(log_params)}"
+    label_endpoint = (
+        f"{loki_base}/loki/api/v1/labels?{urlencode({'start': start_ns, 'end': end_ns})}"
+    )
+    sample_trace_id = str(source["sample_trace_id"])
+    trace_endpoint = f"{tempo_base}/api/traces/{sample_trace_id}"
+    observed: dict[str, int] = {}
+    stream_count = 0
+    identity_log = False
+    identity_trace = False
+    matched_principal = ""
+    index_labels: list[str] = []
+    identity_not_indexed = False
+    for attempt in range(attempts):
+        observed = {
+            variant: value
+            for variant, endpoint in metrics_endpoints.items()
+            if (value := _prometheus_scalar(_fetch_available(fetch_json, endpoint))) is not None
+        }
+        series_payload = _fetch_available(fetch_json, series_endpoint)
+        series = series_payload.get("data", [])
+        stream_count = len(series) if isinstance(series, list) else 0
+        label_payload = _fetch_available(fetch_json, label_endpoint)
+        raw_labels = label_payload.get("data", [])
+        index_labels = (
+            sorted(str(item) for item in raw_labels) if isinstance(raw_labels, list) else []
+        )
+        identity_not_indexed = bool(index_labels) and not {
+            "conversation_id",
+            "correlation_conversation_id",
+            "identity_user_id",
+            "user_id",
+        }.intersection(index_labels)
+        log_payload = _fetch_available(fetch_json, log_endpoint)
+        log_text = json.dumps(log_payload, sort_keys=True)
+        identity_log = (
+            str(source["sample_principal"]) in log_text
+            and str(source["sample_conversation_id"]) in log_text
+        )
+        trace_payload = _fetch_available(fetch_json, trace_endpoint)
+        trace_text = json.dumps(trace_payload, sort_keys=True)
+        matched_principal = (
+            str(source["sample_principal"]) if str(source["sample_principal"]) in trace_text else ""
+        )
+        identity_trace = bool(matched_principal)
+        if (
+            observed == expected
+            and stream_count > 0
+            and identity_log
+            and identity_trace
+            and identity_not_indexed
+        ):
+            break
+        if attempt + 1 < attempts:
+            sleep(1)
+
+    counts_match = observed == expected
+    bounded = observed.get("bounded", 0)
+    growth = {
+        variant: round(observed.get(variant, 0) / bounded, 2) if bounded else 0.0
+        for variant in ("user", "conversation")
+    }
+    overall = (
+        authentication_guards
+        and counts_match
+        and stream_count > 0
+        and identity_log
+        and identity_trace
+        and identity_not_indexed
+    )
+    return {
+        "authentication_guards": "PASS" if authentication_guards else "FAIL",
+        "metric": "agentgateway_requests_total",
+        "observed_series": dict(sorted(observed.items())),
+        "expected_series": dict(sorted(expected.items())),
+        "growth_vs_bounded": growth,
+        "requests_per_variant": int(source["requests_per_variant"]),
+        "query_window": {
+            "finished_at": str(source["finished_at"]),
+            "margin_seconds": int(query_margin.total_seconds()),
+            "started_at": str(source["started_at"]),
+        },
+        "prometheus_queries": metrics_queries,
+        "loki_selector": match,
+        "tempo_trace_id": sample_trace_id,
+        "series_match_executed_traffic": "PASS" if counts_match else "FAIL",
+        "loki_stream_count": stream_count,
+        "loki_index_labels": index_labels,
+        "loki_identity_not_indexed": "PASS" if identity_not_indexed else "FAIL",
+        "gateway_identity_log": "PASS" if identity_log else "FAIL",
+        "gateway_jwt_trace": "PASS" if identity_trace else "FAIL",
+        "tempo_matched_principal": matched_principal,
         "overall": "PASS" if overall else "FAIL",
     }

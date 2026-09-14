@@ -69,6 +69,12 @@ class LabApplication:
             return self._handle_runtime(headers, body)
         if self.role == "mcp" and path == "/mcp/execute":
             return self._handle_mcp(headers, body)
+        if self.role == "cardinality" and path == "/cardinality/run":
+            return HTTPStatus.OK, {
+                "effect": "NO_OP_CARDINALITY_SAMPLE",
+                "side_effects": 0,
+                "status": "ok",
+            }
         return HTTPStatus.NOT_FOUND, {"error": "route_not_found"}
 
     def _handle_runtime(
@@ -235,11 +241,16 @@ def make_handler(application: LabApplication) -> type[BaseHTTPRequestHandler]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--role", choices=("runtime", "mcp"), required=True)
+    parser.add_argument("--role", choices=("runtime", "mcp", "cardinality"), required=True)
     parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://alloy:4318")
-    service_name = "agent-runtime" if args.role == "runtime" else "mcp-adapter"
+    service_names = {
+        "runtime": "agent-runtime",
+        "mcp": "mcp-adapter",
+        "cardinality": "cardinality-backend",
+    }
+    service_name = service_names[args.role]
     telemetry = Telemetry(service_name, endpoint.rstrip("/"))
     application = LabApplication(
         args.role,

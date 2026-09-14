@@ -1,0 +1,160 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "panels": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "The three values are observed series from the same 90-request matrix, not a Cartesian-product estimate.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "continuous-GrYlRd"
+            },
+            "decimals": 0,
+            "min": 0,
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "displayMode": "gradient",
+          "maxVizHeight": 300,
+          "minVizHeight": 16,
+          "minVizWidth": 8,
+          "namePlacement": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showUnfilled": true,
+          "sizing": "auto",
+          "valueMode": "color"
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "count(agentgateway_requests_total{job=\"agentgateway-bounded\",route=\"default/cardinality-run\",status=\"200\"})",
+            "instant": true,
+            "legendFormat": "bounded: team",
+            "range": false,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "count(agentgateway_requests_total{job=\"agentgateway-user\",route=\"default/cardinality-run\",status=\"200\"})",
+            "instant": true,
+            "legendFormat": "+ user_id",
+            "range": false,
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "count(agentgateway_requests_total{job=\"agentgateway-conversation\",route=\"default/cardinality-run\",status=\"200\"})",
+            "instant": true,
+            "legendFormat": "+ user_id + conversation_id",
+            "range": false,
+            "refId": "C"
+          }
+        ],
+        "title": "Observed agentgateway_requests_total series (3 → 30 → 90)",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Identity remains queryable as Loki structured metadata. Loki's label-name API still reports only service_name as an index label.",
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 10
+        },
+        "id": 2,
+        "options": {
+          "dedupStrategy": "none",
+          "enableInfiniteScrolling": false,
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": true,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "{service_name=\"agentgateway\"} | identity_user_id = \"user/sre-oncaller-000\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Gateway access logs by validated JWT subject",
+        "type": "logs"
+      }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 41,
+    "tags": [
+      "agentgateway",
+      "cardinality",
+      "ithelp"
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Day 23 · agentgateway Cardinality Lab",
+    "uid": "day23-agentgateway-cardinality",
+    "version": 0
+  },
+  "folderId": 0,
+  "message": "Provision Day 23 live Lab dashboard",
+  "overwrite": true
+}

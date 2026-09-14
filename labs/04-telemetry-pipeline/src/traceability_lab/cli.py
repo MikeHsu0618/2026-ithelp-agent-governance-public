@@ -5,7 +5,13 @@ import json
 from pathlib import Path
 
 from traceability_lab.artifacts import cleanup_artifacts, package_public_evidence
-from traceability_lab.backend import verify_backend, verify_identity_backend, verify_suite_backend
+from traceability_lab.backend import (
+    verify_backend,
+    verify_cardinality_backend,
+    verify_identity_backend,
+    verify_suite_backend,
+)
+from traceability_lab.cardinality import prepare_identity_material, run_cardinality_traffic
 from traceability_lab.contract import (
     ContractError,
     build_action_context,
@@ -35,6 +41,20 @@ def build_parser() -> argparse.ArgumentParser:
     identity_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     identity_parser.add_argument("--otlp-endpoint", default="http://127.0.0.1:14318")
 
+    cardinality_prepare_parser = subparsers.add_parser("cardinality-prepare")
+    cardinality_prepare_parser.add_argument("--runtime-dir", type=Path, required=True)
+
+    cardinality_run_parser = subparsers.add_parser("cardinality-run")
+    cardinality_run_parser.add_argument("--runtime-dir", type=Path, required=True)
+    cardinality_run_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    cardinality_run_parser.add_argument("--user-count", type=int, default=30)
+    cardinality_run_parser.add_argument("--conversations-per-user", type=int, default=3)
+    cardinality_run_parser.add_argument("--bounded-gateway-url", default="http://127.0.0.1:28081")
+    cardinality_run_parser.add_argument("--user-gateway-url", default="http://127.0.0.1:28082")
+    cardinality_run_parser.add_argument(
+        "--conversation-gateway-url", default="http://127.0.0.1:28083"
+    )
+
     subparsers.add_parser("negative")
 
     verify_parser = subparsers.add_parser("verify-backend")
@@ -53,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify_identity_parser.add_argument("--tempo-url", default="http://127.0.0.1:13200")
     verify_identity_parser.add_argument("--loki-url", default="http://127.0.0.1:13100")
     verify_identity_parser.add_argument("--prometheus-url", default="http://127.0.0.1:19090")
+
+    verify_cardinality_parser = subparsers.add_parser("verify-cardinality")
+    verify_cardinality_parser.add_argument("--run-report", type=Path, required=True)
+    verify_cardinality_parser.add_argument("--loki-url", default="http://127.0.0.1:23100")
+    verify_cardinality_parser.add_argument("--prometheus-url", default="http://127.0.0.1:29090")
+    verify_cardinality_parser.add_argument("--tempo-url", default="http://127.0.0.1:23200")
 
     package_parser = subparsers.add_parser("package-evidence")
     package_parser.add_argument("--artifact-dir", type=Path, required=True)
@@ -92,6 +118,24 @@ def main() -> None:
     if args.command == "negative":
         print(json.dumps(run_negative_case(), ensure_ascii=False, indent=2, sort_keys=True))
         return
+    if args.command == "cardinality-prepare":
+        material = prepare_identity_material(args.runtime_dir)
+        print(json.dumps(material.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return
+    if args.command == "cardinality-run":
+        summary = run_cardinality_traffic(
+            runtime_dir=args.runtime_dir,
+            artifact_root=args.artifact_root,
+            gateway_urls={
+                "bounded": args.bounded_gateway_url,
+                "user": args.user_gateway_url,
+                "conversation": args.conversation_gateway_url,
+            },
+            user_count=args.user_count,
+            conversations_per_user=args.conversations_per_user,
+        )
+        print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return
     if args.command == "package-evidence":
         package_public_evidence(
             artifact_dir=args.artifact_dir,
@@ -130,6 +174,17 @@ def main() -> None:
             tempo_url=args.tempo_url,
             loki_url=args.loki_url,
             prometheus_url=args.prometheus_url,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        if report["overall"] != "PASS":
+            raise SystemExit(2)
+        return
+    if args.command == "verify-cardinality":
+        report = verify_cardinality_backend(
+            args.run_report,
+            loki_url=args.loki_url,
+            prometheus_url=args.prometheus_url,
+            tempo_url=args.tempo_url,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         if report["overall"] != "PASS":

@@ -74,6 +74,74 @@ def test_cli_verify_identity_exits_when_backend_evidence_fails(
     assert exc.value.code == 2
 
 
+def test_cli_cardinality_prepare_writes_only_runtime_material(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    material = SimpleNamespace(
+        to_json_dict=lambda: {
+            "issuer": "https://identity.invalid/day23",
+            "jwks_path": str(tmp_path / "jwks.json"),
+        }
+    )
+    monkeypatch.setattr(cli, "prepare_identity_material", lambda *_args, **_kwargs: material)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["traceability-lab", "cardinality-prepare", "--runtime-dir", str(tmp_path)],
+    )
+
+    cli.main()
+
+    assert json.loads(capsys.readouterr().out)["issuer"].endswith("day23")
+
+
+def test_cli_cardinality_run_prints_a_secret_free_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    summary = SimpleNamespace(
+        to_json_dict=lambda: {
+            "requests_per_variant": 6,
+            "successful_requests": 18,
+        }
+    )
+    monkeypatch.setattr(cli, "run_cardinality_traffic", lambda **_kwargs: summary)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "traceability-lab",
+            "cardinality-run",
+            "--runtime-dir",
+            str(tmp_path / "runtime"),
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ],
+    )
+
+    cli.main()
+
+    assert json.loads(capsys.readouterr().out)["successful_requests"] == 18
+
+
+def test_cli_verify_cardinality_exits_when_backend_counts_do_not_match(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report_path = tmp_path / "cardinality-run.json"
+    report_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "verify_cardinality_backend",
+        lambda *_args, **_kwargs: {"overall": "FAIL"},
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["traceability-lab", "verify-cardinality", "--run-report", str(report_path)],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+
+
 def test_cli_negative_reports_schema_rejection(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

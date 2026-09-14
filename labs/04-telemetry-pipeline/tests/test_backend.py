@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
 
 from traceability_lab.backend import (
     verify_backend,
+    verify_cardinality_backend,
     verify_identity_backend,
     verify_suite_backend,
 )
@@ -143,7 +145,7 @@ def test_suite_backend_requires_expected_services_logs_and_gateway_metrics(tmp_p
                     ]
                 }
             }
-        if url.endswith("/loki/api/v1/labels"):
+        if "/loki/api/v1/labels" in url:
             return {"status": "success", "data": ["service_name", "detected_level"]}
         if "/api/v1/query?" in url:
             return {"status": "success", "data": {"result": [{"value": ["1", "42"]}]}}
@@ -305,7 +307,7 @@ def test_identity_backend_requires_safe_fields_and_absent_sensitive_fields(tmp_p
                     ]
                 }
             }
-        if url.endswith("/loki/api/v1/labels"):
+        if "/loki/api/v1/labels" in url:
             return {"status": "success", "data": ["service_name", "detected_level"]}
         if "/api/v1/query?" in url:
             return {
@@ -437,4 +439,143 @@ def test_identity_backend_fails_when_principal_becomes_a_loki_index_label(tmp_pa
     report = verify_identity_backend(report_path, fetch_json=fetch_json, attempts=1)
 
     assert report["loki_principal_not_indexed"] == "FAIL"
+    assert report["overall"] == "FAIL"
+
+
+def test_cardinality_backend_counts_observed_gateway_series_and_loki_streams(
+    tmp_path: Path,
+) -> None:
+    run_report = tmp_path / "cardinality-run.json"
+    run_report.write_text(
+        json.dumps(
+            {
+                "team_count": 3,
+                "user_count": 6,
+                "conversation_count": 12,
+                "finished_at": "2026-09-14T08:00:01+00:00",
+                "missing_token_status": 401,
+                "requests_per_variant": 12,
+                "sample_principal": "user/sre-oncaller-000",
+                "sample_conversation_id": "conv-000-00",
+                "sample_trace_id": "f" * 32,
+                "started_at": "2026-09-14T08:00:00+00:00",
+                "wrong_audience_status": 401,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fetch_json(url: str) -> dict:
+        if "/api/traces/" in url:
+            assert url.endswith("/api/traces/" + "f" * 32)
+            return {
+                "batches": [
+                    {
+                        "attributes": {"jwt.sub": "user/sre-oncaller-000"},
+                    }
+                ]
+            }
+        if "/api/v1/query?" in url:
+            query = unquote(parse_qs(urlsplit(url).query)["query"][0])
+            assert 'route="default/cardinality-run"' in query
+            counts = {
+                'job="agentgateway-bounded"': "3",
+                'job="agentgateway-user"': "6",
+                'job="agentgateway-conversation"': "12",
+            }
+            value = next(value for marker, value in counts.items() if marker in query)
+            return {"status": "success", "data": {"result": [{"value": ["1", value]}]}}
+        if "/loki/api/v1/series?" in url:
+            params = parse_qs(urlsplit(url).query)
+            assert int(params["start"][0]) < int(params["end"][0])
+            return {"status": "success", "data": [{"service_name": "agentgateway"}]}
+        if "/loki/api/v1/labels" in url:
+            return {"status": "success", "data": ["service_name"]}
+        params = parse_qs(urlsplit(url).query)
+        assert int(params["start"][0]) < int(params["end"][0])
+        return {
+            "status": "success",
+            "data": {
+                "result": [
+                    {
+                        "stream": {"service_name": "agentgateway"},
+                        "values": [
+                            [
+                                "1",
+                                (
+                                    "identity.user_id=user/sre-oncaller-000 "
+                                    "correlation.conversation_id=conv-000-00"
+                                ),
+                            ]
+                        ],
+                    }
+                ]
+            },
+        }
+
+    report = verify_cardinality_backend(run_report, fetch_json=fetch_json, attempts=1)
+
+    assert report["observed_series"] == {
+        "bounded": 3,
+        "conversation": 12,
+        "user": 6,
+    }
+    assert report["expected_series"] == {
+        "bounded": 3,
+        "conversation": 12,
+        "user": 6,
+    }
+    assert report["growth_vs_bounded"] == {"conversation": 4.0, "user": 2.0}
+    assert report["loki_stream_count"] == 1
+    assert report["loki_index_labels"] == ["service_name"]
+    assert report["loki_identity_not_indexed"] == "PASS"
+    assert report["gateway_identity_log"] == "PASS"
+    assert report["gateway_jwt_trace"] == "PASS"
+    assert report["authentication_guards"] == "PASS"
+    assert report["tempo_matched_principal"] == "user/sre-oncaller-000"
+    assert report["tempo_trace_id"] == "f" * 32
+    assert report["overall"] == "PASS"
+
+
+def test_cardinality_backend_rejects_a_theoretical_count_as_observed_evidence(
+    tmp_path: Path,
+) -> None:
+    run_report = tmp_path / "cardinality-run.json"
+    run_report.write_text(
+        json.dumps(
+            {
+                "team_count": 3,
+                "user_count": 6,
+                "conversation_count": 12,
+                "finished_at": "2026-09-14T08:00:01+00:00",
+                "missing_token_status": 200,
+                "requests_per_variant": 12,
+                "sample_principal": "user/sre-oncaller-000",
+                "sample_conversation_id": "conv-000-00",
+                "sample_trace_id": "e" * 32,
+                "started_at": "2026-09-14T08:00:00+00:00",
+                "wrong_audience_status": 401,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fetch_json(url: str) -> dict:
+        if "/api/search?" in url:
+            return {"traces": []}
+        if "/api/v1/query?" in url:
+            return {"status": "success", "data": {"result": [{"value": ["1", "36"]}]}}
+        if "/loki/api/v1/series?" in url:
+            return {"status": "success", "data": [{"service_name": "agentgateway"}]}
+        if "/loki/api/v1/labels" in url:
+            return {"status": "success", "data": ["service_name", "identity_user_id"]}
+        return {"status": "success", "data": {"result": []}}
+
+    report = verify_cardinality_backend(run_report, fetch_json=fetch_json, attempts=1)
+
+    assert report["series_match_executed_traffic"] == "FAIL"
+    assert report["authentication_guards"] == "FAIL"
+    assert report["gateway_identity_log"] == "FAIL"
+    assert report["gateway_jwt_trace"] == "FAIL"
+    assert report["loki_identity_not_indexed"] == "FAIL"
     assert report["overall"] == "FAIL"

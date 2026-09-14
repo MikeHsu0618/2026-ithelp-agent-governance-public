@@ -127,6 +127,23 @@ def test_health_and_unknown_routes_are_explicit() -> None:
     assert application.handle("/unknown", {}, {}) == (404, {"error": "route_not_found"})
 
 
+def test_cardinality_backend_only_returns_a_stable_safe_receipt() -> None:
+    application = LabApplication("cardinality", FakeTelemetry(), "http://unused.invalid")
+
+    status, payload = application.handle(
+        "/cardinality/run",
+        {},
+        {"experiment": "day23"},
+    )
+
+    assert status == 200
+    assert payload == {
+        "effect": "NO_OP_CARDINALITY_SAMPLE",
+        "side_effects": 0,
+        "status": "ok",
+    }
+
+
 def test_gateway_denial_never_builds_a_runtime_plan() -> None:
     with pytest.raises(ValueError, match="does not reach Runtime"):
         build_runtime_plan("gateway-policy-deny")

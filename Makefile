@@ -43,7 +43,9 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-registry lab-03-runtime-registry-up lab-03-runtime-registry-run \
 	lab-03-runtime-registry-down \
 	lab-03-runtime-down \
-	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down
+	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down \
+	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-run \
+	lab-04-cardinality-dashboard lab-04-cardinality-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -488,3 +490,59 @@ lab-04-down:
 	docker compose --project-directory "$(LAB04)" \
 		-f "$(LAB04)/docker-compose.yaml" down --volumes
 	uv run --directory "$(LAB04)" traceability-lab clean --lab-root "$(LAB04)"
+
+lab-04-cardinality-check:
+	uv run --directory "$(LAB04)" pytest -q
+	uv run --directory "$(LAB04)" ruff check .
+	uv run --directory "$(LAB04)" ruff format --check .
+	uv run --directory "$(LAB04)" traceability-lab cardinality-prepare \
+		--runtime-dir "$(LAB04)/.runtime/day23"
+	@for variant in bounded user conversation; do \
+		docker run --rm \
+			-v "$(LAB04)/configs/day-23/agentgateway-$$variant.yaml:/config.yaml:ro" \
+			-v "$(LAB04)/.runtime/day23:/runtime:ro" \
+			$(AGENTGATEWAY_IMAGE) --file /config.yaml --validate-only; \
+	done
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day23.yaml" config --quiet
+	docker run --rm \
+		-v "$(LAB04)/config.day23.alloy:/etc/alloy/config.alloy:ro" \
+		grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33 \
+		validate /etc/alloy/config.alloy
+
+lab-04-cardinality-up:
+	uv sync --directory "$(LAB04)" --all-groups
+	uv run --directory "$(LAB04)" traceability-lab cardinality-prepare \
+		--runtime-dir "$(LAB04)/.runtime/day23"
+	@for variant in bounded user conversation; do \
+		docker run --rm \
+			-v "$(LAB04)/configs/day-23/agentgateway-$$variant.yaml:/config.yaml:ro" \
+			-v "$(LAB04)/.runtime/day23:/runtime:ro" \
+			$(AGENTGATEWAY_IMAGE) --file /config.yaml --validate-only; \
+	done
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day23.yaml" up -d --build --force-recreate --wait
+	$(MAKE) lab-04-cardinality-dashboard
+
+lab-04-cardinality-dashboard:
+	curl --fail --silent --show-error \
+		-H 'content-type: application/json' \
+		--data-binary @"$(LAB04)/configs/day-23/grafana-dashboard.json" \
+		http://127.0.0.1:23000/api/dashboards/db
+
+lab-04-cardinality-run:
+	@mkdir -p "$(LAB04)/.runtime"
+	@set -euo pipefail; \
+		uv run --directory "$(LAB04)" traceability-lab cardinality-run \
+			--runtime-dir "$(LAB04)/.runtime/day23" \
+			--artifact-root "$(LAB04)/artifacts" \
+			| tee "$(LAB04)/.runtime/cardinality-run.json"; \
+		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+			< "$(LAB04)/.runtime/cardinality-run.json")"; \
+		uv run --directory "$(LAB04)" traceability-lab verify-cardinality \
+			--run-report "$$artifact_dir/cardinality-run.json" \
+			| tee "$(LAB04)/.runtime/cardinality-backend-report.json"
+
+lab-04-cardinality-down:
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day23.yaml" down --volumes

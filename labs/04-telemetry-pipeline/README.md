@@ -34,6 +34,59 @@ Day 21 會送出五個固定情境：
 
 Day 22 在相同 Pipeline 上加入 identity projection。Raw claims 先經過 deterministic fixture check，再轉成不含 email／token 的 `VerifiedPrincipalContext`，最後依 Metrics、Traces、Logs 與 Audit 各自建立 allowlist。這個 fixture 只驗證資料流與欄位位置，不取代 Day 8 的 JWT signature、JWKS、issuer、audience 與 expiry 驗證。
 
+Day 23 把缺少的產品實測補上。System under test 是 pinned agentgateway `1.5.0` 的 JWT AuthN、CEL telemetry projection 與原生 `agentgateway_requests_total`，不是 Python producer。Python 只建立本機臨時 RSA key、簽合成 Token、送相同流量並查詢 Prometheus、Tempo 與 Loki。
+
+## 驗證 agentgateway JWT telemetry 與 Cardinality
+
+Day 23 使用三個平行的 agentgateway 實驗組。它們不會互相代理，也不代表 production 要部署三層 Gateway；三組只是讓相同 90 筆 request 在隔離條件下比較不同 metric label 設定。
+
+| 實驗組 | 由 Gateway 加入的 metric labels | 實際出現的 series |
+|---|---|---:|
+| bounded | `team` | 3 |
+| per-user | `team`、`jwt.sub` | 30 |
+| per-conversation | `team`、`jwt.sub`、`x-conversation-id` | 90 |
+
+從 repo root 執行：
+
+```bash
+make lab-04-cardinality-check
+make lab-04-cardinality-up
+make lab-04-cardinality-run
+make lab-04-cardinality-down
+```
+
+`lab-04-cardinality-up` 會建立只存在於 `.runtime/day23/` 的臨時 private key，權限固定為 `0600`。只有 public JWKS 會掛進 Gateway；private key、JWT 與 Authorization header 不會進入 evidence。整套 Lab 不需要外部 API key，也不使用真實帳號。
+
+`lab-04-cardinality-run` 會先送一筆無 Token 與一筆錯誤 audience，兩者都必須由 Gateway 回 `401`。接著建立 30 個合成 principal、3 個 team 與每人 3 個 conversation，同一批 90 筆 request 分別送到三組 Gateway，共 270 次成功呼叫。Verifier 不只檢查 request client 的報告，還會查三個 backend：
+
+- Prometheus：三組 `agentgateway_requests_total` 是否真的為 3／30／90 條 series；
+- Tempo：以本輪 request 保存的 `trace_id` 直接取回 Gateway trace，並核對其中的 `jwt.sub`；
+- Loki：Gateway access log 是否保留 `identity_user_id` structured metadata，同時確認 index label 只有 `service_name`。
+
+本次保存的結果為：
+
+```json
+{
+  "authentication_guards": "PASS",
+  "observed_series": {
+    "bounded": 3,
+    "user": 30,
+    "conversation": 90
+  },
+  "growth_vs_bounded": {
+    "user": 10.0,
+    "conversation": 30.0
+  },
+  "gateway_identity_log": "PASS",
+  "gateway_jwt_trace": "PASS",
+  "loki_identity_not_indexed": "PASS",
+  "loki_stream_count": 1,
+  "overall": "PASS"
+}
+```
+
+這組數字是本次 traffic matrix 實際出現的 label set，不是把所有維度做笛卡兒積得到的理論上限。完整 query 與時間窗在 [`assets/screenshots/day-23/evidence/backend-report.json`](../../assets/screenshots/day-23/evidence/backend-report.json)。
+
 ## 一次跑完整套 Lab
 
 從 repo root 執行：
@@ -131,6 +184,11 @@ make lab-04-negative
 - `src/traceability_lab/suite.py`：五個情境的 client 與預期結果。
 - `src/traceability_lab/identity.py`：verified principal context 與四種 destination projection；
 - `src/traceability_lab/identity_run.py`：Day 22 的污染欄位實驗與安全 evidence 輸出。
+- `configs/day-23/agentgateway-*.yaml`：Day 23 三組 JWT AuthN、CEL access-log／trace／metric projection；
+- `config.day23.alloy`：三組 Gateway metrics scrape 與 OTLP logs／traces pipeline；
+- `docker-compose.day23.yaml`：三組平行 Gateway、no-op backend、Alloy 與 LGTM；
+- `src/traceability_lab/cardinality.py`：臨時 key、合成 Token 與固定 traffic matrix；
+- `configs/day-23/grafana-dashboard.json`：可匯入的 Day 23 實測 Dashboard。
 
 `memory_limiter` 緊接 receiver，identity transform 只刪除已知禁止欄位，然後才進 batch/exporter。這是刻意保留的 collector 防護；它不能取代 producer minimization、backend RBAC、retention 與資料盤點。公開 port 也只綁 `127.0.0.1`。
 

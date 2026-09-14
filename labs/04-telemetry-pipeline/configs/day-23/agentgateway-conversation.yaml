@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+config:
+  logging:
+    format: json
+  metrics:
+    fields:
+      add:
+        conversation_id: 'request.headers["x-conversation-id"]'
+        team: jwt.team
+        user_id: jwt.sub
+
+gateways:
+  lab:
+    port: 3000
+    protocol: HTTP
+
+frontendPolicies:
+  tracing:
+    host: alloy:4317
+    protocol: grpc
+    randomSampling: true
+  accessLog:
+    otlp:
+      host: alloy:4317
+      fields:
+        add:
+          correlation.conversation_id: 'request.headers["x-conversation-id"]'
+          experiment: '"conversation"'
+          identity.team: jwt.team
+          identity.user_id: jwt.sub
+
+routes:
+- name: cardinality-run
+  gateways: [lab]
+  matches:
+  - path:
+      exact: /cardinality/run
+  policies:
+    jwtAuth:
+      mode: strict
+      issuer: https://identity.invalid/day23
+      audiences: [agentgateway-cardinality-lab]
+      jwks:
+        file: /runtime/jwks.json
+    authorization:
+      rules:
+      - allow: 'jwt.token_use == "access" && jwt.scope == "agent.invoke"'
+  backends:
+  - host: backend:8080
