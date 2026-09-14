@@ -5,13 +5,14 @@ import json
 from pathlib import Path
 
 from traceability_lab.artifacts import cleanup_artifacts, package_public_evidence
-from traceability_lab.backend import verify_backend, verify_suite_backend
+from traceability_lab.backend import verify_backend, verify_identity_backend, verify_suite_backend
 from traceability_lab.contract import (
     ContractError,
     build_action_context,
     build_governance_event,
     validate_governance_event,
 )
+from traceability_lab.identity_run import run_identity_projection
 from traceability_lab.runner import run_action
 from traceability_lab.suite import run_suite
 
@@ -30,6 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
     suite_parser.add_argument("--gateway-url", default="http://127.0.0.1:18080")
     suite_parser.add_argument("--drop-mcp-context", action="store_true")
 
+    identity_parser = subparsers.add_parser("identity-projection")
+    identity_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    identity_parser.add_argument("--otlp-endpoint", default="http://127.0.0.1:14318")
+
     subparsers.add_parser("negative")
 
     verify_parser = subparsers.add_parser("verify-backend")
@@ -42,6 +47,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify_suite_parser.add_argument("--tempo-url", default="http://127.0.0.1:13200")
     verify_suite_parser.add_argument("--loki-url", default="http://127.0.0.1:13100")
     verify_suite_parser.add_argument("--prometheus-url", default="http://127.0.0.1:19090")
+
+    verify_identity_parser = subparsers.add_parser("verify-identity")
+    verify_identity_parser.add_argument("--projection-report", type=Path, required=True)
+    verify_identity_parser.add_argument("--tempo-url", default="http://127.0.0.1:13200")
+    verify_identity_parser.add_argument("--loki-url", default="http://127.0.0.1:13100")
+    verify_identity_parser.add_argument("--prometheus-url", default="http://127.0.0.1:19090")
 
     package_parser = subparsers.add_parser("package-evidence")
     package_parser.add_argument("--artifact-dir", type=Path, required=True)
@@ -112,6 +123,24 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         if report["overall"] != "PASS":
             raise SystemExit(2)
+        return
+    if args.command == "verify-identity":
+        report = verify_identity_backend(
+            args.projection_report,
+            tempo_url=args.tempo_url,
+            loki_url=args.loki_url,
+            prometheus_url=args.prometheus_url,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        if report["overall"] != "PASS":
+            raise SystemExit(2)
+        return
+    if args.command == "identity-projection":
+        summary = run_identity_projection(
+            artifact_root=args.artifact_root,
+            otlp_endpoint=args.otlp_endpoint,
+        )
+        print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return
     if args.command == "run-suite":
         summary = run_suite(

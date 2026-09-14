@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -22,6 +23,55 @@ def test_cli_run_prints_summary(
     cli.main()
 
     assert json.loads(capsys.readouterr().out)["action_id"] == "act-day20-cli"
+
+
+def test_cli_identity_projection_prints_safe_summary(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "run_identity_projection",
+        lambda **_: SimpleNamespace(
+            to_json_dict=lambda: {
+                "action_id": "act-day22-cli",
+                "principal_ref": "prn_safe",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "traceability-lab",
+            "identity-projection",
+            "--otlp-endpoint",
+            "http://127.0.0.1:14318",
+        ],
+    )
+
+    cli.main()
+
+    assert json.loads(capsys.readouterr().out)["principal_ref"] == "prn_safe"
+
+
+def test_cli_verify_identity_exits_when_backend_evidence_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report_path = tmp_path / "identity-projection.json"
+    report_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "verify_identity_backend",
+        lambda *_args, **_kwargs: {"overall": "FAIL"},
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["traceability-lab", "verify-identity", "--projection-report", str(report_path)],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
 
 
 def test_cli_negative_reports_schema_rejection(

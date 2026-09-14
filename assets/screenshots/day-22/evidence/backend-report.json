@@ -1,0 +1,9 @@
+{
+  "action_id": "act-day22-2127097bf665",
+  "forbidden_fields_absent": "PASS",
+  "loki_principal_not_indexed": "PASS",
+  "loki_safe_projection": "PASS",
+  "overall": "PASS",
+  "prometheus_bounded_labels": "PASS",
+  "tempo_safe_projection": "PASS"
+}

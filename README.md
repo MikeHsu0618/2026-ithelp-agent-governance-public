@@ -27,6 +27,7 @@
 - [閱讀 Day 19 文章](articles/day-19/article.md)
 - [閱讀 Day 20 文章](articles/day-20/article.md)
 - [閱讀 Day 21 文章](articles/day-21/article.md)
+- [閱讀 Day 22 文章](articles/day-22/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -45,6 +46,7 @@
 - [下載 Day 18 BYO Agent 平台能力驗收表](articles/day-18/platform-capability-matrix.md)
 - [下載 Day 19 Agent Registry 採用盤點表](articles/day-19/registry-adoption-checklist.md)
 - [下載 Day 20 Governed Action Field Set v0.1 放置指南](articles/day-20/governed-action-field-guide.md)
+- [下載 Day 22 Identity Field Placement Matrix](labs/04-telemetry-pipeline/identity-field-placement.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
@@ -58,6 +60,7 @@
 - [直接執行 Day 19 Agent Registry Lab](labs/03-gateway-runtime/README.md#day-19agent-registry-不是批准章)
 - [直接執行 Day 20 Agent Traceability Lab](labs/04-telemetry-pipeline/README.md)
 - [直接執行 Day 21 Agent Telemetry Pipeline Lab](labs/04-telemetry-pipeline/README.md)
+- [直接執行 Day 22 Identity Projection Lab](labs/04-telemetry-pipeline/README.md)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 - [查看 Gateway Runtime Lab source code](labs/03-gateway-runtime/src/gateway_runtime/)
@@ -70,7 +73,7 @@
 - [Day 1–5｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization、Delegation evidence 與治理四問盤點。
 - [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
 - [Day 14–19｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。後續接著實測 A2A、Google ADK BYO Agent 與 HITL，最後用 Agent Registry 驗證 catalog、reconciliation、undeploy 及 Artifact trust 邊界。
-- [Day 20–21｜Agent Traceability Pipeline](labs/04-telemetry-pipeline/README.md)：先用一筆 deterministic no-op action 拆開 Application Record、Operational Telemetry 與 Governance Event，再實際接通 Gateway、Runtime、MCP 與 LGTM 之間的 telemetry path。
+- [Day 20–22｜Agent Traceability Pipeline](labs/04-telemetry-pipeline/README.md)：先用一筆 deterministic no-op action 拆開 Application Record、Operational Telemetry 與 Governance Event，再接通 Gateway、Runtime、MCP 與 LGTM，最後實測身分資料在 Metrics、Traces、Logs 與 Audit 的不同投影。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
@@ -96,6 +99,7 @@ make lab-03-runtime-registry
 make lab-04-up
 make lab-04-check
 make lab-04-run
+make lab-04-identity
 make lab-04-negative
 make lab-04-down
 ```

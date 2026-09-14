@@ -32,6 +32,8 @@ Day 21 會送出五個固定情境：
 
 它們都是可重跑的合成事件，後續實驗會沿用同一批情境，繼續檢查 telemetry 欄位、查詢成本與事件還原能力。
 
+Day 22 在相同 Pipeline 上加入 identity projection。Raw claims 先經過 deterministic fixture check，再轉成不含 email／token 的 `VerifiedPrincipalContext`，最後依 Metrics、Traces、Logs 與 Audit 各自建立 allowlist。這個 fixture 只驗證資料流與欄位位置，不取代 Day 8 的 JWT signature、JWKS、issuer、audience 與 expiry 驗證。
+
 ## 一次跑完整套 Lab
 
 從 repo root 執行：
@@ -65,6 +67,36 @@ LGTM 與 Alloy 介面只綁定 loopback：
 
 這個 LGTM image 是本機開發與示範環境，不是 production topology。
 
+## 驗證 Identity projection
+
+啟動 Compose 後執行：
+
+```bash
+make lab-04-identity
+```
+
+這個 target 會刻意把 synthetic `user.email`、`auth.token`、`principal.ref` 與 `session.id` 放進送往 Alloy 的訊號，再直接查三個 backend：
+
+- Tempo 保留 `principal.ref`、`action_id`、assurance、team 與 role，但找不到 raw email／token；
+- Loki 可用 `principal_ref` structured metadata 過濾事件，不需要把它設成 stream label；
+- Prometheus 只保留 team、route、outcome，不接受 principal、user、session、conversation 或 action ID label；
+- 三個 backend 都不應出現 logging SDK 自動附帶的本機 `code.file.path`。
+
+成功輸出如下：
+
+```json
+{
+  "forbidden_fields_absent": "PASS",
+  "loki_principal_not_indexed": "PASS",
+  "loki_safe_projection": "PASS",
+  "overall": "PASS",
+  "prometheus_bounded_labels": "PASS",
+  "tempo_safe_projection": "PASS"
+}
+```
+
+完整位置判斷在 [`identity-field-placement.md`](identity-field-placement.md)。Lab 的 pseudonym 使用 HMAC-SHA256；程式裡的固定 key 只為了讓公開 fixture 可重現，production 必須改由 Secret 管理並規劃 rotation。
+
 ## 故意拿掉 Trace Context
 
 下面的命令只在 normal call 的 Runtime -> MCP request 拿掉 `traceparent`，其他資料與執行結果維持不變：
@@ -93,12 +125,14 @@ make lab-04-negative
 主要檔案：
 
 - `agentgateway.yaml`：三條正常 route、一條固定 deny policy，以及 OTLP trace/access log；
-- `config.alloy`：OTLP gRPC/HTTP receiver、memory limiter、batch、LGTM exporter 與 Gateway metrics scrape；
+- `config.alloy`：OTLP gRPC/HTTP receiver、memory limiter、identity transform、batch、LGTM exporter 與 Gateway metrics scrape；
 - `docker-compose.yaml`：單一 Gateway、Runtime、MCP、Alloy、LGTM；
 - `src/traceability_lab/service.py`：可重現的 Runtime/MCP fixture；
 - `src/traceability_lab/suite.py`：五個情境的 client 與預期結果。
+- `src/traceability_lab/identity.py`：verified principal context 與四種 destination projection；
+- `src/traceability_lab/identity_run.py`：Day 22 的污染欄位實驗與安全 evidence 輸出。
 
-`memory_limiter` 緊接 receiver，然後才進 batch/exporter。這是刻意保留的 collector 防護；公開 port 也只綁 `127.0.0.1`。
+`memory_limiter` 緊接 receiver，identity transform 只刪除已知禁止欄位，然後才進 batch/exporter。這是刻意保留的 collector 防護；它不能取代 producer minimization、backend RBAC、retention 與資料盤點。公開 port 也只綁 `127.0.0.1`。
 
 要把其中一筆 run 整理成可公開 evidence，可執行：
 

@@ -43,7 +43,7 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-registry lab-03-runtime-registry-up lab-03-runtime-registry-run \
 	lab-03-runtime-registry-down \
 	lab-03-runtime-down \
-	lab-04-up lab-04-check lab-04-run lab-04-broken-trace lab-04-negative lab-04-down
+	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -446,6 +446,19 @@ lab-04-run:
 		uv run --directory "$(LAB04)" traceability-lab verify-suite \
 			--scenario-report "$$artifact_dir/scenario-report.json" \
 			| tee "$(LAB04)/.runtime/backend-report.json"
+
+lab-04-identity:
+	@mkdir -p "$(LAB04)/.runtime"
+	@set -euo pipefail; \
+		uv run --directory "$(LAB04)" traceability-lab identity-projection \
+			--artifact-root "$(LAB04)/artifacts" \
+			--otlp-endpoint http://127.0.0.1:14318 \
+			| tee "$(LAB04)/.runtime/identity-run.json"; \
+		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+			< "$(LAB04)/.runtime/identity-run.json")"; \
+		uv run --directory "$(LAB04)" traceability-lab verify-identity \
+			--projection-report "$$artifact_dir/identity-projection.json" \
+			| tee "$(LAB04)/.runtime/identity-backend-report.json"
 
 lab-04-broken-trace:
 	@mkdir -p "$(LAB04)/.runtime"

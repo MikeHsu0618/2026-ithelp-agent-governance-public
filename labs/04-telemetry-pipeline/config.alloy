@@ -25,6 +25,48 @@ otelcol.processor.memory_limiter "lab" {
   spike_limit    = "64MiB"
 
   output {
+    logs   = [otelcol.processor.transform.identity_projection.input]
+    metrics = [otelcol.processor.transform.identity_projection.input]
+    traces = [otelcol.processor.transform.identity_projection.input]
+  }
+}
+
+otelcol.processor.transform "identity_projection" {
+  error_mode = "propagate"
+
+  trace_statements {
+    context = "span"
+    statements = [
+      `delete_key(attributes, "user.email")`,
+      `delete_key(attributes, "auth.token")`,
+    ]
+  }
+
+  log_statements {
+    context = "log"
+    statements = [
+      `delete_key(attributes, "user.email")`,
+      `delete_key(attributes, "auth.token")`,
+      `delete_key(attributes, "code.file.path")`,
+      `delete_key(attributes, "code.function.name")`,
+      `delete_key(attributes, "code.line.number")`,
+    ]
+  }
+
+  metric_statements {
+    context = "datapoint"
+    statements = [
+      `delete_key(attributes, "user.email")`,
+      `delete_key(attributes, "auth.token")`,
+      `delete_key(attributes, "conversation.id")`,
+      `delete_key(attributes, "ithelp.governance.action_id")`,
+      `delete_key(attributes, "principal.ref")`,
+      `delete_key(attributes, "session.id")`,
+      `delete_key(attributes, "user.id")`,
+    ]
+  }
+
+  output {
     logs   = [otelcol.processor.batch.lab.input]
     metrics = [otelcol.processor.batch.lab.input]
     traces = [otelcol.processor.batch.lab.input]

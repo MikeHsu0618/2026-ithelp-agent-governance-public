@@ -10,7 +10,7 @@ Day 20 的 Tempo waterfall 有兩個 span：`invoke_agent` 底下接著 `execute
 
 下圖要分開看兩條線。上半部是 request 實際走過的 data path，下半部則是各元件把資料送進 Alloy 的 telemetry path。
 
-![Day 21 Lab 的 data path 與 telemetry path。Client、agentgateway、Agent Runtime 和 MCP adapter 都是獨立 producer，訊號經 Alloy 送入 LGTM。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21/assets/diagrams/day-21/telemetry-pipeline.png)
+![Day 21 Lab 的 data path 與 telemetry path。Client、agentgateway、Agent Runtime 和 MCP adapter 都是獨立 producer，訊號經 Alloy 送入 LGTM。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22/assets/diagrams/day-21/telemetry-pipeline.png)
 
 四個 producer 看的是同一筆 action，手上的資料卻不相同：
 
@@ -83,7 +83,7 @@ make lab-04-check
 make lab-04-run
 ```
 
-完整設定、測試和清理方式都在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21/labs/04-telemetry-pipeline/README.md)。`make lab-04-run` 會真的送出五筆 request，再逐筆查詢 backend，而不是把預期結果直接寫進資料庫。
+完整設定、測試和清理方式都在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22/labs/04-telemetry-pipeline/README.md)。`make lab-04-run` 會真的送出五筆 request，再逐筆查詢 backend，而不是把預期結果直接寫進資料庫。
 
 | Scenario | 預期結果 | 原 Trace 應出現的 service |
 |---|---|---|
@@ -115,7 +115,7 @@ Verifier 逐筆比對 HTTP 結果、Tempo service 集合與 Loki event，最後�
 
 正常呼叫在 Tempo 裡共有 4 個 service、8 個 span。除了 Client、Runtime 和 MCP adapter 自己建立的 span，agentgateway 還替 `/agent/run` 與 `/mcp/execute` 各留下 server／upstream span。
 
-![Tempo 的正常 Trace 實拍。畫面由本次 Lab 產生，共有 4 個 service、8 個 span，能從 Lab Client 追到 MCP adapter。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21/assets/screenshots/day-21/tempo-cross-service-trace.png)
+![Tempo 的正常 Trace 實拍。畫面由本次 Lab 產生，共有 4 個 service、8 個 span，能從 Lab Client 追到 MCP adapter。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22/assets/screenshots/day-21/tempo-cross-service-trace.png)
 
 四個 service 能留在同一條因果鏈，靠的是每一跳都正確處理 Trace Context。Client 送出 request 前注入 `traceparent`，Gateway 接續後再傳給 Runtime。Runtime 呼叫 MCP route 時重新注入目前 context，MCP adapter 收到後取出 parent，再建立自己的 span。[OpenTelemetry 對 Context Propagation 的說明](https://opentelemetry.io/docs/concepts/context-propagation/)也把跨服務 propagation 分成傳送端的序列化與接收端的反序列化。少掉其中一邊，後端不會憑 request 時間接近就替我們接線。
 
@@ -151,7 +151,7 @@ HTTP response 仍然是 `200`，MCP receipt 也回 `CANARY_TRIGGERED`。如果�
 
 Tempo 畫面也從正常路徑的 4 services／8 spans，變成 3 services／5 spans。`mcp.call` 仍掛在 Runtime 底下，真正執行 Tool 的 `mcp.tool.execute` 已經落到另一個 Trace。
 
-![拿掉 Runtime 到 MCP 的 traceparent 後，原 Trace 只剩 3 個 service、5 個 span。Tool 回成功，但 mcp-adapter 已不在這條因果鏈裡。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21/assets/screenshots/day-21/tempo-broken-context.png)
+![拿掉 Runtime 到 MCP 的 traceparent 後，原 Trace 只剩 3 個 service、5 個 span。Tool 回成功，但 mcp-adapter 已不在這條因果鏈裡。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22/assets/screenshots/day-21/tempo-broken-context.png)
 
 MCP 的獨立 Trace 和上游 Trace 都不是空的，反而比整套 telemetry 掛掉更容易漏看。單查 MCP 會看到 Tool 正常執行，單查上游也會看到 Runtime 的 outbound span 已結束。事故發生後才用 timestamp、session 或模糊字串拼回兩筆紀錄，很快就會回到人工通靈。
 
@@ -159,7 +159,7 @@ MCP 的獨立 Trace 和上游 Trace 都不是空的，反而比整套 telemetry 
 
 同一筆 normal action 在 Loki 可以查到 Client、Runtime 與 MCP adapter 各自送出的結構化事件。下圖裡四行資料共用 `action_id`，內容依序包含 Client 最後看到的結果、Runtime completion、MCP receipt 與 Runtime accepted event。
 
-![Loki 以 action_id 查到四筆跨 producer event，包含 Client 結果、Runtime 狀態與 MCP no-op receipt。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21/assets/screenshots/day-21/loki-action-events.png)
+![Loki 以 action_id 查到四筆跨 producer event，包含 Client 結果、Runtime 狀態與 MCP no-op receipt。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22/assets/screenshots/day-21/loki-action-events.png)
 
 agentgateway access log 能看到 path、route、upstream 與 HTTP status，卻不會自動讀 request body 裡的 `action_id`。缺少 action ID 的 Gateway log，剛好說明每個 producer 只能寫下自己真正知道的資料。要讓 Gateway log 也帶 action ID，應該先定義可信 header 與防偽邊界，不能看到 body 裡有同名欄位就直接升格成治理證據。
 
@@ -169,7 +169,7 @@ Prometheus 的用途又不同。以下查詢把 Gateway request 按 route、stat
 sum by (route, status, reason) (agentgateway_requests_total)
 ```
 
-![Prometheus 查詢 agentgateway requests。畫面能分辨 agent-runtime 200、MCP 200、policy deny 403 與 missing A2A backend 503。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21/assets/screenshots/day-21/prometheus-agentgateway-metrics.png)
+![Prometheus 查詢 agentgateway requests。畫面能分辨 agent-runtime 200、MCP 200、policy deny 403 與 missing A2A backend 503。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22/assets/screenshots/day-21/prometheus-agentgateway-metrics.png)
 
 `gateway-policy-deny` 留下 `Authorization`／`403`，刻意不存在的 A2A backend 則留下 `NoHealthyBackend`／`503`。Metrics 很適合回答 route 的流量、錯誤率和趨勢，卻不該塞入每一筆 `action_id`。單筆因果關係交給 Trace，細節與離散事件交給 Log／Governance Event，聚合健康度留在 Metrics，這個分工會直接影響 Day 23 的 cardinality。
 

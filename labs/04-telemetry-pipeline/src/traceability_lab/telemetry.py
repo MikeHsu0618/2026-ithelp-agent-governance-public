@@ -6,9 +6,12 @@ from typing import Any
 
 from opentelemetry import propagate
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -41,21 +44,46 @@ class Telemetry:
         self.logger.propagate = False
         self.logger.setLevel(logging.INFO)
 
+        metric_reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics"),
+            export_interval_millis=60_000,
+        )
+        self.meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+        self.meter = self.meter_provider.get_meter("ithelp.day22", "0.3.0")
+        self.action_counter = self.meter.create_counter(
+            "ithelp_agent_actions",
+            description="Synthetic governed Agent actions emitted by the iT Help Lab.",
+            unit="{action}",
+        )
+
     def extract(self, headers: dict[str, str]) -> Any:
         return propagate.extract(headers)
 
     def inject(self, headers: dict[str, str]) -> None:
         propagate.inject(headers)
 
-    def event(self, payload: dict[str, Any]) -> None:
+    def event(
+        self,
+        payload: dict[str, Any],
+        *,
+        attributes: dict[str, str] | None = None,
+    ) -> None:
+        log_attributes = {"action_id": payload.get("action_id", "missing")}
+        if attributes:
+            log_attributes.update(attributes)
         self.logger.info(
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
-            extra={"action_id": payload.get("action_id", "missing")},
+            extra=log_attributes,
         )
+
+    def record_action(self, attributes: dict[str, str]) -> None:
+        self.action_counter.add(1, attributes=attributes)
 
     def shutdown(self) -> None:
         self.trace_provider.force_flush()
         self.logger_provider.force_flush()
+        self.meter_provider.force_flush()
         self.trace_provider.shutdown()
         self.logger_provider.shutdown()
+        self.meter_provider.shutdown()
         self.logger.removeHandler(self.handler)
