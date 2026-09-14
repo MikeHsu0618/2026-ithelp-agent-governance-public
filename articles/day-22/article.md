@@ -12,7 +12,7 @@ JWT 裡有值，只代表 IdP 把它放進 token。等 Gateway 完成 signature�
 
 通過驗證後也不該把整包 claims 繼續往下傳。Runtime 要的是可執行 policy 的 principal context，Telemetry producer 要的是符合查詢目的的 attributes，而 Audit 還需要 issuer、audience、policy 與 effect evidence。三個階段使用不同型別和 allowlist，資料才不會因為「後面可能用得到」一路擴散。
 
-![Raw claims 經驗證後轉為 principal context，再分別投影到 Metrics、Traces、Logs 與 Audit。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r1/assets/diagrams/day-22/identity-data-placements.png)
+![Raw claims 經驗證後轉為 principal context，再分別投影到 Metrics、Traces、Logs 與 Audit。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/diagrams/day-22/identity-data-placements.png)
 
 公開 Lab 使用 deterministic fixture，把 issuer 與 audience 檢查後的 subject 轉成 HMAC-SHA256 `principal.ref`。這個 reference 方便跨 Trace、Log 與 Audit 關聯，仍然是可重新連結的 pseudonym，不等於匿名化。Repo 裡的固定 key 也只為了讓讀者得到相同結果，不能直接搬進 production。
 
@@ -58,7 +58,7 @@ Day 23 會把上面這段補成 runtime evidence：臨時 RS256 JWT 真的通過
 | Logs | `principal.ref`、team、`action_id`，以 structured metadata 保存 | raw token、email、本機 code path | 事件搜尋與除錯 |
 | Audit | actor ref、roles、tenant、issuer、audience、assurance、`action_id` | raw token | 責任鏈、policy decision 與 effect evidence |
 
-完整版本放在 [Identity field placement matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r1/labs/04-telemetry-pipeline/identity-field-placement.md)，裡面另外列了 role、tenant、session 與 conversation ID。這份表不是法規範本，真正落地前仍要加入資料分類、存取角色、保留期限、刪除流程與所在區域。
+完整版本放在 [Identity field placement matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r1/labs/04-telemetry-pipeline/identity-field-placement.md)，裡面另外列了 role、tenant、session 與 conversation ID。這份表不是法規範本，真正落地前仍要加入資料分類、存取角色、保留期限、刪除流程與所在區域。
 
 ## Metrics 只保留有限集合的維度
 
@@ -96,7 +96,7 @@ metric_statements {
 sum by (team, route, outcome) (ithelp_agent_actions_total)
 ```
 
-![Prometheus 實拍。Day 22 的 Agent action metric 只以 team、route 與 outcome 聚合。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r1/assets/screenshots/day-22/prometheus-bounded-labels.png)
+![Prometheus 實拍。Day 22 的 Agent action metric 只以 team、route 與 outcome 聚合。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/screenshots/day-22/prometheus-bounded-labels.png)
 
 Day 23 會把這件事做成壓力實驗，逐步加入 `user_id` 與 `conversation_id`，直接量 Prometheus series 和 Loki stream 的增幅。今天先把欄位邊界定下來，明天才有一條可以被驗證的 cardinality budget。
 
@@ -104,7 +104,7 @@ Day 23 會把這件事做成壓力實驗，逐步加入 `user_id` 與 `conversat
 
 Trace 的工作是重建一筆 action 經過哪些服務、policy 與 Tool，所以 `principal.ref` 和 `action_id` 在這裡有價值。Tempo 實拍裡還能看到 assurance、team、role 與 tenant，事故調查時可以判斷這筆 action 採用哪種身分來源，不必先把 email 當作搜尋鍵。
 
-![Tempo 實拍。identity projection span 保留 action ID、principal reference、assurance、team 與 role，沒有 raw email 或 token。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r1/assets/screenshots/day-22/tempo-identity-projection.png)
+![Tempo 實拍。identity projection span 保留 action ID、principal reference、assurance、team 與 role，沒有 raw email 或 token。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/screenshots/day-22/tempo-identity-projection.png)
 
 [OpenTelemetry 的 user attribute registry](https://opentelemetry.io/docs/specs/semconv/registry/attributes/user/)雖然定義了 `user.id`、`user.email`、`user.name`、`user.roles` 與 `user.hash`，這些欄位目前仍標為 Development。Semantic Convention 告訴我們名稱如何對齊，不會替組織決定哪個直接識別資訊可以進 backend。本文使用自訂 `principal.ref`，就是要把「可關聯的治理主體」和「產品介面顯示的 email」分開。
 
@@ -119,7 +119,7 @@ Loki 的第一段查詢只用低基數 `service_name` 選 stream，再用 pipe �
   | principal_ref = "prn_66103c4906ed52ad53b3"
 ```
 
-![Loki 實拍。查詢先以 service_name 選 stream，再用 principal_ref structured metadata 過濾單筆事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r1/assets/screenshots/day-22/loki-identity-structured-metadata.png)
+![Loki 實拍。查詢先以 service_name 選 stream，再用 principal_ref structured metadata 過濾單筆事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/screenshots/day-22/loki-identity-structured-metadata.png)
 
 [Loki 的原生 OTLP ingestion](https://grafana.com/docs/loki/latest/send-data/otel/)會把未映射成 index label 的 attributes 存成 structured metadata，點號也會正規化成底線。因此 OTLP 的 `principal.ref` 在 LogQL 裡會變成 `principal_ref`。[Grafana 對 structured metadata 的定位](https://grafana.com/docs/loki/latest/get-started/labels/structured-metadata/)正是保存 user ID 等高基數 metadata，查詢時可以過濾，但不為每個值建立 index。
 
