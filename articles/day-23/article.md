@@ -14,7 +14,7 @@ Python 只負責四件事：建立本機臨時 RSA key、替合成 principal 簽
 
 下圖的 A、B、C 是三個平行實驗組，不是把三層 proxy 串在 production data path。每一組都收到完全相同的 90 筆 request，唯一刻意改變的是 metric label 設定。
 
-![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/diagrams/day-23/cardinality-experiment.png)
+![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-23/assets/diagrams/day-23/cardinality-experiment.png)
 
 流量矩陣固定為 30 位合成使用者、3 個 team，每人 3 段 conversation。每組 Gateway 都處理 90 筆，所以整次實驗共有 270 次成功請求，另有兩筆預期被拒絕的 auth guard。principal 使用 `user/sre-oncaller-000` 這類明確的 Lab 名稱，不對應任何真實帳號。
 
@@ -114,7 +114,7 @@ count(
 
 Grafana 畫面上的三個 bar gauge 直接查同一個 `agentgateway_requests_total`。下方 access logs 則來自三組 Gateway 實際送進 Alloy 的 OTLP log，並不是把 backend report JSON 做成靜態圖。
 
-![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r1/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
+![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-23/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
 
 Backend report 會把實際 traffic matrix 推導出的 expected value，與 Prometheus 回傳的 observed value 逐項比對：
 
@@ -227,7 +227,7 @@ make lab-04-cardinality-down
 
 第二次修正發生在 Tempo verifier。最初我用 TraceQL 綁死 `user/sre-oncaller-000`，重新建環境後可能因採樣而找不到。改成搜尋任意 `jwt.sub` 後，下一輪又發現 search 尚未索引本次 span，卻有機會命中舊資料。最後我讓 request 自帶唯一 `traceparent`，直接回查本輪已知 trace ID，才同時排除採樣對象、搜尋延遲與舊資料三個變因。若只保留第一次漂亮的 PASS，這兩個 flaky assumption 都會跟著讀者進 Repo。
 
-完整指令、三份 Gateway YAML、Grafana Dashboard 和 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r1/labs/04-telemetry-pipeline/README.md)。截圖只幫忙看出 3／30／90 的差距，PromQL、TraceQL、LogQL 與原始 JSON 都保留成可以複製的文字。
+完整指令、三份 Gateway YAML、Grafana Dashboard 和 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-23/labs/04-telemetry-pipeline/README.md)。截圖只幫忙看出 3／30／90 的差距，PromQL、TraceQL、LogQL 與原始 JSON 都保留成可以複製的文字。
 
 ## 從 Cardinality 接到 Fallback 成本
 
