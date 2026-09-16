@@ -1,0 +1,24 @@
+{
+  "providers": {
+    "anthropic": {
+      "models": {
+        "day24-backup": {
+          "rates": {
+            "input": "3.00",
+            "output": "15.00"
+          }
+        }
+      }
+    },
+    "openai": {
+      "models": {
+        "day24-primary": {
+          "rates": {
+            "input": "1.25",
+            "output": "10.00"
+          }
+        }
+      }
+    }
+  }
+}

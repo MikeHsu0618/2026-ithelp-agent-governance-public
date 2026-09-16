@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from opentelemetry.trace import Status, StatusCode
 
+from traceability_lab.cost_fallback import DeterministicLlmProvider
 from traceability_lab.scenarios import get_scenario
 from traceability_lab.telemetry import Telemetry
 
@@ -59,12 +60,19 @@ class LabApplication:
         self.role = role
         self.telemetry = telemetry
         self.gateway_url = gateway_url.rstrip("/")
+        self.llm_provider = (
+            DeterministicLlmProvider(role.removeprefix("llm-"))
+            if role in {"llm-primary", "llm-backup"}
+            else None
+        )
 
     def handle(
         self, path: str, headers: dict[str, str], body: dict[str, Any]
     ) -> tuple[int, dict[str, Any]]:
         if path == "/healthz":
             return HTTPStatus.OK, {"status": "ok", "role": self.role}
+        if self.llm_provider is not None:
+            return self.llm_provider.handle(path, headers, body)
         if self.role == "runtime" and path == "/agent/run":
             return self._handle_runtime(headers, body)
         if self.role == "mcp" and path == "/mcp/execute":
@@ -241,7 +249,11 @@ def make_handler(application: LabApplication) -> type[BaseHTTPRequestHandler]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--role", choices=("runtime", "mcp", "cardinality"), required=True)
+    parser.add_argument(
+        "--role",
+        choices=("runtime", "mcp", "cardinality", "llm-primary", "llm-backup"),
+        required=True,
+    )
     parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://alloy:4318")
@@ -249,6 +261,8 @@ def main() -> None:
         "runtime": "agent-runtime",
         "mcp": "mcp-adapter",
         "cardinality": "cardinality-backend",
+        "llm-primary": "day24-primary-provider",
+        "llm-backup": "day24-backup-provider",
     }
     service_name = service_names[args.role]
     telemetry = Telemetry(service_name, endpoint.rstrip("/"))

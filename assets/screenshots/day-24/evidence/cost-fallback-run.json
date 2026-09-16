@@ -1,0 +1,40 @@
+{
+  "cost_contract": {
+    "failed_attempt_usage": "UNKNOWN unless the provider returns usage evidence",
+    "final_invoice": "OUT_OF_SCOPE",
+    "gateway_cost": "MODEL_CATALOG_ESTIMATE"
+  },
+  "scenarios": [
+    {
+      "action_id": "act-day24-primary-success",
+      "gateway": "failover-only",
+      "http_status": 200,
+      "response_model": "day24-primary",
+      "response_tokens": 16,
+      "result": "PRIMARY_SERVED",
+      "scenario": "primary-success"
+    },
+    {
+      "action_id": "act-day24-failover-without-retry",
+      "gateway": "failover-only",
+      "http_status": 503,
+      "response_model": "UNKNOWN",
+      "response_tokens": "UNKNOWN",
+      "result": "REQUEST_FAILED_AFTER_EVICTION",
+      "scenario": "failover-without-retry"
+    },
+    {
+      "action_id": "act-day24-failover-with-retry",
+      "client_attempts": 2,
+      "first_attempt_http_status": 503,
+      "first_attempt_usage": "UNKNOWN",
+      "gateway": "client-retry",
+      "http_status": 200,
+      "response_model": "day24-backup",
+      "response_tokens": 10,
+      "result": "BACKUP_SERVED",
+      "retry_layer": "client",
+      "scenario": "failover-with-retry"
+    }
+  ]
+}

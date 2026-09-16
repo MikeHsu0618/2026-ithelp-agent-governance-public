@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+# agentgateway 1.5.0 does not accept retry under llm.policies. This second
+# instance isolates the client-retry experiment from the failover-only state.
+config:
+  adminAddr: 0.0.0.0:15000
+  database:
+    url: sqlite:///tmp/day24-client-retry.db?mode=rwc
+  logging:
+    format: json
+  metrics:
+    fields:
+      add:
+        experiment: '"client-retry"'
+        team: apiKey.team
+  modelCatalog:
+  - file: /etc/agentgateway/costs.json
+
+gateways:
+  default:
+    port: 3000
+
+frontendPolicies:
+  tracing:
+    host: alloy:4317
+    protocol: grpc
+    randomSampling: true
+  accessLog:
+    otlp:
+      host: alloy:4317
+      fields:
+        add:
+          attribution.team: apiKey.team
+          correlation.action_id: 'request.headers["x-action-id"]'
+          experiment: '"client-retry"'
+
+llm:
+  policies:
+    apiKey:
+      mode: strict
+      keys:
+      - key: sk-day24-platform
+        metadata:
+          name: platform-lab
+          team: platform
+          user: user/sre-oncaller
+  models:
+  - name: day24-primary
+    visibility: internal
+    provider: openAI
+    params:
+      apiKey: fixture-primary-key
+      baseUrl: http://primary-provider:8080/v1
+      model: day24-primary
+    health:
+      eviction:
+        consecutiveFailures: 1
+        duration: 60s
+  - name: day24-backup
+    visibility: internal
+    provider: anthropic
+    params:
+      apiKey: fixture-backup-key
+      baseUrl: http://backup-provider:8080
+      model: day24-backup
+    health:
+      eviction:
+        consecutiveFailures: 1
+        duration: 60s
+  virtualModels:
+  - name: day24-resilient-agent
+    routing:
+      failover:
+        targets:
+        - model: day24-primary
+          priority: 0
+        - model: day24-backup
+          priority: 1

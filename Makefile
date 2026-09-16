@@ -45,7 +45,8 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-down \
 	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down \
 	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-run \
-	lab-04-cardinality-dashboard lab-04-cardinality-down
+	lab-04-cardinality-dashboard lab-04-cardinality-down \
+	lab-04-cost-up lab-04-cost-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -546,3 +547,53 @@ lab-04-cardinality-run:
 lab-04-cardinality-down:
 	docker compose --project-directory "$(LAB04)" \
 		-f "$(LAB04)/docker-compose.day23.yaml" down --volumes
+
+lab-04-cost-check:
+	uv run --directory "$(LAB04)" pytest -q
+	uv run --directory "$(LAB04)" ruff check .
+	uv run --directory "$(LAB04)" ruff format --check .
+	printf '%s  %s\n' \
+		'1380d6720d4eb1814546264fe1ce22a38ea6a33dfa0ef2c7a4fa9283baab253f' \
+		'$(LAB04)/configs/day-24/official-dashboard/agentgateway-dashboard-v1.5.0.json' \
+		| shasum -a 256 -c -
+	@for variant in failover client-retry; do \
+		docker run --rm \
+			-v "$(LAB04)/configs/day-24/agentgateway-$$variant.yaml:/config.yaml:ro" \
+			-v "$(LAB04)/configs/day-24/costs.json:/etc/agentgateway/costs.json:ro" \
+			$(AGENTGATEWAY_IMAGE) --file /config.yaml --validate-only; \
+	done
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day24.yaml" config --quiet
+	docker run --rm \
+		-v "$(LAB04)/config.day24.alloy:/etc/alloy/config.alloy:ro" \
+		grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33 \
+		validate /etc/alloy/config.alloy
+
+lab-04-cost-up:
+	uv sync --directory "$(LAB04)" --all-groups
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day24.yaml" down --volumes --remove-orphans
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day24.yaml" up -d --build --force-recreate --wait
+	$(MAKE) lab-04-cost-dashboard
+
+lab-04-cost-dashboard:
+	curl --fail --silent --show-error \
+		-H 'content-type: application/json' \
+		--data-binary @"$(LAB04)/configs/day-24/grafana-dashboard.json" \
+		http://127.0.0.1:24000/api/dashboards/db
+
+lab-04-cost-run:
+	@mkdir -p "$(LAB04)/.runtime"
+	uv run --directory "$(LAB04)" traceability-lab cost-fallback-run \
+		--artifact-root "$(LAB04)/artifacts" \
+		--summary-output "$(LAB04)/.runtime/cost-fallback-run.json"
+	@artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+		< "$(LAB04)/.runtime/cost-fallback-run.json")"; \
+	uv run --directory "$(LAB04)" traceability-lab verify-cost-fallback \
+		--run-report "$$artifact_dir/cost-fallback-run.json" \
+		--output "$$artifact_dir/backend-report.json"
+
+lab-04-cost-down:
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day24.yaml" down --volumes

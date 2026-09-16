@@ -1,0 +1,241 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": []
+    },
+    "editable": true,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "panels": [
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 14,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "content": "## Extension, not a replacement dashboard\n\nUse agentgateway's official dashboard for requests, LLM/MCP traffic, latency, xDS and runtime health. This focused view adds the evidence the stock dashboard cannot infer: one action across two attempts, **UNKNOWN** failed-attempt usage, and the boundary between a model-catalog estimate and a provider invoice.",
+          "mode": "markdown"
+        },
+        "pluginVersion": "12.3.0",
+        "title": "What this extension adds",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 8,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 10,
+          "x": 14,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "editorMode": "code",
+            "expr": "sum(agentgateway_gen_ai_client_cost_usd_total{gen_ai_response_model!=\"unknown\"})",
+            "instant": true,
+            "legendFormat": "successful requests",
+            "range": false,
+            "refId": "A"
+          }
+        ],
+        "title": "Gateway estimated cost · successful requests",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "Only series with a response model are counted. 503 attempts are intentionally excluded from this estimate.",
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 8,
+            "min": 0,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "id": 3,
+        "options": {
+          "displayMode": "gradient",
+          "maxVizHeight": 300,
+          "minVizHeight": 16,
+          "minVizWidth": 8,
+          "namePlacement": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showUnfilled": true,
+          "sizing": "auto",
+          "valueMode": "color"
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "editorMode": "code",
+            "expr": "sum by (experiment, team, gen_ai_system, gen_ai_response_model) (agentgateway_gen_ai_client_cost_usd_total{gen_ai_response_model!=\"unknown\"})",
+            "instant": true,
+            "legendFormat": "{{experiment}} · {{team}} · {{gen_ai_system}} · {{gen_ai_response_model}}",
+            "range": false,
+            "refId": "A"
+          }
+        ],
+        "title": "Estimated cost by team and served provider/model",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "min": 0,
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 5
+        },
+        "id": 4,
+        "options": {
+          "displayMode": "gradient",
+          "maxVizHeight": 300,
+          "minVizHeight": 16,
+          "minVizWidth": 8,
+          "namePlacement": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showUnfilled": true,
+          "sizing": "auto",
+          "valueMode": "color"
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "editorMode": "code",
+            "expr": "sum by (experiment, gen_ai_system, gen_ai_response_model, gen_ai_token_type) (agentgateway_gen_ai_client_token_usage_sum)",
+            "instant": true,
+            "legendFormat": "{{experiment}} · {{gen_ai_system}} · {{gen_ai_response_model}} · {{gen_ai_token_type}}",
+            "range": false,
+            "refId": "A"
+          }
+        ],
+        "title": "Provider-reported token usage",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The same action ID appears twice: OpenAI-shaped primary returns 503; the client retry is served by the Anthropic-shaped backup.",
+        "gridPos": {
+          "h": 11,
+          "w": 24,
+          "x": 0,
+          "y": 13
+        },
+        "id": 5,
+        "options": {
+          "dedupStrategy": "none",
+          "enableInfiniteScrolling": false,
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": true,
+          "showTime": true,
+          "sortOrder": "Ascending",
+          "wrapLogMessage": true
+        },
+        "pluginVersion": "12.3.0",
+        "targets": [
+          {
+            "editorMode": "code",
+            "expr": "{service_name=\"agentgateway\"} | correlation_action_id = \"act-day24-failover-with-retry\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "One logical action, two provider attempts",
+        "type": "logs"
+      }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 41,
+    "tags": [
+      "agentgateway",
+      "cost",
+      "fallback",
+      "ithelp"
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Day 24 · Fallback & Cost Evidence Extension",
+    "uid": "day24-agentgateway-cost-fallback",
+    "version": 0
+  },
+  "folderId": 0,
+  "message": "Provision Day 24 live Lab dashboard",
+  "overwrite": true
+}

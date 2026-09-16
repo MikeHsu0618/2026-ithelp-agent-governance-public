@@ -8,6 +8,7 @@ from traceability_lab.artifacts import cleanup_artifacts, package_public_evidenc
 from traceability_lab.backend import (
     verify_backend,
     verify_cardinality_backend,
+    verify_cost_fallback_backend,
     verify_identity_backend,
     verify_suite_backend,
 )
@@ -18,6 +19,7 @@ from traceability_lab.contract import (
     build_governance_event,
     validate_governance_event,
 )
+from traceability_lab.cost_fallback import run_cost_fallback_traffic
 from traceability_lab.identity_run import run_identity_projection
 from traceability_lab.runner import run_action
 from traceability_lab.suite import run_suite
@@ -55,6 +57,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--conversation-gateway-url", default="http://127.0.0.1:28083"
     )
 
+    cost_fallback_parser = subparsers.add_parser("cost-fallback-run")
+    cost_fallback_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    cost_fallback_parser.add_argument("--summary-output", type=Path)
+    cost_fallback_parser.add_argument("--failover-gateway-url", default="http://127.0.0.1:28084")
+    cost_fallback_parser.add_argument("--retry-gateway-url", default="http://127.0.0.1:28085")
+
     subparsers.add_parser("negative")
 
     verify_parser = subparsers.add_parser("verify-backend")
@@ -79,6 +87,15 @@ def build_parser() -> argparse.ArgumentParser:
     verify_cardinality_parser.add_argument("--loki-url", default="http://127.0.0.1:23100")
     verify_cardinality_parser.add_argument("--prometheus-url", default="http://127.0.0.1:29090")
     verify_cardinality_parser.add_argument("--tempo-url", default="http://127.0.0.1:23200")
+
+    verify_cost_parser = subparsers.add_parser("verify-cost-fallback")
+    verify_cost_parser.add_argument("--run-report", type=Path, required=True)
+    verify_cost_parser.add_argument("--loki-url", default="http://127.0.0.1:24100")
+    verify_cost_parser.add_argument("--prometheus-url", default="http://127.0.0.1:29091")
+    verify_cost_parser.add_argument("--tempo-url", default="http://127.0.0.1:24200")
+    verify_cost_parser.add_argument("--primary-provider-url", default="http://127.0.0.1:28086")
+    verify_cost_parser.add_argument("--backup-provider-url", default="http://127.0.0.1:28087")
+    verify_cost_parser.add_argument("--output", type=Path)
 
     package_parser = subparsers.add_parser("package-evidence")
     package_parser.add_argument("--artifact-dir", type=Path, required=True)
@@ -136,6 +153,23 @@ def main() -> None:
         )
         print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return
+    if args.command == "cost-fallback-run":
+        summary = run_cost_fallback_traffic(
+            artifact_root=args.artifact_root,
+            failover_gateway_url=args.failover_gateway_url,
+            retry_gateway_url=args.retry_gateway_url,
+        )
+        if args.summary_output:
+            args.summary_output.parent.mkdir(parents=True, exist_ok=True)
+            args.summary_output.write_text(
+                json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+        print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        if any(item["result"] == "UNEXPECTED_MODEL" for item in summary.scenarios):
+            raise SystemExit(2)
+        return
     if args.command == "package-evidence":
         package_public_evidence(
             artifact_dir=args.artifact_dir,
@@ -186,6 +220,25 @@ def main() -> None:
             prometheus_url=args.prometheus_url,
             tempo_url=args.tempo_url,
         )
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        if report["overall"] != "PASS":
+            raise SystemExit(2)
+        return
+    if args.command == "verify-cost-fallback":
+        report = verify_cost_fallback_backend(
+            args.run_report,
+            loki_url=args.loki_url,
+            prometheus_url=args.prometheus_url,
+            tempo_url=args.tempo_url,
+            primary_provider_url=args.primary_provider_url,
+            backup_provider_url=args.backup_provider_url,
+        )
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         if report["overall"] != "PASS":
             raise SystemExit(2)

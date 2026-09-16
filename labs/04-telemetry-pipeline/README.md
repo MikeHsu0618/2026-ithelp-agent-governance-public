@@ -87,6 +87,48 @@ make lab-04-cardinality-down
 
 這組數字是本次 traffic matrix 實際出現的 label set，不是把所有維度做笛卡兒積得到的理論上限。完整 query 與時間窗在 [`assets/screenshots/day-23/evidence/backend-report.json`](../../assets/screenshots/day-23/evidence/backend-report.json)。
 
+## 驗證 LLM Fallback 與成本證據
+
+Day 24 先使用 agentgateway `1.5.0` 內建的 LLM Analytics。兩份 Gateway config 都啟用暫存 SQLite request-log database 與 model catalog，`client-retry` instance 的官方 UI 可從 <http://127.0.0.1:28095/ui/llm/analytics> 開啟。跑完 Fallback 情境後，畫面會顯示 OpenAI／Anthropic 各一筆 request、兩個 calls，以及只有成功 backup response 能證明的 10 tokens／`USD 0.000066`。
+
+Repo 另外收錄與 Lab image 相同 `v1.5.0` 的[官方 Grafana Dashboard](configs/day-24/official-dashboard/agentgateway-dashboard-v1.5.0.json)，原檔 SHA-256 也納入 `lab-04-cost-check`。Kubernetes 環境應優先使用 Helm chart 建立的 ServiceMonitor、PodMonitor 與 Dashboard ConfigMap；官方面板已包含 requests、LLM token／cost／latency、MCP calls、route latency、xDS 與 runtime health。
+
+這個 Compose Lab 是 standalone agentgateway，不具備官方 Dashboard 預期的 Kubernetes `namespace`、Gateway name、Pod 與 container metrics。`configs/day-24/grafana-dashboard.json` 因此只是一張 Fallback／Cost evidence extension，專門補官方面板不會替業務 action 推論的三件事：
+
+- 相同 `action_id` 的 primary `503` 與 backup `200` 是兩次 HTTP request；
+- 失敗 attempt 沒有 provider usage payload 時，usage／cost 必須保持 `UNKNOWN`；
+- `agentgateway_gen_ai_client_cost_usd_total` 是 model catalog estimate，不是 provider invoice。
+
+從 Repo root 執行：
+
+```bash
+make lab-04-cost-check
+make lab-04-cost-up
+make lab-04-cost-run
+make lab-04-cost-down
+```
+
+`lab-04-cost-run` 會實際送出三組流量：
+
+| 情境 | HTTP attempts | 實際 provider 順序 | 結果 |
+|---|---:|---|---|
+| primary success | 1 | primary | OpenAI-shaped `200`，input 11／output 5 |
+| failover without retry | 1 | primary | `503`，usage `UNKNOWN` |
+| failover with client retry | 2 | primary → backup | `503` → Anthropic-shaped `200`，input 7／output 3 |
+
+agentgateway `1.5.0` 的 virtual model failover 依賴 health eviction。觸發 eviction 的原 request 仍會失敗，後續 request 才改用下一個 target。本次使用的 simplified LLM config 不接受 `llm.policies.retry`，因此公開 Lab 由 client 對同一 `action_id` 發出第二次 request，不加第二層 proxy，也不把它說成 Gateway 內部 retry。
+
+Verifier 會查 Loki、Prometheus、Tempo 與兩個 provider `/events` receipt。成功時必須同時看到 1／1／2 attempts、primary → backup 的 provider 順序、四條 Gateway traces、原生 token／cost metrics，以及 `team=platform` 的 bounded attribution。按 Lab price catalog 計算，primary calibration estimate 為 `USD 0.00006375`，backup 成功 attempt 為 `USD 0.00006600`；Fallback action 的失敗 attempt 沒有 usage，所以完整 action total 仍是 `UNKNOWN`，不是 `USD 0.00006600`。
+
+Day 24 使用的本機入口如下，全部只綁 loopback：
+
+- Grafana：<http://127.0.0.1:24000>
+- agentgateway 內建 LLM Analytics：<http://127.0.0.1:28095/ui/llm/analytics>
+- Prometheus：<http://127.0.0.1:29091>
+- Alloy：<http://127.0.0.1:24345>
+- failover-only Gateway：<http://127.0.0.1:28084>
+- client-retry Gateway：<http://127.0.0.1:28085>
+
 ## 一次跑完整套 Lab
 
 從 repo root 執行：
@@ -189,6 +231,13 @@ make lab-04-negative
 - `docker-compose.day23.yaml`：三組平行 Gateway、no-op backend、Alloy 與 LGTM；
 - `src/traceability_lab/cardinality.py`：臨時 key、合成 Token 與固定 traffic matrix；
 - `configs/day-23/grafana-dashboard.json`：可匯入的 Day 23 實測 Dashboard。
+- `configs/day-24/official-dashboard/agentgateway-dashboard-v1.5.0.json`：未修改的官方維運 Dashboard；來源、commit 與 checksum 記在同目錄 README；
+- `configs/day-24/grafana-dashboard.json`：只補 Fallback action／attempt 與成本證據邊界的 focused extension；
+- `configs/day-24/agentgateway-*.yaml`：兩組隔離 eviction state 的 LLM virtual model 設定，以及供官方 Analytics 使用的暫存 SQLite request log；
+- `configs/day-24/costs.json`：可重現且明確標示為 Lab estimate 的 model catalog；
+- `docker-compose.day24.yaml`、`config.day24.alloy`：Day 24 standalone Gateway、provider fixtures 與 LGTM pipeline；
+- `src/traceability_lab/cost_fallback.py`：deterministic provider fixture 與 client traffic；
+- `tests/test_cost_fallback.py`：Fallback、usage 缺口、Dashboard 與官方資產 checksum regression tests。
 
 `memory_limiter` 緊接 receiver，identity transform 只刪除已知禁止欄位，然後才進 batch/exporter。這是刻意保留的 collector 防護；它不能取代 producer minimization、backend RBAC、retention 與資料盤點。公開 port 也只綁 `127.0.0.1`。
 

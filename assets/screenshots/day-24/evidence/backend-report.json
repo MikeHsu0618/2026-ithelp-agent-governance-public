@@ -1,0 +1,27 @@
+{
+  "cost_metric": "agentgateway_gen_ai_client_cost_usd_total",
+  "failed_attempt_cost": "UNKNOWN",
+  "failed_attempt_usage": "UNKNOWN",
+  "final_provider_invoice": "OUT_OF_SCOPE",
+  "gateway_estimated_cost_usd": "0.00012975",
+  "loki_selector": "{service_name=\"agentgateway\"}",
+  "observed_attempts": {
+    "failover-with-retry": 2,
+    "failover-without-retry": 1,
+    "primary-success": 1
+  },
+  "overall": "PASS",
+  "provider_events": {
+    "backup": 1,
+    "primary": 3
+  },
+  "team": "platform",
+  "tempo_trace_count": 4,
+  "tempo_trace_ids": [
+    "4a7c9f3d64a68c9cb9e00a9ecee6a880",
+    "57aaab22a0ed4f9ec51e312785122033",
+    "5d81de8846ece27ae0cac0d41b7dd0fa",
+    "637020c2662832e451331064ed7e7711"
+  ],
+  "token_metric": "agentgateway_gen_ai_client_token_usage_sum"
+}

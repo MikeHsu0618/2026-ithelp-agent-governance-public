@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -425,3 +426,211 @@ def verify_cardinality_backend(
         "tempo_matched_principal": matched_principal,
         "overall": "PASS" if overall else "FAIL",
     }
+
+
+def verify_cost_fallback_backend(
+    run_report: Path,
+    *,
+    loki_url: str = "http://127.0.0.1:24100",
+    prometheus_url: str = "http://127.0.0.1:29091",
+    tempo_url: str = "http://127.0.0.1:24200",
+    primary_provider_url: str = "http://127.0.0.1:28086",
+    backup_provider_url: str = "http://127.0.0.1:28087",
+    fetch_json: Callable[[str], dict[str, Any]] = fetch_json,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = 10,
+) -> dict[str, Any]:
+    """Verify Day 24 against Gateway telemetry and both deterministic providers."""
+
+    source = json.loads(run_report.read_text(encoding="utf-8"))
+    action_by_scenario = {
+        str(item["scenario"]): str(item["action_id"]) for item in source["scenarios"]
+    }
+    loki_base = validate_backend_url(loki_url)
+    prometheus_base = validate_backend_url(prometheus_url)
+    tempo_base = validate_backend_url(tempo_url)
+    primary_base = validate_backend_url(primary_provider_url)
+    backup_base = validate_backend_url(backup_provider_url)
+
+    selector = '{service_name="agentgateway"}'
+    loki_endpoint = f"{loki_base}/loki/api/v1/query_range?" + urlencode(
+        {"query": selector, "limit": 100}
+    )
+    metric_queries = {
+        "cost": "agentgateway_gen_ai_client_cost_usd_total",
+        "tokens": "agentgateway_gen_ai_client_token_usage_sum",
+        "catalog": "agentgateway_cost_catalog_lookups_total",
+    }
+    metric_endpoints = {
+        name: f"{prometheus_base}/api/v1/query?{urlencode({'query': query})}"
+        for name, query in metric_queries.items()
+    }
+
+    streams: list[dict[str, Any]] = []
+    metrics: dict[str, dict[str, Any]] = {}
+    provider_events: dict[str, list[dict[str, Any]]] = {}
+    traced_ids: list[str] = []
+    for attempt in range(attempts):
+        loki_payload = _fetch_available(fetch_json, loki_endpoint)
+        raw_streams = loki_payload.get("data", {}).get("result", [])
+        streams = raw_streams if isinstance(raw_streams, list) else []
+        metrics = {
+            name: _fetch_available(fetch_json, endpoint)
+            for name, endpoint in metric_endpoints.items()
+        }
+        provider_events = {
+            "primary": _events(_fetch_available(fetch_json, f"{primary_base}/events")),
+            "backup": _events(_fetch_available(fetch_json, f"{backup_base}/events")),
+        }
+        trace_ids = sorted(
+            {
+                str(item.get("stream", {}).get("trace_id"))
+                for item in streams
+                if item.get("stream", {}).get("trace_id")
+            }
+        )
+        traced_ids = [
+            trace_id
+            for trace_id in trace_ids
+            if _tempo_has_trace(_fetch_available(fetch_json, f"{tempo_base}/api/traces/{trace_id}"))
+        ]
+        if _cost_fallback_evidence_complete(
+            streams=streams,
+            metrics=metrics,
+            provider_events=provider_events,
+            action_by_scenario=action_by_scenario,
+            traced_ids=traced_ids,
+        ):
+            break
+        if attempt + 1 < attempts:
+            sleep(1)
+
+    action_streams = {
+        scenario: [
+            item.get("stream", {})
+            for item in streams
+            if item.get("stream", {}).get("correlation_action_id") == action_id
+        ]
+        for scenario, action_id in action_by_scenario.items()
+    }
+    observed_attempts = {scenario: len(items) for scenario, items in action_streams.items()}
+    successful_streams = [
+        item.get("stream", {})
+        for item in streams
+        if item.get("stream", {}).get("http_status") == "200"
+    ]
+    failed_streams = [
+        item.get("stream", {})
+        for item in streams
+        if item.get("stream", {}).get("http_status") != "200"
+    ]
+    estimated_cost = sum(
+        (Decimal(str(item["agw_ai_usage_cost_total"])) for item in successful_streams),
+        Decimal("0"),
+    )
+    failed_usage_absent = all(
+        "gen_ai_usage_input_tokens" not in item and "gen_ai_usage_output_tokens" not in item
+        for item in failed_streams
+    )
+    trace_ids = {
+        str(item.get("stream", {}).get("trace_id"))
+        for item in streams
+        if item.get("stream", {}).get("trace_id")
+    }
+    complete = _cost_fallback_evidence_complete(
+        streams=streams,
+        metrics=metrics,
+        provider_events=provider_events,
+        action_by_scenario=action_by_scenario,
+        traced_ids=traced_ids,
+    )
+    return {
+        "cost_metric": metric_queries["cost"],
+        "failed_attempt_cost": "UNKNOWN",
+        "failed_attempt_usage": "UNKNOWN" if failed_usage_absent else "PROVIDER_REPORTED",
+        "final_provider_invoice": "OUT_OF_SCOPE",
+        "gateway_estimated_cost_usd": format(estimated_cost, "f"),
+        "loki_selector": selector,
+        "observed_attempts": observed_attempts,
+        "provider_events": {name: len(items) for name, items in sorted(provider_events.items())},
+        "team": "platform",
+        "tempo_trace_count": len(traced_ids),
+        "tempo_trace_ids": traced_ids,
+        "token_metric": metric_queries["tokens"],
+        "overall": "PASS" if complete else "FAIL",
+    }
+
+
+def _events(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    events = payload.get("events", [])
+    return events if isinstance(events, list) else []
+
+
+def _tempo_has_trace(payload: dict[str, Any]) -> bool:
+    batches = payload.get("batches")
+    if isinstance(batches, list) and batches:
+        return True
+    trace = payload.get("trace", payload)
+    resource_spans = trace.get("resourceSpans", []) if isinstance(trace, dict) else []
+    return isinstance(resource_spans, list) and bool(resource_spans)
+
+
+def _cost_fallback_evidence_complete(
+    *,
+    streams: list[dict[str, Any]],
+    metrics: dict[str, dict[str, Any]],
+    provider_events: dict[str, list[dict[str, Any]]],
+    action_by_scenario: dict[str, str],
+    traced_ids: list[str],
+) -> bool:
+    raw_streams = [item.get("stream", {}) for item in streams]
+    observed_attempts = {
+        scenario: sum(item.get("correlation_action_id") == action_id for item in raw_streams)
+        for scenario, action_id in action_by_scenario.items()
+    }
+    expected_attempts = {
+        "primary-success": 1,
+        "failover-without-retry": 1,
+        "failover-with-retry": 2,
+    }
+    team_is_bounded = bool(raw_streams) and all(
+        item.get("attribution_team") == "platform" for item in raw_streams
+    )
+    provider_sequence = [
+        item.get("gen_ai_provider_name")
+        for item in raw_streams
+        if item.get("correlation_action_id") == action_by_scenario.get("failover-with-retry")
+    ]
+    provider_sequence_ok = sorted(provider_sequence) == ["anthropic", "openai"]
+    failure_usage_absent = all(
+        "gen_ai_usage_input_tokens" not in item and "gen_ai_usage_output_tokens" not in item
+        for item in raw_streams
+        if item.get("http_status") != "200"
+    )
+    metric_results = {
+        name: payload.get("data", {}).get("result", []) for name, payload in metrics.items()
+    }
+    metrics_present = all(
+        isinstance(result, list) and bool(result) for result in metric_results.values()
+    )
+    metrics_bounded = all(
+        item.get("metric", {}).get("team") == "platform"
+        for result in metric_results.values()
+        for item in result
+    )
+    primary_actions = {str(item.get("action_id")) for item in provider_events.get("primary", [])}
+    backup_actions = {str(item.get("action_id")) for item in provider_events.get("backup", [])}
+    provider_receipts_ok = set(action_by_scenario.values()).issubset(primary_actions) and {
+        action_by_scenario.get("failover-with-retry")
+    }.issubset(backup_actions)
+    expected_trace_ids = {str(item.get("trace_id")) for item in raw_streams if item.get("trace_id")}
+    return (
+        observed_attempts == expected_attempts
+        and team_is_bounded
+        and provider_sequence_ok
+        and failure_usage_absent
+        and metrics_present
+        and metrics_bounded
+        and provider_receipts_ok
+        and len(traced_ids) == len(expected_trace_ids)
+    )

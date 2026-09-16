@@ -1,0 +1,122 @@
+name: ithelp-agent-cost-fallback
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm@sha256:6e14b923e0130b8b294ca5bcc7c94d54e899d150817e6c3ed82d9b665afe5499
+    ports:
+      - 127.0.0.1:24000:3000
+      - 127.0.0.1:24100:3100
+      - 127.0.0.1:24200:3200
+      - 127.0.0.1:29091:9090
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -f /tmp/ready &&
+          curl -fsS http://127.0.0.1:3100/ready >/dev/null &&
+          curl -fsS http://127.0.0.1:3200/ready >/dev/null
+      interval: 3s
+      timeout: 2s
+      retries: 60
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - 127.0.0.1:24345:12345
+    volumes:
+      - ./config.day24.alloy:/etc/alloy/config.alloy:ro
+      - day24-alloy-data:/var/lib/alloy/data
+    depends_on:
+      lgtm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  primary-provider:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["--role", "llm-primary"]
+    ports:
+      - 127.0.0.1:28086:8080
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  backup-provider:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["--role", "llm-backup"]
+    ports:
+      - 127.0.0.1:28087:8080
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  agentgateway-failover:
+    image: cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+    command: ["--file", "/etc/agentgateway/config.yaml"]
+    ports:
+      - 127.0.0.1:28084:3000
+    volumes:
+      - ./configs/day-24/agentgateway-failover.yaml:/etc/agentgateway/config.yaml:ro
+      - ./configs/day-24/costs.json:/etc/agentgateway/costs.json:ro
+    depends_on:
+      primary-provider:
+        condition: service_healthy
+      backup-provider:
+        condition: service_healthy
+    restart: unless-stopped
+
+  agentgateway-client-retry:
+    image: cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+    command: ["--file", "/etc/agentgateway/config.yaml"]
+    ports:
+      - 127.0.0.1:28085:3000
+      - 127.0.0.1:28095:15000
+    volumes:
+      - ./configs/day-24/agentgateway-client-retry.yaml:/etc/agentgateway/config.yaml:ro
+      - ./configs/day-24/costs.json:/etc/agentgateway/costs.json:ro
+    depends_on:
+      primary-provider:
+        condition: service_healthy
+      backup-provider:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  day24-alloy-data:
