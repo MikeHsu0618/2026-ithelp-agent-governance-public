@@ -31,6 +31,7 @@
 - [閱讀 Day 23 文章](articles/day-23/article.md)
 - [閱讀 Day 24 文章](articles/day-24/article.md)
 - [閱讀 Day 25 文章](articles/day-25/article.md)
+- [閱讀 Day 26 文章](articles/day-26/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)
@@ -51,6 +52,7 @@
 - [下載 Day 20 Governed Action Field Set v0.1 放置指南](articles/day-20/governed-action-field-guide.md)
 - [下載 Day 22 Identity Field Placement Matrix](labs/04-telemetry-pipeline/identity-field-placement.md)
 - [下載 Day 25 MCP Tool 四層結果檢查表](articles/day-25/mcp-outcome-checklist.md)
+- [下載 Day 26 Incident Replay 欄位指南](articles/day-26/incident-replay-field-guide.md)
 - [直接執行 Day 1 Lab](labs/01-unsafe-agent/README.md)
 - [直接執行 Day 8 JWT Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
@@ -68,10 +70,12 @@
 - [直接執行 Day 23 agentgateway Cardinality Lab](labs/04-telemetry-pipeline/README.md)
 - [直接執行 Day 24 agentgateway Fallback／Cost Lab](labs/04-telemetry-pipeline/README.md)
 - [直接執行 Day 25 SRE Agent／Grafana MCP Lab](labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki)
+- [直接執行 Day 26 Agent Incident Replay Lab](labs/05-incident-replay/README.md)
 - [查看 Day 1 Lab source code](labs/01-unsafe-agent/src/unsafe_agent/)
 - [查看 Identity Boundary Lab source code](labs/02-identity-boundary/src/identity_boundary/)
 - [查看 Gateway Runtime Lab source code](labs/03-gateway-runtime/src/gateway_runtime/)
 - [查看 Agent Traceability Lab source code](labs/04-telemetry-pipeline/src/traceability_lab/)
+- [查看 Agent Incident Replay Lab source code](labs/05-incident-replay/src/incident_replay/)
 
 文章第一行就是標題，不含編輯 metadata；圖片與 Lab 連結也能離開 GitHub 單獨使用，因此可以直接貼進 iT 邦幫忙編輯器。
 
@@ -81,6 +85,7 @@
 - [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
 - [Day 14–19｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。後續接著實測 A2A、Google ADK BYO Agent 與 HITL，最後用 Agent Registry 驗證 catalog、reconciliation、undeploy 及 Artifact trust 邊界。
 - [Day 20–25｜Agent Traceability Pipeline](labs/04-telemetry-pipeline/README.md)：先用一筆 deterministic no-op action 拆開 Application Record、Operational Telemetry 與 Governance Event，再接通 Gateway、Runtime、MCP 與 LGTM。後續實測身分欄位分流、Cardinality、LLM Fallback 成本邊界，以及 Grafana MCP 的 HTTP／MCP／Tool／Query 四層結果。
+- [Day 26｜Agent Incident Replay](labs/05-incident-replay/README.md)：鎖定 Day 1／3 歷史 Artifact，逐欄保留 `VERIFIED`、`OBSERVED`、`UNKNOWN` 與 `NOT_APPLICABLE`；另跑現行 LGTM action 驗證 Tempo、Loki 與 Prometheus 的證據範圍。
 
 Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖片是閱讀輔助，完整指令和可搜尋的結果仍以 repo 內容為準。
 
@@ -112,6 +117,7 @@ make lab-04-cardinality-check
 make lab-04-cost-check
 make lab-04-mcp-check
 make lab-04-down
+make lab-05-check
 ```
 
 `make lab-02-cognito-config-check` 另外需要 Terraform 與 Docker。它只驗證 Terraform provider schema 及 agentgateway 設定，不會建立 AWS 資源，也不會啟動 MCP target。需要 live model 或 container 的其他步驟，請依各 Lab README 準備環境；`.env.example` 只列變數名稱，不包含任何 credential。

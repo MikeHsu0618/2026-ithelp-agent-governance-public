@@ -4,7 +4,7 @@ Day 1 的 SRE Agent 有一個 `query_logs` Tool。名字看起來很像回事，
 
 Day 20 到 Day 24，我們一直把 LGTM 放在 Agent 外面。Agent、Gateway 與 MCP Server 送出 telemetry，SRE 再到 Grafana 看 Dashboard、查 Loki、追 Tempo。今天把方向轉過來：同一套 Grafana 與 Loki 不只用來「看 Agent」，還要能提供受控的查詢能力，讓 Agent 自己取得事故證據。
 
-這次 [公開 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki) 會讓 Google ADK Agent 實際呼叫 `query_loki_logs`，流量經過 agentgateway、官方 mcp-grafana、Grafana datasource proxy，最後到真正的 Loki。模型決策使用 deterministic callback，把 LLM 的隨機性先移開。ADK runtime、MCP handshake、Tool Call 與後端查詢仍由真實元件執行。
+這次 [公開 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki) 會讓 Google ADK Agent 實際呼叫 `query_loki_logs`，流量經過 agentgateway、官方 mcp-grafana、Grafana datasource proxy，最後到真正的 Loki。模型決策使用 deterministic callback，把 LLM 的隨機性先移開。ADK runtime、MCP handshake、Tool Call 與後端查詢仍由真實元件執行。
 
 ## Grafana MCP 補的是 Agent 入口，不是另一套可觀測性平台
 
@@ -12,7 +12,7 @@ Day 20 到 Day 24，我們一直把 LGTM 放在 Agent 外面。Agent、Gateway �
 
 這個位置很容易被說成「替 Agent 加一個 Grafana Tool」，但架構上的價值不在多一個 Tool 名稱。Grafana MCP 沒有取代 Loki，也沒有取代原本的 LGTM。它把既有觀測資料整理成 Agent 能理解的 Tool contract，agentgateway 則放在前面處理 MCP routing、backend credential、policy 與 traffic telemetry，避免每個 Agent 都直接持有 Grafana endpoint 和 credential。
 
-![SRE 問題先交給 Google ADK Agent，再經 agentgateway、mcp-grafana 與 Grafana datasource proxy 查詢 Loki。Tool result 帶著 service_name、action_id 與 trace_id 回到 Agent，下方分開標示三段連線的授權責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25/assets/diagrams/day-25/sre-agent-grafana-mcp-path.png)
+![SRE 問題先交給 Google ADK Agent，再經 agentgateway、mcp-grafana 與 Grafana datasource proxy 查詢 Loki。Tool result 帶著 service_name、action_id 與 trace_id 回到 Agent，下方分開標示三段連線的授權責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26/assets/diagrams/day-25/sre-agent-grafana-mcp-path.png)
 
 圖裡刻意把連線拆成三段，因為它們回答的問題不同。Agent 到 Gateway 要處理 caller、tenant 與 scope，Gateway 到 MCP Server 要決定哪個 backend 能被呼叫，mcp-grafana 到 Grafana 則受 Grafana credential、RBAC、datasource 與資料範圍約束。只把三段都畫成一條「已認證」箭頭，最後很容易把 service account 誤當成人類使用者的 delegation evidence。
 
@@ -130,7 +130,7 @@ mcp-grafana `1.4.2` 也提供 `--loki-enforced-matchers`，可以把固定 match
 
 這個 incident 值得保留，但它只是 Grafana MCP 實戰裡的一個除錯分支，不是整篇文章的目的。它提醒我們，同一筆 Tool Call 至少有四種結果不能混在一起：Client HTTP、MCP contract、Tool result，以及 Agent 最後拿到的 query outcome。
 
-![同樣收到 Client HTTP 200，Grafana API 回 HTML 會形成 Tool error，合法空查詢是 NO MATCH，只有查到帶 action_id 與 trace_id 的 Loki log 才是 USABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25/assets/diagrams/day-25/grafana-mcp-four-layer.png)
+![同樣收到 Client HTTP 200，Grafana API 回 HTML 會形成 Tool error，合法空查詢是 NO MATCH，只有查到帶 action_id 與 trace_id 的 Loki log 才是 USABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26/assets/diagrams/day-25/grafana-mcp-four-layer.png)
 
 Lab 另外保留一組安全 HTML fixture，讓真正的 mcp-grafana 呼叫 Grafana datasource proxy 時收到 `200 text/html`。三種 client-facing request 都回 HTTP `200`，結果卻完全不同：
 
@@ -141,7 +141,7 @@ valid-empty-query        PASS         PASS     PASS     NO_MATCH
 usable-loki-result       PASS         PASS     PASS     USABLE
 ```
 
-第一列的 MCP response 本身成立，但 `result.isError=true`。第二列 Tool 沒壞，只是指定時間範圍沒有符合資料。第三列才把 Agent 後續調查需要的 correlation fields 一起帶回來。HTTP success rate 適合看 transport health，不適合直接命名成「Agent 任務成功率」。讀者若要把這套判讀帶回自己的系統，可以直接使用 [MCP Tool 四層結果檢查表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25/articles/day-25/mcp-outcome-checklist.md)。
+第一列的 MCP response 本身成立，但 `result.isError=true`。第二列 Tool 沒壞，只是指定時間範圍沒有符合資料。第三列才把 Agent 後續調查需要的 correlation fields 一起帶回來。HTTP success rate 適合看 transport health，不適合直接命名成「Agent 任務成功率」。讀者若要把這套判讀帶回自己的系統，可以直接使用 [MCP Tool 四層結果檢查表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/articles/day-25/mcp-outcome-checklist.md)。
 
 ## Gateway 看得到 Tool Call，Agent 才能判斷資料是否可用
 
@@ -169,9 +169,9 @@ make lab-04-mcp-run
 make lab-04-mcp-down
 ```
 
-目前這份 evidence 使用 Google ADK `2.7.0`、agentgateway `1.5.0`、mcp-grafana `1.4.2`、Alloy `1.18.1` 與固定 digest 的 LGTM image。完整設定、測試結果與 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki)，官方 agentgateway MCP Playground 的實跑畫面也一併保留：
+目前這份 evidence 使用 Google ADK `2.7.0`、agentgateway `1.5.0`、mcp-grafana `1.4.2`、Alloy `1.18.1` 與固定 digest 的 LGTM image。完整設定、測試結果與 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki)，官方 agentgateway MCP Playground 的實跑畫面也一併保留：
 
-![agentgateway 官方 MCP Playground 實跑 query_loki_logs，Tool output 含一筆 Loki log、service_name label，以及 action_id、trace_id structured metadata。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25/assets/screenshots/day-25/agentgateway-grafana-mcp-playground.png)
+![agentgateway 官方 MCP Playground 實跑 query_loki_logs，Tool output 含一筆 Loki log、service_name label，以及 action_id、trace_id structured metadata。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26/assets/screenshots/day-25/agentgateway-grafana-mcp-playground.png)
 
 ## 查得到 Trace ID，還不等於有一份完整 Audit Trail
 

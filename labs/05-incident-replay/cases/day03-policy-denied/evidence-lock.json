@@ -1,0 +1,8 @@
+{
+  "case_id": "day03-live-policy-denied",
+  "files": {
+    "canary.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "events.jsonl": "60292f819f9ee982060ba361d7f441106f15f4449deea68eda5e55cff45a495b",
+    "manifest.json": "0b15afe0400715862fdfff58e2b416aca82526c3ee6038a410e6b71d63da5fa0"
+  }
+}

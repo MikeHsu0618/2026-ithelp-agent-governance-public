@@ -1,0 +1,8 @@
+{
+  "case_id": "day01-live-canary",
+  "files": {
+    "canary.jsonl": "c7217f375c83c205915d914177e52e1446e66be6c1c6f12e068fcb8497f1343a",
+    "events.jsonl": "b8b9d1b83a332f68063c5667b65d98980e1982156f108c9a60cd465e1acf009c",
+    "manifest.json": "d1f3a0aa826c6ef73b73980a68b8802643abd65688b13a3e5e2992d0762bc740"
+  }
+}

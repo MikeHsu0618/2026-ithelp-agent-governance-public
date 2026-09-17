@@ -5,6 +5,18 @@ LAB01 := $(CURDIR)/labs/01-unsafe-agent
 LAB02 := $(CURDIR)/labs/02-identity-boundary
 LAB03 := $(CURDIR)/labs/03-gateway-runtime
 LAB04 := $(CURDIR)/labs/04-telemetry-pipeline
+LAB05 := $(CURDIR)/labs/05-incident-replay
+LAB04_GRAFANA_PORT ?= 13000
+LAB04_LOKI_PORT ?= 13100
+LAB04_TEMPO_PORT ?= 13200
+LAB04_PROMETHEUS_PORT ?= 19090
+LAB04_ALLOY_PORT ?= 12345
+LAB04_OTLP_GRPC_PORT ?= 14317
+LAB04_OTLP_HTTP_PORT ?= 14318
+LAB04_GATEWAY_PORT ?= 18080
+LAB04_COMPOSE_PROJECT ?= ithelp-agent-traceability
+export LAB04_GRAFANA_PORT LAB04_LOKI_PORT LAB04_TEMPO_PORT LAB04_PROMETHEUS_PORT
+export LAB04_ALLOY_PORT LAB04_OTLP_GRPC_PORT LAB04_OTLP_HTTP_PORT LAB04_GATEWAY_PORT
 AGENTGATEWAY_IMAGE := cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
 DAY16_CONFIG := $(LAB03)/configs/day-16
 DAY16_MCP_FIXTURE := $(LAB03)/fixtures/day-16-mcp
@@ -47,7 +59,8 @@ KUBECTL_BIN ?= kubectl
 	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-run \
 	lab-04-cardinality-dashboard lab-04-cardinality-down \
 	lab-04-cost-up lab-04-cost-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down \
-	lab-04-mcp-check lab-04-mcp-up lab-04-mcp-run lab-04-mcp-down
+	lab-04-mcp-check lab-04-mcp-up lab-04-mcp-run lab-04-mcp-down \
+	lab-05-check lab-05-up lab-05-run lab-05-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -421,6 +434,7 @@ lab-03-runtime-down:
 lab-04-up:
 	uv sync --directory "$(LAB04)" --all-groups
 	docker compose --project-directory "$(LAB04)" \
+		-p "$(LAB04_COMPOSE_PROJECT)" \
 		-f "$(LAB04)/docker-compose.yaml" up -d --build --force-recreate --wait
 
 lab-04-check:
@@ -442,13 +456,16 @@ lab-04-run:
 	@set -euo pipefail; \
 		uv run --directory "$(LAB04)" traceability-lab run-suite \
 			--artifact-root "$(LAB04)/artifacts" \
-			--otlp-endpoint http://127.0.0.1:14318 \
-			--gateway-url http://127.0.0.1:18080 \
+			--otlp-endpoint http://127.0.0.1:$(LAB04_OTLP_HTTP_PORT) \
+			--gateway-url http://127.0.0.1:$(LAB04_GATEWAY_PORT) \
 			| tee "$(LAB04)/.runtime/latest-run.json"; \
 		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
 			< "$(LAB04)/.runtime/latest-run.json")"; \
 		uv run --directory "$(LAB04)" traceability-lab verify-suite \
 			--scenario-report "$$artifact_dir/scenario-report.json" \
+			--tempo-url http://127.0.0.1:$(LAB04_TEMPO_PORT) \
+			--loki-url http://127.0.0.1:$(LAB04_LOKI_PORT) \
+			--prometheus-url http://127.0.0.1:$(LAB04_PROMETHEUS_PORT) \
 			| tee "$(LAB04)/.runtime/backend-report.json"
 
 lab-04-identity:
@@ -490,6 +507,7 @@ lab-04-negative:
 
 lab-04-down:
 	docker compose --project-directory "$(LAB04)" \
+		-p "$(LAB04_COMPOSE_PROJECT)" \
 		-f "$(LAB04)/docker-compose.yaml" down --volumes
 	uv run --directory "$(LAB04)" traceability-lab clean --lab-root "$(LAB04)"
 
@@ -635,3 +653,56 @@ lab-04-mcp-run:
 lab-04-mcp-down:
 	docker compose --project-directory "$(LAB04)" \
 		-f "$(LAB04)/docker-compose.day25.yaml" down --volumes
+
+lab-05-check:
+	uv sync --directory "$(LAB05)" --all-groups
+	uv run --directory "$(LAB05)" pytest -q
+	uv run --directory "$(LAB05)" ruff check .
+	uv run --directory "$(LAB05)" ruff format --check .
+	uv run --directory "$(LAB05)" incident-replay historical \
+		--case-dir "$(LAB05)/cases/day01-canary" \
+		--target-tool delete_demo_database \
+		--output "$(LAB05)/.runtime/check-day01.json"
+	uv run --directory "$(LAB05)" incident-replay historical \
+		--case-dir "$(LAB05)/cases/day03-policy-denied" \
+		--target-tool delete_demo_database \
+		--output "$(LAB05)/.runtime/check-day03.json"
+
+lab-05-up:
+	uv sync --directory "$(LAB05)" --all-groups
+	$(MAKE) LAB04_COMPOSE_PROJECT=ithelp-agent-incident-replay \
+		LAB04_GRAFANA_PORT=26000 LAB04_LOKI_PORT=26100 LAB04_TEMPO_PORT=26200 \
+		LAB04_PROMETHEUS_PORT=26990 LAB04_ALLOY_PORT=26345 LAB04_OTLP_GRPC_PORT=26317 \
+		LAB04_OTLP_HTTP_PORT=26318 LAB04_GATEWAY_PORT=26808 lab-04-up
+
+lab-05-run:
+	@mkdir -p "$(LAB05)/.runtime"
+	uv run --directory "$(LAB05)" incident-replay historical \
+		--case-dir "$(LAB05)/cases/day01-canary" \
+		--target-tool delete_demo_database \
+		--output "$(LAB05)/.runtime/day01-replay.json"
+	uv run --directory "$(LAB05)" incident-replay historical \
+		--case-dir "$(LAB05)/cases/day03-policy-denied" \
+		--target-tool delete_demo_database \
+		--output "$(LAB05)/.runtime/day03-policy-control.json"
+	@set -euo pipefail; \
+		uv run --directory "$(LAB04)" traceability-lab run-suite \
+			--artifact-root "$(LAB05)/.runtime/modern-artifacts" \
+			--otlp-endpoint http://127.0.0.1:26318 \
+			--gateway-url http://127.0.0.1:26808 \
+			| tee "$(LAB05)/.runtime/latest-modern-run.json"; \
+		artifact_dir="$$(python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact_dir"])' \
+			< "$(LAB05)/.runtime/latest-modern-run.json")"; \
+		uv run --directory "$(LAB05)" incident-replay modern \
+			--scenario-report "$$artifact_dir/scenario-report.json" \
+			--scenario normal-call \
+			--tempo-url http://127.0.0.1:26200 \
+			--loki-url http://127.0.0.1:26100 \
+			--prometheus-url http://127.0.0.1:26990 \
+			--attempts 30 \
+			--output "$(LAB05)/.runtime/modern-reference.json"
+
+lab-05-down:
+	docker compose --project-directory "$(LAB04)" \
+		-p "ithelp-agent-incident-replay" \
+		-f "$(LAB04)/docker-compose.yaml" down --volumes

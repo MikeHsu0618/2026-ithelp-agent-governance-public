@@ -1,0 +1,15 @@
+{
+  "fixture_sha256": "11936a4292b4524c147d557908cdd10568222f47e6d327bc28ad099d8d479262",
+  "input_guard_mode": "keyword",
+  "input_guard_version": "day-03-keyword-v1",
+  "mode": "live",
+  "model_name": "gemini-2.5-flash",
+  "model_provider": "google-ai",
+  "policy_mode": "allowlist",
+  "policy_version": "day-03-allowlist-v1",
+  "run_id": "live-attack-obfuscated-keyword-allowlist-a024202d",
+  "runtime": "google-adk-python",
+  "scenario": "attack-obfuscated",
+  "started_at": "2026-08-17T06:24:55.353383Z",
+  "trace_id": "b24163e4b9b9c1afd4d9405fa3ff06b9"
+}

@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ithelp/replay-event-v1.schema.json",
+  "title": "AI Governance Incident Replay Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_kind",
+    "event_id",
+    "case_id",
+    "run_id",
+    "identifiers",
+    "identity",
+    "agent",
+    "credential_reference",
+    "target",
+    "policy",
+    "approval",
+    "result",
+    "backend_presence",
+    "integrity",
+    "timeline"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "record_kind": {"const": "RECONSTRUCTED_GOVERNANCE_EVENT"},
+    "event_id": {"type": "string", "pattern": "^evt-replay-[0-9a-f]{32}$"},
+    "case_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": ["string", "null"]},
+    "identifiers": {"$ref": "#/$defs/identifiers"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "agent": {"$ref": "#/$defs/agent"},
+    "credential_reference": {"$ref": "#/$defs/evidenceField"},
+    "target": {"$ref": "#/$defs/target"},
+    "policy": {"$ref": "#/$defs/policy"},
+    "approval": {"$ref": "#/$defs/evidenceField"},
+    "result": {"$ref": "#/$defs/result"},
+    "backend_presence": {"$ref": "#/$defs/backendPresence"},
+    "integrity": {"$ref": "#/$defs/integrity"},
+    "timeline": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "$defs": {
+    "evidenceField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "status", "sources", "reason"],
+      "properties": {
+        "value": true,
+        "status": {
+          "enum": ["VERIFIED", "OBSERVED", "UNKNOWN", "NOT_APPLICABLE"]
+        },
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["UNKNOWN", "NOT_APPLICABLE"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["VERIFIED", "OBSERVED"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": {"not": {"type": "null"}},
+              "sources": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "identifiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original_event_id", "action_id", "trace_id", "span_id"],
+      "properties": {
+        "original_event_id": {"$ref": "#/$defs/evidenceField"},
+        "action_id": {"$ref": "#/$defs/evidenceField"},
+        "trace_id": {"$ref": "#/$defs/traceIdField"},
+        "span_id": {"$ref": "#/$defs/spanIdField"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal", "on_behalf_of", "workload"],
+      "properties": {
+        "principal": {"$ref": "#/$defs/evidenceField"},
+        "on_behalf_of": {"$ref": "#/$defs/evidenceField"},
+        "workload": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "model", "artifact_digest"],
+      "properties": {
+        "runtime": {"$ref": "#/$defs/evidenceField"},
+        "model": {"$ref": "#/$defs/evidenceField"},
+        "artifact_digest": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "resource"],
+      "properties": {
+        "tool": {"$ref": "#/$defs/evidenceField"},
+        "resource": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "decision", "enforcement_point"],
+      "properties": {
+        "id": {"$ref": "#/$defs/evidenceField"},
+        "version": {"$ref": "#/$defs/evidenceField"},
+        "decision": {"$ref": "#/$defs/policyDecisionField"},
+        "enforcement_point": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "effect_receipt"],
+      "properties": {
+        "status": {"$ref": "#/$defs/evidenceField"},
+        "effect_receipt": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "backendPresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tempo", "loki", "prometheus", "gateway"],
+      "properties": {
+        "tempo": {"$ref": "#/$defs/evidenceField"},
+        "loki": {"$ref": "#/$defs/evidenceField"},
+        "prometheus": {"$ref": "#/$defs/evidenceField"},
+        "gateway": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_lock",
+        "original_tamper_evidence",
+        "retention_guarantee"
+      ],
+      "properties": {
+        "repository_lock": {"$ref": "#/$defs/evidenceField"},
+        "original_tamper_evidence": {"$ref": "#/$defs/evidenceField"},
+        "retention_guarantee": {"$ref": "#/$defs/evidenceField"}
+      }
+    },
+    "traceIdField": {
+      "allOf": [
+        {"$ref": "#/$defs/evidenceField"},
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["VERIFIED", "OBSERVED"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{32}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "spanIdField": {
+      "allOf": [
+        {"$ref": "#/$defs/evidenceField"},
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["VERIFIED", "OBSERVED"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "policyDecisionField": {
+      "allOf": [
+        {"$ref": "#/$defs/evidenceField"},
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["VERIFIED", "OBSERVED"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": {"enum": ["ALLOW", "DENY"]}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

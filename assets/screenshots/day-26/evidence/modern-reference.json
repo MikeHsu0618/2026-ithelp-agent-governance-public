@@ -1,0 +1,35 @@
+{
+  "action_id": "act-normal-call-735491db",
+  "loki": {
+    "line_count": 4,
+    "matched_action": true,
+    "query": "{service_name=~\"agentgateway|agent-runtime|mcp-adapter|ithelp-lab-client\"} |= \"act-normal-call-735491db\"",
+    "status": "OBSERVED"
+  },
+  "prometheus": {
+    "query": "count({__name__=~\"agentgateway_.*\"})",
+    "reason": "A nonzero series count confirms Gateway metrics exist, but not this action.",
+    "sample_count": 246.0,
+    "scope": "AGGREGATE_ONLY",
+    "status": "OBSERVED"
+  },
+  "tempo": {
+    "complete": true,
+    "expected_services": [
+      "agent-runtime",
+      "agentgateway",
+      "ithelp-lab-client",
+      "mcp-adapter"
+    ],
+    "missing_services": [],
+    "services": [
+      "agent-runtime",
+      "agentgateway",
+      "ithelp-lab-client",
+      "mcp-adapter"
+    ],
+    "source": "http://127.0.0.1:26200/api/v2/traces/c37ea02406df247fd306d35803c75c56",
+    "status": "OBSERVED"
+  },
+  "trace_id": "c37ea02406df247fd306d35803c75c56"
+}
