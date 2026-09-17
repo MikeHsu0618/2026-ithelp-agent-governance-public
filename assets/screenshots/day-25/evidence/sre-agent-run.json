@@ -1,0 +1,27 @@
+{
+  "observed_at": "2026-09-17T13:19:24Z",
+  "runtime": "google-adk-python/2.7.0",
+  "model_decision": "deterministic before_model_callback",
+  "tool_name": "query_loki_logs",
+  "configured_path": [
+    "Google ADK",
+    "agentgateway",
+    "mcp-grafana",
+    "Grafana",
+    "Loki"
+  ],
+  "tool_arguments": {
+    "datasourceUid": "loki",
+    "format": "full",
+    "limit": 5,
+    "logql": "{service_name=\"day25-sre-agent\"} |= \"act-day25-adk-query\""
+  },
+  "tool_summary": {
+    "result": "USABLE",
+    "lines_returned": 1,
+    "results_truncated": false,
+    "service_name": "day25-sre-agent",
+    "action_id": "act-day25-adk-query",
+    "trace_id": "25252525252525252525252525252525"
+  }
+}

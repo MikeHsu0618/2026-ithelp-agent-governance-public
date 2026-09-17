@@ -8,6 +8,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from opentelemetry.trace import Status, StatusCode
@@ -208,6 +209,59 @@ class LabApplication:
             return HTTPStatus.OK, receipt
 
 
+class HtmlGrafanaFixture:
+    """A narrow Grafana API fixture that returns HTML from the Loki query path."""
+
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def handle(self, path: str, headers: dict[str, str]) -> tuple[int, str, bytes]:
+        request_path = urlsplit(path).path
+        if request_path == "/healthz":
+            return HTTPStatus.OK, "application/json", b'{"status":"ok"}'
+        if request_path == "/events":
+            return (
+                HTTPStatus.OK,
+                "application/json",
+                json.dumps({"events": self.events}, sort_keys=True).encode(),
+            )
+        if request_path == "/api/datasources/uid/loki":
+            payload = {
+                "access": "proxy",
+                "basicAuth": False,
+                "database": "",
+                "id": 1,
+                "isDefault": True,
+                "jsonData": {},
+                "name": "Loki",
+                "orgId": 1,
+                "readOnly": True,
+                "type": "loki",
+                "typeName": "Loki",
+                "uid": "loki",
+                "url": "http://loki.invalid:3100",
+                "user": "",
+            }
+            return HTTPStatus.OK, "application/json", json.dumps(payload).encode()
+        if request_path.startswith("/api/datasources/proxy/uid/loki/") or request_path.startswith(
+            "/api/datasources/uid/loki/resources/"
+        ):
+            content_type = "text/html; charset=utf-8"
+            self.events.append(
+                {
+                    "path": request_path,
+                    "request_encoding_flags": headers.get(
+                        "x-loki-response-encoding-flags", "MISSING"
+                    ),
+                    "response_content_type": content_type,
+                    "response_status": HTTPStatus.OK,
+                }
+            )
+            body = b"<!doctype html><html><title>Grafana sign in</title></html>"
+            return HTTPStatus.OK, content_type, body
+        return HTTPStatus.NOT_FOUND, "application/json", b'{"error":"route_not_found"}'
+
+
 def _required_text(body: dict[str, Any], key: str) -> str:
     value = body.get(key)
     if not isinstance(value, str) or not value:
@@ -247,15 +301,45 @@ def make_handler(application: LabApplication) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+def make_html_grafana_handler(application: HtmlGrafanaFixture) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            headers = {key.casefold(): value for key, value in self.headers.items()}
+            status, content_type, body = application.handle(self.path, headers)
+            self.send_response(status)
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    return Handler
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--role",
-        choices=("runtime", "mcp", "cardinality", "llm-primary", "llm-backup"),
+        choices=(
+            "runtime",
+            "mcp",
+            "cardinality",
+            "llm-primary",
+            "llm-backup",
+            "grafana-html",
+        ),
         required=True,
     )
     parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
+    if args.role == "grafana-html":
+        server = ThreadingHTTPServer(
+            ("0.0.0.0", args.port), make_html_grafana_handler(HtmlGrafanaFixture())
+        )
+        server.serve_forever()
+        return
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://alloy:4318")
     service_names = {
         "runtime": "agent-runtime",

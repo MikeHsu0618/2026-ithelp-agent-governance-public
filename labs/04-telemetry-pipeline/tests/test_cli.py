@@ -121,6 +121,87 @@ def test_cli_cardinality_run_prints_a_secret_free_summary(
     assert json.loads(capsys.readouterr().out)["successful_requests"] == 18
 
 
+def test_cli_sre_agent_run_prints_the_configured_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    summary = SimpleNamespace(
+        to_json_dict=lambda: {
+            "runtime": "google-adk-python/2.7.0",
+            "configured_path": ["Google ADK", "agentgateway", "mcp-grafana", "Grafana", "Loki"],
+            "tool_summary": {"result": "USABLE"},
+        }
+    )
+    monkeypatch.setattr(cli, "run_sre_agent_investigation", lambda **_kwargs: summary)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "traceability-lab",
+            "sre-agent-run",
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ],
+    )
+
+    cli.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["tool_summary"]["result"] == "USABLE"
+    assert output["configured_path"][0] == "Google ADK"
+
+
+def test_cli_mcp_outcome_rejects_expected_classification_with_failed_http(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scenarios = (
+        {
+            "scenario": "upstream-200-html",
+            "assessment": {
+                "client_http": "PASS",
+                "mcp_contract": "PASS",
+                "tool_result": "ERROR",
+                "domain_outcome": "UNKNOWN",
+                "classification": "TOOL_EXECUTION_ERROR",
+            },
+        },
+        {
+            "scenario": "valid-empty-query",
+            "assessment": {
+                "client_http": "PASS",
+                "mcp_contract": "PASS",
+                "tool_result": "PASS",
+                "domain_outcome": "NO_MATCH",
+                "classification": "VALID_BUT_EMPTY",
+            },
+        },
+        {
+            "scenario": "usable-loki-result",
+            "assessment": {
+                "client_http": "FAIL",
+                "mcp_contract": "PASS",
+                "tool_result": "PASS",
+                "domain_outcome": "USABLE",
+                "classification": "USABLE_RESULT",
+            },
+        },
+    )
+    summary = SimpleNamespace(to_json_dict=lambda: {"scenarios": scenarios}, scenarios=scenarios)
+    monkeypatch.setattr(cli, "run_mcp_outcome_traffic", lambda **_kwargs: summary)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "traceability-lab",
+            "mcp-outcome-run",
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+
+
 def test_cli_verify_cardinality_exits_when_backend_counts_do_not_match(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

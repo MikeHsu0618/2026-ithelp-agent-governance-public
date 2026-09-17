@@ -21,7 +21,9 @@ from traceability_lab.contract import (
 )
 from traceability_lab.cost_fallback import run_cost_fallback_traffic
 from traceability_lab.identity_run import run_identity_projection
+from traceability_lab.mcp_outcome import run_mcp_outcome_traffic
 from traceability_lab.runner import run_action
+from traceability_lab.sre_agent import run_sre_agent_investigation
 from traceability_lab.suite import run_suite
 
 
@@ -62,6 +64,22 @@ def build_parser() -> argparse.ArgumentParser:
     cost_fallback_parser.add_argument("--summary-output", type=Path)
     cost_fallback_parser.add_argument("--failover-gateway-url", default="http://127.0.0.1:28084")
     cost_fallback_parser.add_argument("--retry-gateway-url", default="http://127.0.0.1:28085")
+
+    mcp_outcome_parser = subparsers.add_parser("mcp-outcome-run")
+    mcp_outcome_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    mcp_outcome_parser.add_argument("--summary-output", type=Path)
+    mcp_outcome_parser.add_argument("--good-gateway-url", default="http://127.0.0.1:25080/mcp")
+    mcp_outcome_parser.add_argument("--html-gateway-url", default="http://127.0.0.1:25081/mcp")
+    mcp_outcome_parser.add_argument("--loki-url", default="http://127.0.0.1:25100")
+    mcp_outcome_parser.add_argument("--grafana-url", default="http://127.0.0.1:25000")
+    mcp_outcome_parser.add_argument("--html-fixture-url", default="http://127.0.0.1:25090")
+
+    sre_agent_parser = subparsers.add_parser("sre-agent-run")
+    sre_agent_parser.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    sre_agent_parser.add_argument("--summary-output", type=Path)
+    sre_agent_parser.add_argument("--gateway-url", default="http://127.0.0.1:25080/mcp")
+    sre_agent_parser.add_argument("--loki-url", default="http://127.0.0.1:25100")
+    sre_agent_parser.add_argument("--grafana-url", default="http://127.0.0.1:25000")
 
     subparsers.add_parser("negative")
 
@@ -169,6 +187,66 @@ def main() -> None:
         print(json.dumps(summary.to_json_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         if any(item["result"] == "UNEXPECTED_MODEL" for item in summary.scenarios):
             raise SystemExit(2)
+        return
+    if args.command == "mcp-outcome-run":
+        summary = run_mcp_outcome_traffic(
+            artifact_root=args.artifact_root,
+            good_gateway_url=args.good_gateway_url,
+            html_gateway_url=args.html_gateway_url,
+            loki_url=args.loki_url,
+            grafana_url=args.grafana_url,
+            html_fixture_url=args.html_fixture_url,
+        )
+        payload = summary.to_json_dict()
+        if args.summary_output:
+            args.summary_output.parent.mkdir(parents=True, exist_ok=True)
+            args.summary_output.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        expected = {
+            "upstream-200-html": {
+                "client_http": "PASS",
+                "mcp_contract": "PASS",
+                "tool_result": "ERROR",
+                "domain_outcome": "UNKNOWN",
+                "classification": "TOOL_EXECUTION_ERROR",
+            },
+            "valid-empty-query": {
+                "client_http": "PASS",
+                "mcp_contract": "PASS",
+                "tool_result": "PASS",
+                "domain_outcome": "NO_MATCH",
+                "classification": "VALID_BUT_EMPTY",
+            },
+            "usable-loki-result": {
+                "client_http": "PASS",
+                "mcp_contract": "PASS",
+                "tool_result": "PASS",
+                "domain_outcome": "USABLE",
+                "classification": "USABLE_RESULT",
+            },
+        }
+        observed = {item["scenario"]: item["assessment"] for item in summary.scenarios}
+        if observed != expected:
+            raise SystemExit(2)
+        return
+    if args.command == "sre-agent-run":
+        summary = run_sre_agent_investigation(
+            artifact_root=args.artifact_root,
+            gateway_url=args.gateway_url,
+            loki_url=args.loki_url,
+            grafana_url=args.grafana_url,
+        )
+        payload = summary.to_json_dict()
+        if args.summary_output:
+            args.summary_output.parent.mkdir(parents=True, exist_ok=True)
+            args.summary_output.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return
     if args.command == "package-evidence":
         package_public_evidence(

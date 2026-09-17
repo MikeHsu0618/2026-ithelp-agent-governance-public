@@ -46,7 +46,8 @@ KUBECTL_BIN ?= kubectl
 	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down \
 	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-run \
 	lab-04-cardinality-dashboard lab-04-cardinality-down \
-	lab-04-cost-up lab-04-cost-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down
+	lab-04-cost-up lab-04-cost-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down \
+	lab-04-mcp-check lab-04-mcp-up lab-04-mcp-run lab-04-mcp-down
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -597,3 +598,40 @@ lab-04-cost-run:
 lab-04-cost-down:
 	docker compose --project-directory "$(LAB04)" \
 		-f "$(LAB04)/docker-compose.day24.yaml" down --volumes
+
+lab-04-mcp-check:
+	uv run --directory "$(LAB04)" pytest -q
+	uv run --directory "$(LAB04)" ruff check .
+	uv run --directory "$(LAB04)" ruff format --check .
+	@for variant in grafana html; do \
+		docker run --rm \
+			-v "$(LAB04)/configs/day-25/agentgateway-$$variant.yaml:/config.yaml:ro" \
+			$(AGENTGATEWAY_IMAGE) --file /config.yaml --validate-only; \
+	done
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day25.yaml" config --quiet
+	docker run --rm \
+		-v "$(LAB04)/config.day25.alloy:/etc/alloy/config.alloy:ro" \
+		grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33 \
+		validate /etc/alloy/config.alloy
+
+lab-04-mcp-up:
+	uv sync --directory "$(LAB04)" --all-groups
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day25.yaml" down --volumes --remove-orphans
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day25.yaml" up -d --build --force-recreate --wait
+
+lab-04-mcp-run:
+	@mkdir -p "$(LAB04)/.runtime"
+	uv run --directory "$(LAB04)" traceability-lab mcp-outcome-run \
+		--artifact-root "$(LAB04)/artifacts" \
+		--summary-output "$(LAB04)/.runtime/mcp-outcome-run.json"
+	GOOGLE_API_USE_CLIENT_CERTIFICATE=false \
+	uv run --directory "$(LAB04)" traceability-lab sre-agent-run \
+		--artifact-root "$(LAB04)/artifacts" \
+		--summary-output "$(LAB04)/.runtime/sre-agent-run.json"
+
+lab-04-mcp-down:
+	docker compose --project-directory "$(LAB04)" \
+		-f "$(LAB04)/docker-compose.day25.yaml" down --volumes

@@ -1,0 +1,75 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+otelcol.receiver.otlp "day25" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    logs    = [otelcol.processor.memory_limiter.day25.input]
+    metrics = [otelcol.processor.memory_limiter.day25.input]
+    traces  = [otelcol.processor.memory_limiter.day25.input]
+  }
+}
+
+otelcol.processor.memory_limiter "day25" {
+  check_interval = "1s"
+  limit          = "256MiB"
+  spike_limit    = "64MiB"
+
+  output {
+    logs    = [otelcol.processor.batch.day25.input]
+    metrics = [otelcol.processor.batch.day25.input]
+    traces  = [otelcol.processor.batch.day25.input]
+  }
+}
+
+otelcol.processor.batch "day25" {
+  timeout         = "1s"
+  send_batch_size = 128
+
+  output {
+    logs    = [otelcol.exporter.otlphttp.lgtm.input]
+    metrics = [otelcol.exporter.otlphttp.lgtm.input]
+    traces  = [otelcol.exporter.otlphttp.lgtm.input]
+  }
+}
+
+otelcol.exporter.otlphttp "lgtm" {
+  client {
+    endpoint = "http://lgtm:4318"
+  }
+}
+
+prometheus.scrape "agentgateway_good" {
+  targets = [{
+    "__address__" = "agentgateway-grafana:15020",
+    "job"         = "agentgateway-grafana",
+  }]
+  scrape_interval = "2s"
+  scrape_timeout  = "1s"
+  forward_to      = [prometheus.remote_write.lgtm.receiver]
+}
+
+prometheus.scrape "agentgateway_html" {
+  targets = [{
+    "__address__" = "agentgateway-html:15020",
+    "job"         = "agentgateway-html",
+  }]
+  scrape_interval = "2s"
+  scrape_timeout  = "1s"
+  forward_to      = [prometheus.remote_write.lgtm.receiver]
+}
+
+prometheus.remote_write "lgtm" {
+  endpoint {
+    url = "http://lgtm:9090/api/v1/write"
+  }
+}

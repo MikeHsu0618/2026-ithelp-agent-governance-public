@@ -1,0 +1,59 @@
+{
+  "observed_at": "2026-09-17T13:19:22Z",
+  "system_under_test": {
+    "agentgateway": "1.5.0 (pinned image digest)",
+    "mcp_grafana": "1.4.2 (pinned image digest)",
+    "path": "MCP client -> agentgateway -> mcp-grafana -> Grafana datasource proxy -> Loki"
+  },
+  "query_window": {
+    "start": "2026-09-17T13:14:22Z",
+    "end": "2026-09-17T13:20:22Z"
+  },
+  "scenarios": [
+    {
+      "name": "upstream-200-html",
+      "client_http": "PASS",
+      "mcp_contract": "PASS",
+      "tool_result": "ERROR",
+      "query_outcome": "UNKNOWN",
+      "classification": "TOOL_EXECUTION_ERROR",
+      "upstream_grafana_api": {
+        "http_status": 200,
+        "content_type": "text/html; charset=utf-8"
+      },
+      "error_excerpt": "invalid character '<' looking for beginning of value"
+    },
+    {
+      "name": "valid-empty-query",
+      "client_http": "PASS",
+      "mcp_contract": "PASS",
+      "tool_result": "PASS",
+      "query_outcome": "NO_MATCH",
+      "classification": "VALID_BUT_EMPTY",
+      "lines_returned": 0
+    },
+    {
+      "name": "usable-loki-result",
+      "client_http": "PASS",
+      "mcp_contract": "PASS",
+      "tool_result": "PASS",
+      "query_outcome": "USABLE",
+      "classification": "USABLE_RESULT",
+      "lines_returned": 1,
+      "labels": {
+        "service_name": "day25-mcp-outcome"
+      },
+      "structured_metadata": {
+        "action_id": "act-day25-loki-query",
+        "trace_id": "25252525252525252525252525252525"
+      }
+    }
+  ],
+  "tests": {
+    "passed": 106,
+    "branch_coverage_percent": 82.71,
+    "agentgateway_config_validation": "PASS",
+    "alloy_config_validation": "PASS",
+    "compose_validation": "PASS"
+  }
+}

@@ -129,6 +129,70 @@ Day 24 使用的本機入口如下，全部只綁 loopback：
 - failover-only Gateway：<http://127.0.0.1:28084>
 - client-retry Gateway：<http://127.0.0.1:28085>
 
+## 讓 Google ADK SRE Agent 透過 Grafana MCP 查 Loki
+
+Day 25 把 Day 1 的 local `query_logs` fixture 換成真正的 Google ADK MCP Toolset。SRE Agent 先連 agentgateway，再由 Gateway 將 MCP request 轉給官方 `mcp-grafana 1.4.2`；mcp-grafana 經 Grafana datasource proxy 查詢 Loki。模型決策使用 deterministic callback，避免 LLM quota 與隨機性干擾整合測試；ADK Runtime、MCP Tool Call 與後端產品鏈都是真實執行。
+
+```text
+Google ADK -> agentgateway -> mcp-grafana -> Grafana datasource proxy -> Loki
+```
+
+從 Repo root 執行：
+
+```bash
+make lab-04-mcp-check
+make lab-04-mcp-up
+make lab-04-mcp-run
+make lab-04-mcp-down
+```
+
+`lab-04-mcp-run` 先用 raw verifier 完成 MCP `initialize`、`notifications/initialized`、`tools/list` 與 `tools/call`，比較三組 client-facing HTTP status 都是 `200` 的結果：
+
+| 情境 | MCP contract | Tool result | Query outcome |
+|---|---|---|---|
+| Grafana API 回 `200 text/html` | PASS | ERROR | UNKNOWN |
+| 合法 Loki 查詢沒有符合資料 | PASS | PASS | NO_MATCH |
+| 查到含 `action_id` 與 `trace_id` 的 log | PASS | PASS | USABLE |
+
+HTML 情境不會連到真實登入頁。Lab 另外啟動一個安全 fixture：datasource metadata endpoint 回正常 JSON，Grafana datasource proxy 路徑則刻意回 `200 text/html`。這讓 `mcp-grafana` 真正執行 datasource lookup 與 response decode，最後透過 MCP Tool result 回報 `invalid character '<'`，而不是由 Python 偽造錯誤字串。
+
+正常 Loki log 只將 `service_name` 放在 stream labels，`action_id` 與 `trace_id` 使用 structured metadata。`mcp-grafana` 的 full-format response 應把兩者放回 `structuredMetadata`；這同時驗證 categorized labels 支援已存在於目前版本。Runner 會在 `artifacts/day25-*` 保存三種 exchange、握手結果與 terminal matrix，所有 session ID 都會在落盤前遮蔽。
+
+Raw verifier 完成後，同一個 Make target 會再執行 `sre-agent-run`。ADK `2.7.0` 只載入 `query_loki_logs`，實際查到一筆 `service_name=day25-sre-agent` 的合成 log，再把 Tool result 收斂成 bounded summary：
+
+```json
+{
+  "runtime": "google-adk-python/2.7.0",
+  "tool_name": "query_loki_logs",
+  "configured_path": ["Google ADK", "agentgateway", "mcp-grafana", "Grafana", "Loki"],
+  "tool_summary": {
+    "result": "USABLE",
+    "lines_returned": 1,
+    "service_name": "day25-sre-agent",
+    "action_id": "act-day25-adk-query",
+    "trace_id": "25252525252525252525252525252525"
+  }
+}
+```
+
+`configured_path` 描述 Lab 接起來的產品拓撲，不當成逐 hop 的 telemetry receipt。鎖定版本的 ADK/MCP client 可能只提供 `content[].text`，也可能提供 `structuredContent`。Runner 兩種 shape 都會驗證，而且至少要有一筆資料的 `service_name`、`action_id`、`trace_id` 全部符合本次 synthetic request 才會回報 `USABLE`；落盤時只保存結果、筆數與 correlation fields，不複製完整 log payload。
+
+兩條 MCP client 路徑都會在結束時送出 `DELETE /mcp`。目前鎖定的 agentgateway 會接受請求並回 `202`，ADK `2.7.0` 則因 session manager 對回應碼的期待不同而印出 `Session termination failed: 202`。Gateway access log 仍可看到 DELETE 已到達；這是 teardown 回應碼的互通性差異，不是查詢失敗，也不該用 `terminate_on_close=False` 把它藏起來。
+
+mcp-grafana 以 `--disable-write` 關閉寫入 Tool，並使用 `--loki-enforced-matchers 'service_name=~"day25-.*"'` 限制可讀 stream。依 upstream 的 query-enforcement 要求，Compose 也明確關閉 API、rendering、Sift 與 Assistant Tools，避免它們繞過原生 Loki query path。ADK 的 `tool_filter` 仍只用來縮小模型看到的 Tool 清單，不能代替 end-user OAuth、delegation 或 production Grafana RBAC。
+
+Day 25 的本機入口如下，全部只綁 loopback：
+
+- Grafana：<http://127.0.0.1:25000>
+- agentgateway MCP Playground：<http://127.0.0.1:25095/ui/mcp/playground>
+- 正常 MCP endpoint：<http://127.0.0.1:25080/mcp>
+- HTML 實驗 MCP endpoint：<http://127.0.0.1:25081/mcp>
+- Loki：<http://127.0.0.1:25100>
+- Prometheus：<http://127.0.0.1:29925>
+- Alloy：<http://127.0.0.1:25345>
+
+這個實驗驗證的是 read-only Loki Tool。`NO_MATCH` 對查詢工具是可判讀的業務結果，不等於系統故障；若換成有副作用的 Tool，第四層必須改由 receipt、read-after-write 或 Audit event 證明 effect，不能只檢查 response 裡是否有資料。
+
 ## 一次跑完整套 Lab
 
 從 repo root 執行：

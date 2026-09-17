@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+config:
+  adminAddr: 0.0.0.0:15000
+
+frontendPolicies:
+  tracing:
+    host: alloy:4317
+    protocol: grpc
+    randomSampling: true
+  accessLog:
+    otlp:
+      host: alloy:4317
+
+mcp:
+  port: 3000
+  prefixMode: conditional
+  policies:
+    cors:
+      allowOrigins:
+      - http://127.0.0.1:25095
+      allowHeaders: ["*"]
+      exposeHeaders: [Mcp-Session-Id]
+  targets:
+  - name: grafana
+    policies:
+      backendAuth:
+        key:
+          value: day25-synthetic-caller-token
+    mcp:
+      host: http://mcp-grafana:8000/mcp

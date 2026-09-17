@@ -1,0 +1,156 @@
+name: ithelp-grafana-mcp-outcome
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm@sha256:6e14b923e0130b8b294ca5bcc7c94d54e899d150817e6c3ed82d9b665afe5499
+    ports:
+      - 127.0.0.1:25000:3000
+      - 127.0.0.1:25100:3100
+      - 127.0.0.1:25200:3200
+      - 127.0.0.1:29925:9090
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -f /tmp/ready &&
+          curl -fsS http://127.0.0.1:3100/ready >/dev/null &&
+          curl -fsS http://127.0.0.1:3200/ready >/dev/null
+      interval: 3s
+      timeout: 2s
+      retries: 60
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - 127.0.0.1:25345:12345
+    volumes:
+      - ./config.day25.alloy:/etc/alloy/config.alloy:ro
+      - day25-alloy-data:/var/lib/alloy/data
+    depends_on:
+      lgtm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana-html-fixture:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["--role", "grafana-html"]
+    ports:
+      - 127.0.0.1:25090:8080
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  mcp-grafana:
+    image: grafana/mcp-grafana:1.4.2@sha256:f87fa67a561f7b3deb412402887117bd1e9f1f7a8695935d27c498543ab3458b
+    entrypoint: ["/app/mcp-grafana"]
+    command:
+      - --transport
+      - streamable-http
+      - --address
+      - 0.0.0.0:8000
+      - --allowed-hosts
+      - "*"
+      - --allowed-origins
+      - http://127.0.0.1:25095
+      - --disable-write
+      - --loki-enforced-matchers
+      - 'service_name=~"day25-.*"'
+      - --disable-api
+      - --disable-rendering
+      - --disable-sift
+      - --disable-assistant
+    environment:
+      GRAFANA_URL: http://lgtm:3000
+      GRAFANA_USERNAME: admin
+      GRAFANA_PASSWORD: admin
+      MCP_GRAFANA_SERVER_TOKEN: day25-synthetic-caller-token
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=day25-lab
+    depends_on:
+      lgtm:
+        condition: service_healthy
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  mcp-grafana-html:
+    image: grafana/mcp-grafana:1.4.2@sha256:f87fa67a561f7b3deb412402887117bd1e9f1f7a8695935d27c498543ab3458b
+    entrypoint: ["/app/mcp-grafana"]
+    command:
+      - --transport
+      - streamable-http
+      - --address
+      - 0.0.0.0:8000
+      - --allowed-hosts
+      - "*"
+      - --allowed-origins
+      - http://127.0.0.1:25096
+      - --disable-write
+      - --loki-enforced-matchers
+      - 'service_name=~"day25-.*"'
+      - --disable-api
+      - --disable-rendering
+      - --disable-sift
+      - --disable-assistant
+    environment:
+      GRAFANA_URL: http://grafana-html-fixture:8080
+      GRAFANA_USERNAME: synthetic
+      GRAFANA_PASSWORD: synthetic
+      MCP_GRAFANA_SERVER_TOKEN: day25-synthetic-caller-token
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=day25-lab
+    depends_on:
+      grafana-html-fixture:
+        condition: service_healthy
+      alloy:
+        condition: service_started
+    restart: unless-stopped
+
+  agentgateway-grafana:
+    image: cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+    command: ["--file", "/etc/agentgateway/config.yaml"]
+    ports:
+      - 127.0.0.1:3000:3000
+      - 127.0.0.1:25080:3000
+      - 127.0.0.1:25095:15000
+    volumes:
+      - ./configs/day-25/agentgateway-grafana.yaml:/etc/agentgateway/config.yaml:ro
+    depends_on:
+      mcp-grafana:
+        condition: service_started
+    restart: unless-stopped
+
+  agentgateway-html:
+    image: cr.agentgateway.dev/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+    command: ["--file", "/etc/agentgateway/config.yaml"]
+    ports:
+      - 127.0.0.1:25081:3000
+      - 127.0.0.1:25096:15000
+    volumes:
+      - ./configs/day-25/agentgateway-html.yaml:/etc/agentgateway/config.yaml:ro
+    depends_on:
+      mcp-grafana-html:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  day25-alloy-data:
