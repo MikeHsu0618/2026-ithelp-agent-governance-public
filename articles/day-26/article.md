@@ -4,9 +4,9 @@ Day 25 的 SRE Agent 已經能從 Loki result 拿到 `trace_id`。拿到這串 I
 
 我把 Day 1 那次 `CANARY_TRIGGERED` 的 live run 拿回來重建，才發現問題甚至比缺幾個欄位更麻煩。那條 trace 裡一共有八筆 event，Agent 先提出 `delete_demo_database`，接著又呼叫 `query_metrics`。如果只依 `trace_id` 把所有紀錄排成一列，很容易把兩個 Tool 的結果合成一個 action。更現實的是，Day 1 當時只有本機 JSONL、manifest 與 no-op canary receipt，根本沒有證據能證明這串 ID 曾經進過 Tempo 或 Loki。
 
-所以今天的 [公開 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/labs/05-incident-replay/README.md) 不會把舊 JSON 塞進 Tempo，再假裝當年就有完整 telemetry。它做兩件分開的事：先從鎖定的歷史 Artifact 誠實回放 Day 1 與 Day 3，再另跑一筆現行 action，驗證現在的 LGTM pipeline 能留下哪些證據。兩邊可以比較，不能合併成同一場事故。
+所以今天的 [公開 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27/labs/05-incident-replay/README.md) 不會把舊 JSON 塞進 Tempo，再假裝當年就有完整 telemetry。它做兩件分開的事：先從鎖定的歷史 Artifact 誠實回放 Day 1 與 Day 3，再另跑一筆現行 action，驗證現在的 LGTM pipeline 能留下哪些證據。兩邊可以比較，不能合併成同一場事故。
 
-![上半部是 Day 1 歷史 Artifact，經 replay projection 產生帶證據狀態的 Governance Event。下半部是 Day 26 另跑的新 action，由 Tempo、Loki 與 Prometheus 分別提供 request path、structured event 與 aggregate metrics。兩個 run 以虛線分開，不能混成同一場事故。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26/assets/diagrams/day-26/replay-evidence-boundary.png)
+![上半部是 Day 1 歷史 Artifact，經 replay projection 產生帶證據狀態的 Governance Event。下半部是 Day 26 另跑的新 action，由 Tempo、Loki 與 Prometheus 分別提供 request path、structured event 與 aggregate metrics。兩個 run 以虛線分開，不能混成同一場事故。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27/assets/diagrams/day-26/replay-evidence-boundary.png)
 
 ## 一條 Trace 裡不只一個 Action
 
@@ -91,7 +91,7 @@ Day 3 的 `POLICY_DENIED` 是一組很有用的 control case。它有自己的 t
 
 歷史 replay 跑完後，Lab 04 會另送一筆新的 `normal-call`。這次產生獨立的 `action_id=act-normal-call-735491db` 與 `trace_id=c37ea024...75c56`，再分別查 Tempo、Loki 與 Prometheus。它不是 Day 1 的補件，而是對現行 instrumentation 做一次驗收。
 
-![Grafana Explore 的 Tempo trace 實跑畫面。查詢指定 trace ID，結果顯示 ithelp-lab-client、agentgateway、agent-runtime 與 mcp-adapter 四個 service，共八個 spans。路徑包含 Agent request、Gateway、Runtime、MCP Call 與 Tool execution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26/assets/screenshots/day-26/grafana-tempo-action-trace.png)
+![Grafana Explore 的 Tempo trace 實跑畫面。查詢指定 trace ID，結果顯示 ithelp-lab-client、agentgateway、agent-runtime 與 mcp-adapter 四個 service，共八個 spans。路徑包含 Agent request、Gateway、Runtime、MCP Call 與 Tool execution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27/assets/screenshots/day-26/grafana-tempo-action-trace.png)
 
 這張圖能證明該 trace 在 Tempo 出現，也能看見 `ithelp-lab-client → agentgateway → agent-runtime → agentgateway → mcp-adapter` 的 request path。Loki 另外找到四行帶同一個 `action_id` 的 structured event。這符合 OpenTelemetry 的設計。LogRecord 可以帶 `TraceId` 與 `SpanId`，讓 log 和 trace 以 execution context 關聯，而 `Resource` 描述的是哪個 service 送出資料。[OpenTelemetry Logs Data Model](https://opentelemetry.io/docs/specs/otel/logs/data-model/)也明確把這些欄位分開定義。
 
@@ -141,7 +141,7 @@ uv run --directory labs/05-incident-replay incident-replay historical \
   --output labs/05-incident-replay/.runtime/day01-replay.json
 ```
 
-完整欄位定義放在 [AI Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json)，讀者也可以搭配 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26/articles/day-26/incident-replay-field-guide.md)，替自己的事件逐欄標示來源與證據狀態。
+完整欄位定義放在 [AI Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json)，讀者也可以搭配 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27/articles/day-26/incident-replay-field-guide.md)，替自己的事件逐欄標示來源與證據狀態。
 
 ## Trace 找得到，責任仍要有人接手
 
