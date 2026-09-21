@@ -4,7 +4,7 @@ agentgateway `1.5.0` 的 LLM Analytics 跑起來後，不用先畫 Grafana，就
 
 下面這張官方畫面來自其中一組 Lab 流量。它列出 `2 calls`，OpenAI 與 Anthropic 各收到一筆 request，總成本是 `USD 0.000066`。光看 Dashboard 很容易理解成「兩次呼叫總共花了這些錢」，但這兩個 calls 其實是同一個 Agent action 的兩次嘗試，而且只有成功的那次帶回 usage。
 
-![agentgateway 1.5.0 內建 Analytics 實跑畫面。相同 Fallback action 產生 OpenAI 與 Anthropic 各一筆 request，畫面顯示 2 calls，但只有成功 response 提供的 10 tokens 與 USD 0.000066。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28/assets/screenshots/day-24/agentgateway-official-analytics-dashboard.png)
+![agentgateway 1.5.0 內建 Analytics 實跑畫面。相同 Fallback action 產生 OpenAI 與 Anthropic 各一筆 request，畫面顯示 2 calls，但只有成功 response 提供的 10 tokens 與 USD 0.000066。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29/assets/screenshots/day-24/agentgateway-official-analytics-dashboard.png)
 
 Day 23 已經決定哪些 identity 欄位適合放進 Metrics。Day 24 接著把 model、provider、token usage 與費率接進來，實際盤點 agentgateway 內建 Analytics、官方 Grafana Dashboard 和 Provider 帳單之間的界線。主模型故障後切換備援只是其中一個壓力測試，因為它最容易讓一個看似完整的總額露出缺口。
 
@@ -47,7 +47,7 @@ Lab 的 principal 固定為 `user/sre-oncaller`，API key metadata 將它映射�
 
 圖中的兩個 agentgateway 方塊不是雙層 Proxy。為了隔離 health eviction state，Lab 啟動兩組互不串接的實驗：一組只看沒有 retry 的結果，另一組讓 client 對相同 `action_id` 發出第二次 request。每一筆實際 data path 都只有 Client → Gateway → Provider。
 
-![同一個 Agent action 經過兩次 HTTP request。第一次由 primary provider 回傳 503，第二次 client retry 才由 backup provider 成功服務，失敗 attempt 的 usage 與 cost 保持 UNKNOWN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28/assets/diagrams/day-24/fallback-cost-evidence.png)
+![同一個 Agent action 經過兩次 HTTP request。第一次由 primary provider 回傳 503，第二次 client retry 才由 backup provider 成功服務，失敗 attempt 的 usage 與 cost 保持 UNKNOWN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29/assets/diagrams/day-24/fallback-cost-evidence.png)
 
 這次我把帳拆成兩層，避免一開始就寫下一個看似完整的 action total：
 
@@ -118,7 +118,7 @@ Traffic runner 會送出一筆正常流量、一筆沒有重試的故障，以�
 
 內建 Analytics 截圖只查看 `client-retry` Gateway，所以畫面是兩個 calls 與一筆 backup cost。下面這張 Grafana extension 則聚合兩組實驗，除了 primary calibration 與 backup 的原生成本指標，也能用同一個 `correlation_action_id` 在 Loki 找到 primary `503` 和 backup `200`。Tempo 裡同樣保留兩個 trace IDs。
 
-![Day 24 Grafana focused extension 實拍。上半部使用 agentgateway 原生成本與 token metrics，下半部以相同 action_id 查到 primary 503 與 backup 200。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28/assets/screenshots/day-24/agentgateway-cost-fallback-dashboard.png)
+![Day 24 Grafana focused extension 實拍。上半部使用 agentgateway 原生成本與 token metrics，下半部以相同 action_id 查到 primary 503 與 backup 200。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29/assets/screenshots/day-24/agentgateway-cost-fallback-dashboard.png)
 
 ## Gateway estimate 與 Provider 帳單
 
@@ -186,7 +186,7 @@ make lab-04-cost-run
 make lab-04-cost-down
 ```
 
-啟動後可在 `http://127.0.0.1:28095/ui/llm/analytics` 查看 agentgateway 內建 Analytics。`lab-04-cost-run` 會查 Prometheus、Loki、Tempo 與兩個 Provider receipt endpoints。只有 1／1／2 attempts、primary → backup 順序、四條 Gateway traces、原生 token／cost metrics 與 action logs 全部吻合，backend report 才會得到 `overall: PASS`。設定檔、可複製的查詢與 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28/labs/04-telemetry-pipeline/README.md)。
+啟動後可在 `http://127.0.0.1:28095/ui/llm/analytics` 查看 agentgateway 內建 Analytics。`lab-04-cost-run` 會查 Prometheus、Loki、Tempo 與兩個 Provider receipt endpoints。只有 1／1／2 attempts、primary → backup 順序、四條 Gateway traces、原生 token／cost metrics 與 action logs 全部吻合，backend report 才會得到 `overall: PASS`。設定檔、可複製的查詢與 machine-readable evidence 都放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/labs/04-telemetry-pipeline/README.md)。
 
 ## 下一個綠燈：HTTP 200
 
