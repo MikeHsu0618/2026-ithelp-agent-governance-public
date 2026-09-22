@@ -74,7 +74,7 @@ Gateway policy 如果直接判斷 `jwt.role == "mcp-observer"`，自然永遠對
 
 ## 換成 Cognito，移走的是 Runtime
 
-![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r2/assets/diagrams/day-06/identity-center-before-after.png)
+![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05-r2/assets/diagrams/day-06/identity-center-before-after.png)
 
 改用 Cognito User Pools 後，請求仍然經過相同的責任位置：
 
@@ -94,7 +94,7 @@ Cognito 可以 federation 外部 OIDC／SAML IdP，也能透過 resource server 
 
 |  | Keycloak | Amazon Cognito User Pools |
 | --- | --- | --- |
-| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r2/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r2/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05-r2/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-05-r2/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 技術驗收 | Federation、role claim、Gateway 與 MCP RBAC 已跑通 | Human 與 M2M 路徑已跑通 |
 | 平台要承擔的範圍 | Identity 設定加上完整服務 runtime | Identity 設定與整合，runtime 在 AWS 服務邊界 |
 | 當時的適配性 | 適合有人長期經營、服務多個系統的 Identity Platform | 適合先替少數 AI 服務提供清楚的 OIDC boundary |
@@ -104,7 +104,7 @@ Cognito 可以 federation 外部 OIDC／SAML IdP，也能透過 resource server 
 
 ## 這個決定不是永久結論
 
-完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r2/articles/day-06/identity-center-decision-matrix.md) 放在 repo。這次沒有替功能逐項打分，因為兩條技術鏈都已經跑通，先決條件在於組織準備承接哪一種 operating model。
+完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-05-r2/articles/day-06/identity-center-decision-matrix.md) 放在 repo。這次沒有替功能逐項打分，因為兩條技術鏈都已經跑通，先決條件在於組織準備承接哪一種 operating model。
 
 出現以下情況時，我們會重開這份決策：
 
