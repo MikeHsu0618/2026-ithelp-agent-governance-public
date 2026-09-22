@@ -22,13 +22,13 @@
 
 Day 3 用改寫過的惡意 Log 做了另一組對照。兩次 live run 使用同一份輸入與模型設定，Gemini 都提出 `delete_demo_database`。全部放行時，安全標記增加一筆。換成 Tool allowlist，function 執行前就被拒絕，安全標記維持零。Agent 收到拒絕結果後，改用 `query_metrics` 完成原本的唯讀調查。這組結果只證明 Lab 裡的執行前拒絕點有效，沒有證明完整的企業授權已經到位。
 
-完整事件與回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r1/labs/05-incident-replay/README.md)。對下一筆真的有副作用的 action，架構還得補上可信身分、delegation、實際執行的 Artifact 與業務授權。執行後也要留下能對回同一筆 action 的 effect receipt。
+完整事件與回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r1/labs/05-incident-replay/README.md)。對下一筆真的有副作用的 action，架構還得補上可信身分、delegation、實際執行的 Artifact 與業務授權。執行後也要留下能對回同一筆 action 的 effect receipt。
 
 ## Reference Architecture 的四條路徑
 
 三十天最後收斂成四條路徑。Request Path 安排每一層能做的決策，Context Rail 保存這些決策依賴的身分與政策資料，Artifact Path 對回實際執行版本，Evidence Path 則保留事後查詢與 Audit 所需的紀錄。產品名稱是目前的實作選擇，架構審查真正要看的仍是誰能決定、實際跑了什麼，以及事後查得到什麼。
 
-![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。Context 隨 action 傳遞。下方兩張卡片分別說明 Git／OCI Artifact provenance，以及 Alloy／LGTM 與 Governance Event 的 evidence 路徑。kagent、Agent Registry 是條件式選項，Audit 保存與防竄改仍待獨立驗證。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r1/assets/diagrams/day-30/reference-architecture.png)
+![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。Context 隨 action 傳遞。下方兩張卡片分別說明 Git／OCI Artifact provenance，以及 Alloy／LGTM 與 Governance Event 的 evidence 路徑。kagent、Agent Registry 是條件式選項，Audit 保存與防竄改仍待獨立驗證。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15-r1/assets/diagrams/day-30/reference-architecture.png)
 
 ## Request Path：Identity、Gateway 與 Resource Authorization
 
