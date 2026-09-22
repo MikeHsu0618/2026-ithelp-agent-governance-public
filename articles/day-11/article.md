@@ -16,7 +16,7 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | Human 是 subject，Runtime 是 current actor | RFC 8693 Token Exchange |
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02-r2/assets/diagrams/day-11/three-oauth-flows.png)
 
 這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。接下來三段都沿著這個判斷往下走。
 
@@ -99,7 +99,7 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 
 ## Lab 只驗證會改變判斷的分支
 
-[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 一共跑九個案例。三條 Flow 各有一個成功案例，其餘六個負向案例刻意放入 Callback、Scope、Registration、Client Type、Target 與 Audience 錯誤。正文不再逐列抄完整驗收表，只留下最能區分三條路徑的結果：
+[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r2/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 一共跑九個案例。三條 Flow 各有一個成功案例，其餘六個負向案例刻意放入 Callback、Scope、Registration、Client Type、Target 與 Audience 錯誤。正文不再逐列抄完整驗收表，只留下最能區分三條路徑的結果：
 
 | 情境 | 結果 | 說明 |
 | --- | --- | --- |
@@ -109,7 +109,7 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 | Runtime 要求未授權 Target | DENY | 代表關係不能自行擴張可存取的 Resource |
 | Human Token 的 Audience 錯誤 | DENY | 入口 Token 不能拿來交換任意下游 Token |
 
-![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02-r2/assets/screenshots/day-11/01-oauth-flow-results.png)
 
 從 Repo Root 執行以下指令，就能重跑完整案例：
 
@@ -119,7 +119,7 @@ make lab-02-check
 make lab-02-oauth
 ```
 
-最終輸出會顯示 `9/9 cases matched`，完整 Decision Event、合成 Claims 與故障判讀指令則放在 [Day 11 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/assets/screenshots/day-11/evidence.md) 與 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-11/oauth-flow-selection-guide.md)。Lab 是 Offline Policy Simulation，不是 Authorization Server 相容性認證，也沒有模擬 Browser、Consent、TLS、Refresh Token 或正式環境的 Client Authentication。
+最終輸出會顯示 `9/9 cases matched`，完整 Decision Event、合成 Claims 與故障判讀指令則放在 [Day 11 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r2/assets/screenshots/day-11/evidence.md) 與 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r2/articles/day-11/oauth-flow-selection-guide.md)。Lab 是 Offline Policy Simulation，不是 Authorization Server 相容性認證，也沒有模擬 Browser、Consent、TLS、Refresh Token 或正式環境的 Client Authentication。
 
 ## Cognito 能接住兩條路，Delegation 仍待補齊
 
