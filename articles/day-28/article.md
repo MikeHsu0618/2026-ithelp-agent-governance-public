@@ -1,12 +1,12 @@
 # Day 28｜從既有 LGTM 開始：Agent Governance 的導入順序
 
-[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-24-r1/articles/day-27/capability-ledger.md) 同時留下 `KEEP`、`ADOPT`、`DEFER` 與 `UNKNOWN`。只看風險，最刺眼的 `UNKNOWN` 好像應該優先處理。照產品架構圖走，又很容易先裝 kagent、Registry 或另一套 Identity Center。這兩種排序都忽略同一件事：誰現在有能力把新增控制接進值班、升級和事故流程？
+[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r1/articles/day-27/capability-ledger.md) 同時留下 `KEEP`、`ADOPT`、`DEFER` 與 `UNKNOWN`。只看風險，最刺眼的 `UNKNOWN` 好像應該優先處理。照產品架構圖走，又很容易先裝 kagent、Registry 或另一套 Identity Center。這兩種排序都忽略同一件事：誰現在有能力把新增控制接進值班、升級和事故流程？
 
 我手上的現況並不平均。LGTM 是 Production 核心，有人維護，也有既有查詢和告警習慣。Cognito 的 Human／M2M 路徑已經跑通，agentgateway 也有明確的 LLM／MCP／A2A Traffic Boundary。相較之下，企業 Identity Center、跨團隊 Agent Control Plane 與 Catalog 仍缺共同需求或長期 Owner。
 
 導入順序因此不該是一座所有團隊都要爬完的成熟度階梯。這篇改用實際 Trigger 排序：Tool 是否產生副作用、共同 Policy 是否開始漂移、Artifact 是否跨環境流動、團隊是否需要 Self-service、成本是否進入正式分攤，以及證據是否有完整性義務。Trigger 尚未成立時，現有架構可以是正式停留點，不是「還沒做完」。
 
-![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。Workload identity 和 tamper-evident Audit 依個別需求開啟。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-24-r1/assets/diagrams/day-28/adoption-path.png)
+![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。Workload identity 和 tamper-evident Audit 依個別需求開啟。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r1/assets/diagrams/day-28/adoption-path.png)
 
 ## 最小可維運基線
 
@@ -62,7 +62,7 @@ Workload Identity 是否採用 Kubernetes ServiceAccount、Workload-bound Token 
 
 ## Trigger、控制與停留條件
 
-完整版本放在 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-24-r1/articles/day-28/adoption-trigger-matrix.md)。正文保留最常見的八種情境：
+完整版本放在 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r1/articles/day-28/adoption-trigger-matrix.md)。正文保留最常見的八種情境：
 
 | Trigger | 先補的控制 | 合理停留點 |
 | --- | --- | --- |
