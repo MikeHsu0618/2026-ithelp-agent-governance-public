@@ -42,11 +42,11 @@ Retry 更需要分清楚產品預設與架構風險。若兩層都設定「失�
 | Retry | AI Route 不設定 Application Retry | 只有具 Idempotency Contract 的 Operation 才考慮開啟 |
 | Telemetry | TLS、Connection、Host、Request ID | Identity、Policy、Model／Tool Decision、Backend Outcome |
 
-這張表的用途是逼每個行為留下唯一 Owner，不是要求所有環境都部署相同拓撲。完整版本放在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-15/proxy-responsibility-matrix.md)，另外包含 Timeout、SSE、Error Propagation 與 Fail-closed，可直接帶進 Route Review。
+這張表的用途是逼每個行為留下唯一 Owner，不是要求所有環境都部署相同拓撲。完整版本放在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r1/articles/day-15/proxy-responsibility-matrix.md)，另外包含 Timeout、SSE、Error Propagation 與 Fail-closed，可直接帶進 Route Review。
 
 下面的架構圖來自去識別化的實務 Topology，只保留 Request 經過的邊界與每一層可以改動的資料。
 
-![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-15/ingress-boundary.png)
+![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r1/assets/diagrams/day-15/ingress-boundary.png)
 
 Backend 在 Network 與 Routing 上都不接受 Edge 直接呼叫。agentgateway 掛掉時，Request 必須明確失敗。如果 Edge 還藏著一條 Fallback Route 可以直連 MCP Server 或 LLM Provider，最需要治理的時候反而會繞過治理點。
 
@@ -64,7 +64,7 @@ Timeout 則要當成完整 Budget。Edge 的 Connection／Idle Timeout 必須容
 
 ## 公開 Lab 只驗 Agent Gateway 的 Traffic Contract
 
-Production 有兩層 Gateway，公開 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/03-gateway-runtime/README.md) 刻意只啟動一個 Pinned agentgateway 與一個 Synthetic OpenAI-compatible Provider：
+Production 有兩層 Gateway，公開 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r1/labs/03-gateway-runtime/README.md) 刻意只啟動一個 Pinned agentgateway 與一個 Synthetic OpenAI-compatible Provider：
 
 ```text
 Lab client → one agentgateway → synthetic provider
@@ -74,7 +74,7 @@ Lab client → one agentgateway → synthetic provider
 
 Synthetic Provider 對一般 Request 回 `200 application/json`。SSE Case 會先送出第一段 Event，等 Client 確認收到後才完成剩餘內容。若 Gateway 把 Response Buffer 完才送，這個 Case 就會 Timeout。另一個固定 Model 則回傳 `429` 與 `Retry-After: 7`，用來確認錯誤語意沒有在中途被改寫或重送。
 
-![Day 15 實際 Lab terminal card。單一 agentgateway 1.5.0 且 retry disabled，一般 JSON 與 SSE 得到 200，缺少或錯誤 caller credential 得到 401，上游 rate limit 保留 429，backend credential isolation 通過，六組結果皆符合預期。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-15/01-traffic-boundary-results.png)
+![Day 15 實際 Lab terminal card。單一 agentgateway 1.5.0 且 retry disabled，一般 JSON 與 SSE 得到 200，缺少或錯誤 caller credential 得到 401，上游 rate limit 保留 429，backend credential isolation 通過，六組結果皆符合預期。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r1/assets/screenshots/day-15/01-traffic-boundary-results.png)
 
 六組 Case 最後收斂成四份 Contract：
 
@@ -92,7 +92,7 @@ make lab-03-runtime-up
 make lab-03-runtime-traffic
 ```
 
-完整六組結果、Redacted Config 與原始 Terminal 收在 [Day 15 Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/assets/screenshots/day-15/evidence.md)。Lab 沒有測 Kong 設定、HA、吞吐、長時間 Heartbeat、MCP Session Persistence 或 A2A Streaming，因此不能拿來宣稱 Production Topology 已完成驗收。
+完整六組結果、Redacted Config 與原始 Terminal 收在 [Day 15 Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r1/assets/screenshots/day-15/evidence.md)。Lab 沒有測 Kong 設定、HA、吞吐、長時間 Heartbeat、MCP Session Persistence 或 A2A Streaming，因此不能拿來宣稱 Production Topology 已完成驗收。
 
 ## Route Review 應該留下可執行的 Contract
 

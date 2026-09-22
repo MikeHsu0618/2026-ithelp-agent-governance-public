@@ -8,7 +8,7 @@ LiteLLM 並沒有在評估途中突然少掉某項功能，改變的是我們手
 
 ## LiteLLM 為什麼會先進入候選名單
 
-![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/litellm/litellm-logo.jpg)
+![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r1/assets/third-party/litellm/litellm-logo.jpg)
 
 [LiteLLM](https://www.litellm.ai/) 同時是一層多 Provider Translation／Routing Layer 與 LLM Gateway。應用程式只要更換 `base_url`，便能用相近的介面呼叫不同模型。真正的 Provider Key 留在 Proxy，Application Repository 不必各自保存一份。再加上 Virtual Key、Rate Limit、Budget、Spend Tracking、Fallback 和 UI，它很自然會成為共用模型入口的候選方案。
 
@@ -43,7 +43,7 @@ Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬�
 
 ## Scorecard 先寫 Owner，再填產品能力
 
-最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
+最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r1/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
 
 正文只留下最影響這次結果的六列：
 
@@ -60,7 +60,7 @@ Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬�
 
 ## agentgateway 對齊既有的交付方式
 
-![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/agentgateway/agentgateway-logo.png)
+![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r1/assets/third-party/agentgateway/agentgateway-logo.png)
 
 [agentgateway](https://agentgateway.dev/) 的 Data Plane 能代理 HTTP、gRPC、LLM、MCP 與 A2A 流量，Kubernetes 模式則由 Controller Watch Gateway API 與相關 Resource，產生 Runtime Config，再透過 xDS 送到 Data Plane。Route、Backend、Policy 與 Gateway Lifecycle 都從 Kubernetes API 進場，變更能沿用原本的 Git Review 與 Reconciliation。
 
@@ -99,7 +99,7 @@ MCP client → agentgateway → JWT / Tool policy → MCP server
 
 下圖把原始選型與事後事件分成兩條時間線。上半部是當時真正影響決定的 Operating Model 與 Identity Mapping，下半部則是轉向 agentgateway 後才發生的 LiteLLM 供應鏈事件，以及後續改善。
 
-![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-13/selection-timeline.png)
+![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r1/assets/diagrams/day-13/selection-timeline.png)
 
 [官方事件 Issue](https://github.com/BerriAI/litellm/issues/24518) 列出 PyPI `1.82.7` 與 `1.82.8` 遭植入惡意程式，可能蒐集並外傳 Credential。維護團隊移除受影響套件、輪替 Maintainer 帳號，並在調查期間暫停 Release。Issue 也說明，當時使用 Proxy Docker Image 的人不在公告列出的影響範圍。
 
