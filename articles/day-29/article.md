@@ -6,9 +6,9 @@ Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可�
 
 Day 26 回放這筆 Action 時，Tool、Resource、Policy Decision 與 Canary Result 找得回來，Principal、Delegation、Agent Artifact、Approval 和原始紀錄完整性仍是 `UNKNOWN`。即使把所有欄位補齊，Identity 也只證明誰來了，Gateway 只證明哪版共同規則放行，Runtime 只證明送了哪些參數。目標服務仍要判斷這張工單、這個帳戶或這次 Deployment 此刻能不能修改。
 
-這篇沿同一筆 Action 建立 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/articles/day-29/production-responsibility-contract.md)，把 Control Owner、Decision Owner、Handoff Evidence、Escalation 與 Residual Risk 放回執行順序裡。
+這篇沿同一筆 Action 建立 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r1/articles/day-29/production-responsibility-contract.md)，把 Control Owner、Decision Owner、Handoff Evidence、Escalation 與 Residual Risk 放回執行順序裡。
 
-![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r1/assets/diagrams/day-29/responsibility-handoff.png)
+![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r1/assets/diagrams/day-29/responsibility-handoff.png)
 
 ## 三種通過代表不同判斷
 
@@ -69,7 +69,7 @@ Security／Risk 要決定哪些 Events 必須保存、保存多久、誰能讀�
 
 ## Residual Risk 只收有證據的缺口
 
-責任審查若只列「模型幻覺、資安、法規、擴充性」，很難決定是否上線。本文的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/articles/day-29/residual-risk-register.md) 只收前文已經出現的六項缺口：
+責任審查若只列「模型幻覺、資安、法規、擴充性」，很難決定是否上線。本文的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r1/articles/day-29/residual-risk-register.md) 只收前文已經出現的六項缺口：
 
 | Residual Risk | Evidence | 目前處理 |
 | --- | --- | --- |
