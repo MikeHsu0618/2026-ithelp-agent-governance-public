@@ -50,11 +50,11 @@ Static Bearer Key 當然有侷限。它可能被複製，無法辨認特定 Pod 
 
 ## 同一個 Gateway 比較三種 Credential
 
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r1/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
+[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
 
 這裡需要先釐清名稱。LiteLLM Virtual Key 是前一篇實務選型的對象，Lab 使用 agentgateway API Key Policy 與 Metadata 重現相同的 Identity Mapping 問題。`Consumer Key` 是本文為了區分用途採用的名稱，不是 agentgateway 另一種正式 Credential Type。
 
-![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r1/assets/diagrams/day-14/credential-boundary.png)
+![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r1/assets/diagrams/day-14/credential-boundary.png)
 
 API Key Route 使用 Strict Mode，兩把 Key 分別映射成 Human 與 Workload Metadata：
 
@@ -72,7 +72,7 @@ apiKey:
       workload: workload/runtime-a
 ```
 
-完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r1/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。Lab 每次產生新的 API Key、Provider Key 與 RSA Signing Key，公開 Artifact 只保存短指紋、Redacted Config、Public JWKS 與 Decision Event。這些安全檢查屬於 Evidence，不再佔用正文解釋 Credential 語意的篇幅。
+完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。Lab 每次產生新的 API Key、Provider Key 與 RSA Signing Key，公開 Artifact 只保存短指紋、Redacted Config、Public JWKS 與 Decision Event。這些安全檢查屬於 Evidence，不再佔用正文解釋 Credential 語意的篇幅。
 
 ## Offboarding Gap 會被 HTTP 200 藏起來
 
@@ -126,7 +126,7 @@ Human Key、Workload Key 與 Human JWT 通過後，都由同一個 Backend Authe
 
 Synthetic Provider 會檢查收到的 `Authorization` 是否等於本次產生的 Provider Key，也確認它不等於 Human Key、Workload Key 或 JWT。這個實際 Backend Behavior 才能支持「Provider Key 已被隔離」，不能只從架構圖推論。
 
-![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r1/assets/screenshots/day-14/01-credential-boundary-results.png)
+![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r1/assets/screenshots/day-14/01-credential-boundary-results.png)
 
 正文把九組結果收斂成四個判斷：
 
@@ -137,7 +137,7 @@ Synthetic Provider 會檢查收到的 `Authorization` 是否等於本次產生�
 | Human JWT | Wrong／Missing Issuer、Audience 被拒絕 | 指定版本已鎖住 Token Boundary |
 | Backend Credential | Provider 只收到 Provider Key | Caller Credential 沒有直接洩漏到上游 |
 
-可複製指令與完整 Machine-readable Result 收在 [Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r1/assets/screenshots/day-14/evidence.md)，架構 Review 可直接使用 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r1/articles/day-14/credential-decision-table.md)。重跑整組案例只需要：
+可複製指令與完整 Machine-readable Result 收在 [Screenshot Evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/assets/screenshots/day-14/evidence.md)，架構 Review 可直接使用 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r1/articles/day-14/credential-decision-table.md)。重跑整組案例只需要：
 
 ```bash
 make lab-03-runtime-up
