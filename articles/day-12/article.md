@@ -8,7 +8,7 @@
 
 ## 同一個 User Pool，兩個 App Client
 
-<img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r1/assets/third-party/aws/amazon-cognito-architecture-icon.png" alt="Amazon Cognito 官方 AWS Architecture Icon" width="96">
+<img src="https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-10-r1/assets/third-party/aws/amazon-cognito-architecture-icon.png" alt="Amazon Cognito 官方 AWS Architecture Icon" width="96">
 
 Day 6 已經交代過 Keycloak 與 Cognito 的選型。Keycloak 的 Federation、Role Claim 與 Gateway RBAC 都能在 Kubernetes 跑通，我們最後改用 Cognito，是因為當時沒有足夠的組織共識與維運人力去建立平台級 Identity Center。這個決策不代表 Cognito 比 Keycloak 強，而是我們不想為少數服務先背起另一套帳號生命週期。
 
@@ -92,7 +92,7 @@ Human：client_id + sub + aud + scope
 M2M：  client_id + scope，Human 不適用
 ```
 
-![同一個 Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r1/assets/diagrams/day-12/cognito-dual-path.png)
+![同一個 Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-10-r1/assets/diagrams/day-12/cognito-dual-path.png)
 
 在 agentgateway 設定裡，`aud` 不能放進兩條路徑共同必填的 Claims。兩條 CEL Rule 先確認 `token_use == "access"`，再各自處理 Human 與 M2M：
 
@@ -116,17 +116,17 @@ Scope 在 Cognito Access Token 裡是以空白分隔的字串，Policy 要檢查
 
 這份範例明確拒絕帶有意外 `aud` 的 M2M Token，因為本篇沒有使用 Pre-token Trigger 改寫它。若平台未來決定替 M2M 加入 Audience，Token Contract、Gateway Policy 與 Regression Test 都要一起更新，不能只改 IdP 後就期待 Gateway 自行理解新語意。
 
-完整 Gateway 設定放在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r1/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。設定驗證只證明 YAML 與 Policy 能被指定版本載入，不代表 Cognito Live Integration 已經完成。真正的 JWKS Rotation、Managed Login 與 Provider Compatibility 仍需要可拋棄的 AWS 環境測試。
+完整 Gateway 設定放在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-10-r1/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。設定驗證只證明 YAML 與 Policy 能被指定版本載入，不代表 Cognito Live Integration 已經完成。真正的 JWKS Rotation、Managed Login 與 Provider Compatibility 仍需要可拋棄的 AWS 環境測試。
 
 ## Terraform 只負責固定兩份 Registration
 
-Terraform 範例將 Human 與 M2M 建成兩個獨立 `aws_cognito_user_pool_client`。Human 設定 `generate_secret=false` 與 Authorization Code，M2M 則設定 `generate_secret=true` 與 Client Credentials。完整 HCL 放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-09-r1/labs/02-identity-boundary/configs/cognito-terraform/)，正文不再逐段複製。
+Terraform 範例將 Human 與 M2M 建成兩個獨立 `aws_cognito_user_pool_client`。Human 設定 `generate_secret=false` 與 Authorization Code，M2M 則設定 `generate_secret=true` 與 Client Credentials。完整 HCL 放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-10-r1/labs/02-identity-boundary/configs/cognito-terraform/)，正文不再逐段複製。
 
 本輪只執行 `terraform validate`，沒有對 AWS Apply。這代表 HCL 與 Provider Schema 能對上，不能證明 Domain 唯一性、AWS 權限、Federation 或 Managed Login 已完成。`generate_secret=true` 也會讓 M2M Secret 進入 Terraform State，正式套用以前仍要處理 Remote State Encryption 與存取權限。
 
 ## Lab 驗證兩份 Contract 不會互相誤收
 
-[Day 12 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r1/labs/02-identity-boundary/README.md) 以九個案例覆蓋兩條成功路徑，以及 Callback、Scope、Client Type、Secret、Resource Binding 與 Policy Input 錯誤。正文只保留幾個真正會改變設計判斷的結果：
+[Day 12 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-10-r1/labs/02-identity-boundary/README.md) 以九個案例覆蓋兩條成功路徑，以及 Callback、Scope、Client Type、Secret、Resource Binding 與 Policy Input 錯誤。正文只保留幾個真正會改變設計判斷的結果：
 
 | 情境 | 結果 | 它證明的事 |
 | --- | --- | --- |
@@ -136,7 +136,7 @@ Terraform 範例將 Human 與 M2M 建成兩個獨立 `aws_cognito_user_pool_clie
 | M2M 要求 Resource Binding | DENY | Human 的 Audience Contract 不能直接套到 M2M |
 | 任一路徑缺少必要 Policy Input | DENY | Signature 通過仍不代表 Authorization 資料足夠 |
 
-![Day 12 Cognito 雙路徑 Lab 的實際 CLI 結果。Human 與 M2M 各有一條成功 path，callback、scope、policy claim、public client、client secret 與 M2M resource binding 錯誤都被分階段拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r1/assets/screenshots/day-12/01-cognito-dual-path-results.png)
+![Day 12 Cognito 雙路徑 Lab 的實際 CLI 結果。Human 與 M2M 各有一條成功 path，callback、scope、policy claim、public client、client secret 與 M2M resource binding 錯誤都被分階段拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-10-r1/assets/screenshots/day-12/01-cognito-dual-path-results.png)
 
 從 Repo Root 可以重跑 Fixture、Gateway 設定與 Terraform 驗證：
 
@@ -147,7 +147,7 @@ make lab-02-cognito
 make lab-02-cognito-config-check
 ```
 
-完整九組結果、Safe Registration 與 Decision Event 收在 [Day 12 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r1/assets/screenshots/day-12/evidence.md)，排錯時可配合 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r1/articles/day-12/cognito-dual-path-checklist.md)。這些結果來自 Offline Policy Simulation 與 Config Validation，沒有冒充 AWS Apply、Managed Login、Live Token、JWKS Rotation 或 Secret Rotation 演練。
+完整九組結果、Safe Registration 與 Decision Event 收在 [Day 12 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-10-r1/assets/screenshots/day-12/evidence.md)，排錯時可配合 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-10-r1/articles/day-12/cognito-dual-path-checklist.md)。這些結果來自 Offline Policy Simulation 與 Config Validation，沒有冒充 AWS Apply、Managed Login、Live Token、JWKS Rotation 或 Secret Rotation 演練。
 
 ## Token 驗過之後，還有平台責任要接
 
