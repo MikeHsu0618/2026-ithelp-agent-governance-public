@@ -6,9 +6,9 @@ Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可�
 
 [Day 26](https://ithelp.ithome.com.tw/articles/10412919) 回放這筆 action 時，Tool、resource、policy decision 與 canary result 都找得回來。Principal、delegation、Agent Artifact、approval，以及原始紀錄是否完整，則只能寫 `UNKNOWN`。即使把這些欄位全部補齊，Identity 仍只證明誰來了，Gateway 只證明哪版規則放行，Runtime 只證明送了哪些參數。它們無法替目標服務確認這張工單、這個帳戶或這次 deployment 此刻是否應該被修改。
 
-Day 27 的 [Capability Ledger](https://ithelp.ithome.com.tw/articles/10413859) 把每項能力的來源、證據和維運 owner 分開，[Day 28](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/articles/day-28/article.md) 再依既有 LGTM、Identity 與 Gateway 排出導入順序。共同控制交給平台之後，單次 action 的業務決策並沒有跟著移過去。這一篇會沿同一筆 action 製作 Production Responsibility Contract，記下誰維護控制、誰能做決定、下一站要收到什麼證據，以及哪種差異必須升級處理。
+Day 27 的 [Capability Ledger](https://ithelp.ithome.com.tw/articles/10413859) 把每項能力的來源、證據和維運 owner 分開，[Day 28](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-28/article.md) 再依既有 LGTM、Identity 與 Gateway 排出導入順序。共同控制交給平台之後，單次 action 的業務決策並沒有跟著移過去。這一篇會沿同一筆 action 製作 Production Responsibility Contract，記下誰維護控制、誰能做決定、下一站要收到什麼證據，以及哪種差異必須升級處理。
 
-![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29/assets/diagrams/day-29/responsibility-handoff.png)
+![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-29/responsibility-handoff.png)
 
 ## 三種「通過」不能混成一個綠燈
 
@@ -32,7 +32,7 @@ Day 1 的 policy engine 沒有故障，它只是執行了一條沒有 resource �
 
 Identity 能確認 `user/sre-oncaller` 的 credential，不代表這個人可以刪除某個 production resource。Gateway 可以檢查 JWT、route 與共同 policy，不知道工單裡批准的是 staging 還是 production。Application 負責把 resource 規則落成可執行的 authorization，規則的可接受範圍仍要由目標 resource 的 owner 決定。這些判斷需要接力，不能靠同一個 `owner=platform` 欄位一次帶過。
 
-完整的 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/articles/day-29/production-responsibility-contract.md) 會先固定 request origin、business intent、Tool、resource、arguments digest、Artifact、policy 與有效期，再填 control owner、decision owner、handoff evidence、escalation 和 residual risk。正文按 action 發生的順序走，RACI 只放在附錄，因為單看 `R`、`A`、`C`、`I` 看不出 Token、policy decision、approval 和 receipt 是否真的屬於同一筆 action。
+完整的 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-29/production-responsibility-contract.md) 會先固定 request origin、business intent、Tool、resource、arguments digest、Artifact、policy 與有效期，再填 control owner、decision owner、handoff evidence、escalation 和 residual risk。正文按 action 發生的順序走，RACI 只放在附錄，因為單看 `R`、`A`、`C`、`I` 看不出 Token、policy decision、approval 和 receipt 是否真的屬於同一筆 action。
 
 ## Control Owner 與 Decision Owner
 
@@ -60,7 +60,7 @@ Security／Risk 要回答的是另一組問題：哪些事件必須保存、保�
 
 ## Risk Register 只收已經看見的缺口
 
-整理責任時很容易順手列出「模型幻覺、法規、資安、擴充性」等泛稱風險。這種清單沒有 evidence、owner 或關閉條件，很難拿來決定是否上線。目前的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/articles/day-29/residual-risk-register.md) 有六項，每一項都能回到前面的 Lab 或決策紀錄：
+整理責任時很容易順手列出「模型幻覺、法規、資安、擴充性」等泛稱風險。這種清單沒有 evidence、owner 或關閉條件，很難拿來決定是否上線。目前的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-29/residual-risk-register.md) 有六項，每一項都能回到前面的 Lab 或決策紀錄：
 
 | Residual risk | 證據來源 | 目前處理 |
 |---|---|---|

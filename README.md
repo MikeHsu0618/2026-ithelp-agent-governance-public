@@ -35,6 +35,7 @@
 - [閱讀 Day 27 文章](articles/day-27/article.md)
 - [閱讀 Day 28 文章](articles/day-28/article.md)
 - [閱讀 Day 29 文章](articles/day-29/article.md)
+- [閱讀 Day 30 文章](articles/day-30/article.md)
 - [下載 Day 2 Agent Threat Model Worksheet](articles/day-02/threat-model-worksheet.md)
 - [下載 Day 4 Agent Delegation Decision Table](articles/day-04/delegation-decision-table.md)
 - [下載 Day 5 Agent Governance 四問 Checklist](articles/day-05/governance-four-question-checklist.md)

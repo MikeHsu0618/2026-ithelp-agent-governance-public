@@ -8,7 +8,7 @@
 
 下面這張圖是總帳的讀法。產品名稱只會出現在 `Current Source`，不再佔據比較表的欄位。同一列還必須寫出 evidence、owner、升級後的重驗範圍，以及現在仍然存在的 gap。
 
-![Day 26 留下 principal、delegation、artifact 與 approval 等 evidence gap。這些問題先轉成 capability，再記錄 current source、evidence、owner、revalidation、gap 和 decision。產品名稱只出現在實作來源，不作為比較表欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29/assets/diagrams/day-27/capability-ledger-method.png)
+![Day 26 留下 principal、delegation、artifact 與 approval 等 evidence gap。這些問題先轉成 capability，再記錄 current source、evidence、owner、revalidation、gap 和 decision。產品名稱只出現在實作來源，不作為比較表欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-27/capability-ledger-method.png)
 
 ## 從產品比較表改成 Capability Ledger
 
@@ -48,7 +48,7 @@ Day 26 的 `identity.principal` 是 `UNKNOWN`。IdP 可以驗證 Human 或 Servi
 
 ## Capability Ledger v1
 
-下表是目前的摘要。完整版本另外列出 owner、upgrade／fork surface、remaining gap 與 reopen condition，放在 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/articles/day-27/capability-ledger.md)。要匯入試算表或改成自己的架構，可以直接下載 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29/articles/day-27/capability-ledger.csv)。
+下表是目前的摘要。完整版本另外列出 owner、upgrade／fork surface、remaining gap 與 reopen condition，放在 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-27/capability-ledger.md)。要匯入試算表或改成自己的架構，可以直接下載 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-27/capability-ledger.csv)。
 
 | Capability | Current Source | Evidence | Decision |
 |---|---|---|---|
