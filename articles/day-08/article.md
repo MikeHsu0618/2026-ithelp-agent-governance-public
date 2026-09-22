@@ -8,7 +8,7 @@
 
 ## Lab：JWT 驗證案例
 
-我把這個落差整理成可離線執行的 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r1/labs/02-identity-boundary/README.md)。Lab 使用本機 ephemeral issuer 產生合成 Token，不會連到私有 Cognito 設定。正文先看最能影響設計的四組結果：
+我把這個落差整理成可離線執行的 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/labs/02-identity-boundary/README.md)。Lab 使用本機 ephemeral issuer 產生合成 Token，不會連到私有 Cognito 設定。正文先看最能影響設計的四組結果：
 
 | Case | 結果 | 停下來的原因 |
 | --- | --- | --- |
@@ -19,9 +19,9 @@
 
 四枚 Token 都由同一個 issuer key 簽出，signature 也都能驗證。差異發生在簽章之後：`wrong_audience` 不屬於目前的 resource，`access_missing_team` 缺少應用政策輸入，帶著 `team=platform` 的 ID token 則因用途錯誤而更早被拒絕。
 
-![Lab 02 的實際 CLI 結果：七組 Token case 只有 valid_access 被放行，其他案例分別在 header、claims 或 policy 階段被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r1/assets/screenshots/day-08/01-jwt-boundary-results.png)
+![Lab 02 的實際 CLI 結果：七組 Token case 只有 valid_access 被放行，其他案例分別在 header、claims 或 policy 階段被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r1/assets/screenshots/day-08/01-jwt-boundary-results.png)
 
-截圖列出完整七組結果，另外包含錯誤 issuer、過期 Token 和缺少 scope。原始 summary、JSONL event 與重現方式都放在 [Day 8 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r1/assets/screenshots/day-08/evidence.md)，指令和錯誤碼不需要從圖片抄回來。
+截圖列出完整七組結果，另外包含錯誤 issuer、過期 Token 和缺少 scope。原始 summary、JSONL event 與重現方式都放在 [Day 8 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/assets/screenshots/day-08/evidence.md)，指令和錯誤碼不需要從圖片抄回來。
 
 ## JWT 進入 Policy 前的驗證流程
 
@@ -29,7 +29,7 @@ JWT payload 很容易 decode，開發時也常先把 `sub`、`team` 和 `scope` 
 
 Lab 將 Token 進入應用 policy 前的檢查分成四道：
 
-![一枚尚未可信的 JWT 依序通過 Header 與 Key、Signature 與 Registered Claims、OAuth Context、Application Policy Inputs。任何一道失敗都回傳對應拒絕碼，全部通過後 claims 才能進入 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r1/assets/diagrams/day-08/token-validation-gates.png)
+![一枚尚未可信的 JWT 依序通過 Header 與 Key、Signature 與 Registered Claims、OAuth Context、Application Policy Inputs。任何一道失敗都回傳對應拒絕碼，全部通過後 claims 才能進入 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r1/assets/diagrams/day-08/token-validation-gates.png)
 
 1. **Header 與 Key**：固定可接受的演算法，使用 `kid` 從受信任的 JWKS 找 key。Verifier 不會跟著 Token header 裡的 `jku` 或 `x5u` 到任意位置下載金鑰。
 2. **Signature 與 Registered Claims**：驗證 signature、`iss`、`aud`、`exp` 等欄位。Lab 的 `wrong_issuer` 刻意沿用同一把 signing key，證明簽章正確不會順便讓 issuer 變可信。
@@ -46,7 +46,7 @@ Lab 將 Token 進入應用 policy 前的檢查分成四道：
 
 `id_token_has_team` 最容易讓人走捷徑。這枚 Token 有 policy 想要的使用者資料，卻是用來描述登入結果的 ID token。目前 MCP API 明確採用 access-token contract，所以 verifier 在它進入 policy 前就回覆 `TOKEN_TYPE_INVALID`。若另一個產品選擇接受 ID token，它也應有獨立的 validation profile，而不是讓 endpoint 在兩種 Token 之間任選資料比較多的一枚。
 
-每個 claim 可以回答與不能回答的問題，我整理在 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r1/articles/day-08/token-claim-boundary.md)。那張表也刻意把 signature、issuer、audience、scope 與應用屬性分開，避免「payload 看得到」被誤認成「policy 已經可以相信」。
+每個 claim 可以回答與不能回答的問題，我整理在 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/articles/day-08/token-claim-boundary.md)。那張表也刻意把 signature、issuer、audience、scope 與應用屬性分開，避免「payload 看得到」被誤認成「policy 已經可以相信」。
 
 ## Cognito Access Token 的驗證條件
 
