@@ -28,7 +28,7 @@ Agent、MCP Server、Model 與 Skill 散在不同 Repository 和 Cluster 後，�
 
 Kubernetes-style 很容易被誤讀成 CRD。[API Package](https://github.com/agentregistry-dev/agentregistry/blob/v0.4.0/pkg/api/v1alpha1/doc.go) 將這些 Type 定義為 Wire、Storage 與 API Contract，Spec／Status 仍寫入 PostgreSQL。當 `Deployment` 指向 Kubernetes Runtime 時，Controller 才把 Registry 裡的 Desired State 轉成 kagent Resource。
 
-![Agent Registry 0.4.0 的 Catalog 與 Deployment controller 邊界。Author 或 CI 經 API 寫入 PostgreSQL 內的 Agent、Runtime 與 Deployment，controller 再把 Deployment materialize 成 kagent Agent。下方另列出本次已驗證的 catalog、reconciliation、image reference 更新與 undeploy，以及 Registry 本身不會自動補上的 authentication、Git promotion、簽章和 runtime policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r1/assets/diagrams/day-19/registry-reconciliation-trust-boundary.png)
+![Agent Registry 0.4.0 的 Catalog 與 Deployment controller 邊界。Author 或 CI 經 API 寫入 PostgreSQL 內的 Agent、Runtime 與 Deployment，controller 再把 Deployment materialize 成 kagent Agent。下方另列出本次已驗證的 catalog、reconciliation、image reference 更新與 undeploy，以及 Registry 本身不會自動補上的 authentication、Git promotion、簽章和 runtime policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-19/registry-reconciliation-trust-boundary.png)
 
 新版確實補上我當年缺少的 Declarative Reconciliation。Manifest 長得像 Kubernetes YAML，Git 卻不會因此自動成為 Source of Truth，`approved` 也不會直接變成經過簽章且不可變的 Promotion 結果。這兩層差異正是本次 Lab 要驗證的地方。
 
@@ -38,7 +38,7 @@ Kubernetes-style 很容易被誤讀成 CRD。[API Package](https://github.com/ag
 
 第一份 Manifest 註冊 `day19byo@approved`，Image Reference 是 `ithelp/day19-byo:1.0.0`。Deployment 使用相同 Name 與 Tag 指向它，再交給 kagent Runtime。啟動後，UI 能查到這筆 Agent，也能看到它進入 Deployment Path。
 
-![Agent Registry 0.4.0 實際 UI。Agents 頁面顯示 day19byo，tag 為 approved，描述已更新成相同 catalog tag 指向另一個 image reference。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r1/assets/screenshots/day-19/01-agent-registry-catalog.png)
+![Agent Registry 0.4.0 實際 UI。Agents 頁面顯示 day19byo，tag 為 approved，描述已更新成相同 catalog tag 指向另一個 image reference。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/01-agent-registry-catalog.png)
 
 Probe 接著對相同的 `day19byo@approved` 再 Apply 一次，只把 Image Reference 改成 `ithelp/day19-byo:1.0.1`。Registry 接受變更，既有 Deployment 被重新 Reconcile，kagent Agent 也跟著換成新的 Reference。
 
@@ -58,17 +58,17 @@ Lab 把結果分成三個正常能力與兩個已暴露風險：
 | Anonymous Catalog Write | RISK_EXPOSED | 預設安裝不是 Production Authorization Baseline |
 | 相同 `approved` Tag 更換 Image | RISK_EXPOSED | Tag 本身不是 Immutable Promotion Evidence |
 
-![Day 19 實際 Lab 輸出的 terminal card。Catalog 讀取、部署到 kagent 與 declarative undeploy 通過。匿名寫入及相同 approved tag 更換 image reference 被列為 RISK_EXPOSED。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r1/assets/screenshots/day-19/03-agent-registry-boundary-results.png)
+![Day 19 實際 Lab 輸出的 terminal card。Catalog 讀取、部署到 kagent 與 declarative undeploy 通過。匿名寫入及相同 approved tag 更換 image reference 被列為 RISK_EXPOSED。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/03-agent-registry-boundary-results.png)
 
 `RISK_EXPOSED` 不是測試壞掉。它表示 Lab 成功重現了不應被 `PASS` 掩蓋的採用風險。若只看 Controller Status 全綠，很容易把 Reconciliation 正常誤讀成信任鏈完整。
 
 最後一次 Apply 將 `Deployment.spec.desiredState` 改成 `undeployed`。kagent 中由 Registry 管理的 Agent 隨即移除，Registry UI 則保留 Catalog 與 Deployment Record。這比直接 Delete 更適合平台操作，因為 Desired State、Status 與 Runtime Teardown 仍走同一條控制路徑。
 
-![Agent Registry 0.4.0 實際 Deployed 頁面。完成 declarative undeploy 後，頁面顯示 0 resources running，同時保留 day19byo 的 deployment record。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r1/assets/screenshots/day-19/02-agent-registry-deployed.png)
+![Agent Registry 0.4.0 實際 Deployed 頁面。完成 declarative undeploy 後，頁面顯示 0 resources running，同時保留 day19byo 的 deployment record。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/02-agent-registry-deployed.png)
 
 ## 採用條件不能只看 Controller 功能
 
-[Lab 03 的 Day 19 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r1/labs/03-gateway-runtime/README.md) 可以用一條命令重跑 Catalog Apply、Deployment、相同 Tag 更新與 Undeploy：
+[Lab 03 的 Day 19 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/03-gateway-runtime/README.md) 可以用一條命令重跑 Catalog Apply、Deployment、相同 Tag 更新與 Undeploy：
 
 ```bash
 make lab-03-runtime-registry
@@ -76,7 +76,7 @@ make lab-03-runtime-registry
 
 重跑後，有些舊印象必須正式修正。`0.4.0` 的 Catalog、Kubernetes-style API、Controller Status 與 Undeploy 已經形成完整的 Declarative Path，不能再說 Agent Registry 只展示 Metadata。組織若缺少跨團隊的 Agent／MCP Catalog，也願意讓它成為正式 Control Plane，新版的價值比 `0.3.3` 時清楚很多。
 
-授權與 Artifact Trust 則尚未自動完成。我把結果整理成 [Agent Registry 採用盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r1/articles/day-19/registry-adoption-checklist.md)，正文留下六個選型問題：
+授權與 Artifact Trust 則尚未自動完成。我把結果整理成 [Agent Registry 採用盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-19/registry-adoption-checklist.md)，正文留下六個選型問題：
 
 | 採用問題 | 本次結果 | 還缺什麼 |
 | --- | --- | --- |
