@@ -10,7 +10,7 @@
 
 圖中四張卡片分別對應同一筆 Agent action 的目的、服務驗證、決策邏輯和執行環境。
 
-![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 說明誰提出或核准目的，Service 說明哪個服務在目前 credential hop 完成驗證，Agent 記錄選擇動作的 artifact，Workload 記錄實際持有 credential 的 runtime。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19-r1/assets/diagrams/day-07/four-identity-slots.png)
+![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 說明誰提出或核准目的，Service 說明哪個服務在目前 credential hop 完成驗證，Agent 記錄選擇動作的 artifact，Workload 記錄實際持有 credential 的 runtime。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20-r1/assets/diagrams/day-07/four-identity-slots.png)
 
 Human 說明目的從哪裡來。這筆 latency 調查是值班工程師提出的，能驗證的識別應該來自 issuer 指派的 `sub`。Email、display name 或 `sre-oncaller` 方便人閱讀，卻可能被修改，也不能取代原始 subject。[OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) 對 `sub` 的定義，就是 issuer 對 End-User 指派的識別值。
 
@@ -69,7 +69,7 @@ Human 委派與排程任務放在一起，才能看出四類責任不是一張�
 
 ## Audit 留完整路徑，Policy 只取必要欄位
 
-完整的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19-r1/articles/day-07/identity-flow-matrix.md) 可以直接拿去做 Agent／MCP design review。Review 從 credential hop 開始，逐段確認誰提出目的、哪個服務完成驗證、哪一版 Agent 做決定、哪個 Workload 實際送出 request，再為每個答案標明來源和驗證方式。現有 JWT 裡剛好有哪些 claims，不應反過來決定責任模型。
+完整的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-20-r1/articles/day-07/identity-flow-matrix.md) 可以直接拿去做 Agent／MCP design review。Review 從 credential hop 開始，逐段確認誰提出目的、哪個服務完成驗證、哪一版 Agent 做決定、哪個 Workload 實際送出 request，再為每個答案標明來源和驗證方式。現有 JWT 裡剛好有哪些 claims，不應反過來決定責任模型。
 
 Audit 適合保存完整路徑，因為事後重建需要知道責任如何轉手。Policy 的輸入可以小得多。M2M rate limit 主要關心 authenticated Service，高風險 Tool approval 可能同時看 Human、Agent 與 resource，MCP Server 則應驗證目前 credential 的 audience、scope、action 和 resource。
 
