@@ -1,239 +1,86 @@
-# Day 9｜Delegation Context 實作：把 Human、Agent 與 Workload 寫進同一條責任鏈
+# Day 9｜Delegation Context 實作：釐清 Gateway、Agent Runtime 與 Kubernetes 的責任邊界
 
-Day 8 的 Gateway 已經能驗證 issuer、audience、scope 與 policy claim，但那只能證明「這枚 Token 能不能送到這個 resource」。如果值班工程師請 SRE Copilot 查詢錯誤，Copilot 再把工作交給 Investigator Agent，最後由 Kubernetes workload 呼叫 `query_logs`，一枚 access token 還是說不完整中間發生了什麼。
+把 Cognito 的登入接到 Agent 入口後，我原本想在稽核紀錄留一個 `actor` 就好：Human flow 記使用者的 `sub`，無人值守的工作記 ServiceAccount。畫出實際呼叫路徑時，這個欄位馬上不夠用了。
 
-同一筆 Tool Call 走過不同觀測點時，各自會留下合理但不完整的答案：Gateway 看見 `sub=user/sre-oncaller`，Agent runtime 知道目前執行的是 `sre-investigator@v1`，Pod spec 則指定 `serviceAccountName=sre-agent`。三個值都可能是真的，卻不能互相取代。
+想像值班工程師請 SRE Copilot 查登入錯誤。Copilot 把工作交給 Investigator Agent，最後由 Kubernetes 裡的 runtime 呼叫 MCP `query_logs`。如果查詢範圍不對，事後只留下 `actor=user/sre-oncaller`，看起來像工程師親手下了查詢。只留下執行用的 ServiceAccount，又像一個沒有來由的排程工作。兩筆紀錄都可能是真的，卻都不足以回答「這次 Tool Call 是怎麼走到這裡的」。
 
-我在整理 Cognito Human SSO、M2M credential 與 Agent runtime 的 audit 欄位時，最難處理的是這段責任該怎麼留下來。只記 Human，Agent 如何選 Tool、改參數或繼續委派會消失。只記 ServiceAccount，所有請求又會像 workload 自己發起的。這不是 production incident 回放，而是實作期間形成的 actor-model 判斷。以下用合成身分與 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/labs/02-identity-boundary/README.md) 的 `delegation` command 固定資料結構。
+這是我在整理 Cognito Human 與 Agent runtime 的責任歸屬時，拿來檢查設計的合成情境。Day 8 已經處理 Gateway 如何驗眼前那枚 Token。這次要補的是 Token 沒打算回答的事：誰提出任務、Agent 之間如何轉交、哪個 runtime 最後送出 Tool Call。
 
-我先用七組測試把規則釘死：角色身分可以明確標成 `UNKNOWN`，需要存在的 slot 卻不能直接消失。
+## 同一筆查詢，在三個地方會有三種答案
+
+Gateway 看得到目前進站的 Token，能識別這次登入的值班工程師。Agent runtime 知道 Copilot 把任務交給哪版 Investigator，以及後者呼叫了什麼 Tool。Kubernetes 則知道程式以哪個 ServiceAccount 執行。單獨查任何一邊，都只能看見一段。
+
+![值班工程師請 Copilot 調查，Copilot 委派 Investigator，再由 Kubernetes workload 呼叫 query_logs。圖下方是同一次 Tool Call 保存的 actor chain、credential、target 與事件關聯欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-09/delegation-sequence.png)
+
+Delegation Context 是每筆 Tool Call 附帶的交接紀錄。它讓事後查詢能分清「誰要求」和「誰執行」，不用從 `actor`、Pod 名稱與幾段 log 猜一條故事。`trace_id` 可以幫忙找到同一條請求的事件，但它本身不會告訴我們每個角色在這次委派裡做了什麼。接收請求的系統仍要自己判斷能不能執行。
+
+在這個設計裡，入口先記下已驗的 Human，Copilot 交辦時留下自己的 Agent 版本，Investigator 接手後成為最後執行的 Agent。等 Tool Call 真要送出，才把當前憑證、執行它的 Workload 和 `query_logs` 目標一起寫進事件。這不是期待某個元件憑空知道整條鏈：上游若沒把委派資訊傳下來，Gateway 在最後一跳無法從 Token 的 `sub` 推回是哪版 Agent 接了工作。
+
+如果異常來自工程師指定的查詢，修法可能落在操作介面。Copilot 若把工作交錯了 Agent，就要查委派邏輯。同一種查詢若在 Investigator 換版後才出問題，則要回頭看 Agent artifact。只存一個 `actor`，值班的人連該先找誰一起查都容易判錯。
+
+## Delegation Context 怎麼記
+
+公開 Lab 的 [Human delegated 範例](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/assets/screenshots/day-09/evidence/demo-context-human-delegated.json) 將這次 `query_logs` 留成一筆事件。`actor_chain` 記下值班工程師、Copilot、Investigator 與執行的 Workload。`credential` 記當前觀測點所見的 issuer、subject、client、audience 與指紋，`target` 則記這次碰的是哪個 resource、哪個 action。`event_id`、時間與 `trace_id` 方便回頭找同一次動作。完整欄位與 schema 放在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-09/delegation-context-field-guide.md)，正文先拿它回答值班時最直接的問題。
+
+從 repo root 執行以下查詢，可以從同一筆紀錄取出任務來源、最後執行的 Agent 版本、Workload 與 Tool：
+
+```bash
+jq -r '[
+  .actor_chain.human.principal,
+  (.actor_chain.agents[] | select(.role == "EXECUTING") | (.principal + "@" + .version)),
+  .actor_chain.workload.principal,
+  .target.action
+] | @tsv' assets/screenshots/day-09/evidence/demo-context-human-delegated.json
+```
 
 ```text
-human_delegated          ACCEPT  ACCEPT
-scheduled_service        ACCEPT  ACCEPT
-a2a_unknown_workload     ACCEPT  ACCEPT
-missing_workload_slot    REJECT  REQUIRED_FIELD_MISSING
-human_null               REJECT  NULL_NOT_ALLOWED
-duplicate_agent_sequence REJECT  AGENT_SEQUENCE_INVALID
-actor_only               REJECT  REQUIRED_FIELD_MISSING
+user/sre-oncaller  agent/sre-investigator@v1  k8s://lab/identity-boundary/sa/sre-agent  query_logs
 ```
 
-`a2a_unknown_workload` 把 Human 與 Workload 寫成 `UNKNOWN`，validator 仍然接受，因為事件已經明說這條 flow 理應有這兩個角色，只是目前沒有足夠證據。`missing_workload_slot` 和 `human_null` 則被拒絕。欄位消失或塞入 `null` 時，事後無法判斷它代表角色不存在、上游沒傳，還是 parser 失敗。
+這行輸出比 `actor=user/sre-oncaller` 多回答了兩件事：最後是哪版 Agent 執行，以及請求從哪個 Workload 送出。`agents[]` 還保留完整的委派順序，Copilot 是 `DELEGATING`，Investigator 是 `EXECUTING`。同一筆事件的 `target` 能指出 MCP resource，而不只留一個 Tool 名稱。Context 保留了這些差異，卻不代表只憑這筆 JSON 就能判斷當時該不該允許查詢。
 
-![Delegation Context Lab 的實際 CLI 結果：三組完整或明確 UNKNOWN 的 context 被接受，缺 slot、null、重複 Agent sequence 與 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/screenshots/day-09/01-delegation-context-results.png)
+這份 v0.1 是本系列設計的 audit 資料契約，不是 OAuth、A2A 或 OpenTelemetry 的標準格式。它也沒有偷偷把 `client_id` 當成另一個已登入的 Service。公開 Human flow 的 `client_id=sre-console` 表示使用了哪個 OAuth client。因為沒有另一個獨立驗證過的 Service actor，`service` 欄位寫 `NOT_APPLICABLE`。
 
-> `Lab` 圖片由 `make lab-02-delegation` 的實際輸出重新排版。完整指令、JSON summary、JSONL event 與 hash 保存在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/assets/screenshots/day-09/evidence.md)，不用從圖片抄指令。
+## 排程任務與遺失的身分不能寫成同一種空值
 
-## 各觀測點只能看見責任鏈的一段
+值班工程師發起的任務有 Human，排程 Agent 則從頭到尾沒有互動式登入者。還有第三種麻煩狀況：上游 Agent 本來應該傳來 Human 或 Workload，資料卻在交接時沒帶到。若這些情況都記成 `null`，之後查詢時無法區分正常的無人工作和真的漏了欄位。
 
-這筆 Tool Call 的 actor chain 有四個 slot，其中 Service 在這條 Human flow 並不存在：
+Lab 對這幾種情況給出不同結果：
 
-```text
-Human      user/sre-oncaller
-Service    NOT_APPLICABLE
-Agent      sre-copilot@v1 → sre-investigator@v1
-Workload   ServiceAccount lab/sre-agent
-```
+| 情境 | Context 怎麼寫 | 結果 |
+| --- | --- | --- |
+| 排程 Agent | Human 是 `NOT_APPLICABLE`，這條路徑本來沒有登入者 | `ACCEPT` |
+| 上游沒有傳 Workload 身分 | Workload 是 `UNKNOWN`，並記下原因 | `ACCEPT` |
+| Human 委派卻漏掉整個 Workload 欄位 | 沒有值，也沒有說明缺口 | `REQUIRED_FIELD_MISSING` |
 
-`client_id=sre-console` 仍然值得保存，但它屬於 credential context，不是第二個 actor。這條 Human flow 使用 public OAuth client，沒有 client authentication 可以證明 Service principal，因此 `service` 明寫 `NOT_APPLICABLE`。到了 Client Credentials flow，通過 client authentication 的 M2M principal 才會填進這個 slot。
+`UNKNOWN` 仍能通過資料檢查，因為這筆紀錄明確表示資訊缺失。它不會因此取得執行權限，真正的 policy 完全可以拒絕缺少 Workload 身分的請求。把缺口明寫出來的好處，是值班時可以直接篩出哪些 Agent 路徑丟了交接資訊，而不是靠人看空白猜原因。
 
-這些位置來自不同來源，也有不同的可信程度。Agent display name 不能替代 Human principal，Pod spec 裡的 ServiceAccount 名稱也不能直接證明目前持有 credential 的 workload。若只剩一個 `actor` 欄位，最後寫進去的值通常取決於哪個元件剛好負責記 Log，而不是完整的責任鏈。
+## 用 Lab 檢查責任鏈有沒有寫完整
 
-`trace_id` 可以幫忙串事件，不能代替身分。W3C Trace Context 對 `trace-id` 的定義是識別一條 distributed trace，它沒有證明 Human、Agent 或 Workload 是誰。[W3C Trace Context](https://www.w3.org/TR/trace-context/#trace-id)
-
-我沒有再把四個值壓成一條更長的 actor 字串，而是讓 Delegation Context 分別保存 actor chain、credential、target 與 correlation 欄位。下圖先看 request 經過哪些角色，再看事件需要留下哪些證據：
-
-![值班工程師委派 SRE Copilot，Copilot 再委派 Investigator Agent，由 Kubernetes ServiceAccount workload 呼叫 MCP。Delegation Context 保存完整 actor chain、credential、target 與 correlation 欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-09/delegation-sequence.png)
-
-這份 Context 保存證據，不自動宣告委派合法。授權規則仍要判斷值班工程師能否使用這個 Agent、Agent 能否執行 `query_logs`，以及 workload 是否受信任。
-
-## Delegation Context v0.1
-
-完整 schema 放在 [`delegation-context-v0.1.schema.json`](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/labs/02-identity-boundary/src/identity_boundary/schemas/delegation-context-v0.1.schema.json)，使用 [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12)。下面是正向案例的主要結構：
-
-```json
-{
-  "schema_version": "delegation-context/v0.1",
-  "event_id": "evt-day09-human-delegated",
-  "trace_id": "0af7651916cd43dd8448eb211c80319c",
-  "timestamp": "2026-08-19T05:52:22Z",
-  "flow_kind": "HUMAN_DELEGATED",
-  "actor_chain": {
-    "human": {
-      "state": "PRESENT",
-      "principal": "user/sre-oncaller",
-      "evidence_source": "verified_access_token.sub",
-      "evidence_level": "VERIFIED"
-    },
-    "service": {
-      "state": "NOT_APPLICABLE",
-      "reason": "human delegated flow has no separate service actor"
-    },
-    "agents": [
-      {
-        "sequence": 0,
-        "principal": "agent/sre-copilot",
-        "version": "v1",
-        "role": "DELEGATING",
-        "evidence_source": "controlled_deployment_metadata",
-        "evidence_level": "ASSERTED"
-      },
-      {
-        "sequence": 1,
-        "principal": "agent/sre-investigator",
-        "version": "v1",
-        "role": "EXECUTING",
-        "evidence_source": "controlled_deployment_metadata",
-        "evidence_level": "ASSERTED"
-      }
-    ],
-    "workload": {
-      "state": "PRESENT",
-      "principal": "k8s://lab/identity-boundary/sa/sre-agent",
-      "evidence_source": "kubernetes.serviceaccount",
-      "evidence_level": "ASSERTED"
-    }
-  },
-  "credential": {
-    "type": "OAUTH_ACCESS_TOKEN",
-    "issuer": "https://issuer.lab.example/identity-boundary",
-    "subject": "user/sre-oncaller",
-    "client_id": "sre-console",
-    "audiences": ["mcp://lab/observability/query"],
-    "fingerprint": "sha256:5d333c1bd8075ace62ef09e3d8e9ca8153cbe6e4dc51c307ab0806f8fcbd3f3e"
-  },
-  "target": {
-    "resource": "mcp://lab/observability/query",
-    "action": "query_logs"
-  }
-}
-```
-
-這份 JSON 可以直接通過 v0.1 validator。Raw bearer token 不在 schema 允許的欄位中，Lab evidence 也會掃描 compact JWT 與 private-key marker。
-
-每個欄位的用途、查詢方式與升版規則整理在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-09/delegation-context-field-guide.md)。這份 v0.1 是本系列的 audit contract，不是我替 RFC 或 A2A 發明的新標準。
-
-## Evidence level 與身分可信度
-
-正向案例裡的 Human、Agent 與 Workload 都有值，但 `evidence_level` 故意沒有填成同一級。Service slot 則明確標成 `NOT_APPLICABLE`。
-
-`user/sre-oncaller` 來自 Day 8 已驗過的 access-token `sub`，所以標 `VERIFIED`。`sre-console` 是 access token 裡的 public OAuth `client_id`，保存在 credential context 方便查詢。這個值能說明哪個應用參與流程，不能拿來填補不存在的 Service actor。
-
-Agent 名稱與版本來自受控合成 deployment metadata，先標 `ASSERTED`。公開 Lab 的 ServiceAccount 名稱則取自合成 Pod spec，一樣只標 `ASSERTED`。Kubernetes 官方把 ServiceAccount 定義為 cluster 內的 non-human identity，Pod 可以使用其 credential 表明身分。不過，把 `serviceAccountName` 寫進事件，不等於這個 decision point 已驗過 bound token 或 workload attestation。[Kubernetes Service Accounts](https://kubernetes.io/docs/concepts/security/service-accounts/)
-
-如果未來 Gateway 驗證 bound ServiceAccount token、SPIFFE SVID 或 cloud workload identity，再把該觀測點的 workload evidence 升為 `VERIFIED`。先把欄位塗綠，之後反而很難找出治理缺口。
-
-## UNKNOWN 與 NOT_APPLICABLE 的 policy 差異
-
-排程 Agent 沒有人坐在瀏覽器前，Human slot 應該是：
-
-```json
-{
-  "state": "NOT_APPLICABLE",
-  "reason": "scheduled execution has no interactive human"
-}
-```
-
-A2A request 原本可能由 Human 啟動，但上游沒有傳遞這份 context，則要寫：
-
-```json
-{
-  "state": "UNKNOWN",
-  "reason": "upstream agent did not propagate human identity"
-}
-```
-
-兩者對 incident replay 與 policy 的影響不同。第一種不必追查漏資料，第二種可能要 fail closed、降權或要求補充證據。`null` 把這個差異抹掉了。
-
-A2A `1.0.0` 的 Agent Card 會宣告 server 接受哪些 authentication scheme，client 再透過該 scheme 的 out-of-band 流程取得 credential，並在每次 request 的 header 或 transport metadata 中送出。規格可以建立當下 A2A client 的 transport identity，卻不會替應用補出最初的 Human、前一個 Agent 與實際 Workload。[A2A Protocol Specification 1.0.0](https://a2a-protocol.org/v1.0.0/specification/#7-authentication-and-authorization)
-
-我在評估 kagent／BYO Agent 邊界時也遇到同一題。A2A 能處理 Agent discovery、呼叫與 task lifecycle。Runtime 沒有收集或轉送 Human、Agent 與 Workload evidence 時，平台仍然無法從協定名稱重建責任鏈。Day 17–18 會再用 Kubernetes Lab 驗證這條邊界。
-
-## Agent chain 的 schema 與 semantic validation
-
-JSON Schema 能限制 `agents` 是陣列、每個 item 有哪些欄位，還能要求全鏈只出現一個 `EXECUTING`。它不適合把「sequence 必須從 0 連續遞增，而且 executing Agent 一定位於最後」寫成一團難維護的條件。
-
-Lab 因此分兩層：
-
-```python
-errors = Draft202012Validator(schema).iter_errors(context)
-if errors:
-    reject("CONTEXT_SCHEMA_INVALID")
-
-sequences = [agent["sequence"] for agent in agents]
-if sequences != list(range(len(agents))):
-    reject("AGENT_SEQUENCE_INVALID")
-
-roles = [agent["role"] for agent in agents]
-if roles[-1] != "EXECUTING" or "EXECUTING" in roles[:-1]:
-    reject("AGENT_ROLE_INVALID")
-```
-
-Schema 管欄位與型別，semantic validator 管跨欄位語意。兩層都回穩定錯誤碼，audit 才能查「哪一種 context 一直壞掉」，不必解析一長串 validation message。
-
-## RFC 8693 act 與本地 Audit Context 的分工
-
-[RFC 8693 OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html#section-4.1) 已定義 JWT `act` claim：top-level subject 是被代表的一方，`act` 表示目前 actor，巢狀 `act` 還能保存之前的 delegation actors。
-
-`act` 很適合接住 Day 11 的 Token Exchange／OBO，但 Day 9 沒把整份 Context 硬塞成自訂 JWT claim，理由有三個：
-
-- RFC 的 `act` 處理 Token delegation identity。Agent artifact version、Kubernetes execution evidence、target action 與本地 evidence level 仍需要自己的 audit contract。
-- RFC 明確說 access-control policy 只應考慮 top-level claims 與目前 actor，較早的巢狀 actors 是資訊性歷史。Incident replay 需要歷史，不代表每一個 prior actor 都能直接參與現在的 ALLOW。
-- Context 可能來自多個觀測點。只有 access token 的欄位由 Token verifier 證明，其餘欄位要附各自的來源與 integrity protection。
-
-Token Exchange 可以產生可驗的 subject／current actor。Delegation Context 再把它與 Agent、Workload、target、trace 串進治理事件，兩者處理不同層次的資料。
-
-## 重現 Day 9 Delegation Lab
-
-開頭的七組結果都能從 repo root 重跑。三個正向案例涵蓋 Human 委派、無人排程，以及 Human／Workload evidence 暫時未知的 A2A flow。四個負向案例分別拿掉必要 slot、放入 `null`、破壞 Agent sequence，或退回單一 `actor` 字串。
-
-從 repo root 執行：
+[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/labs/02-identity-boundary/README.md) 使用合成的值班工程師、Agent 與 ServiceAccount，檢查這份資料契約是否能區分上述情境。在 repo root 執行：
 
 ```bash
 make lab-02-up
-make lab-02-check
 make lab-02-delegation
 ```
 
-預期最後看到：
+下面是最能看出差異的四組結果。其餘負向案例與原始紀錄在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/assets/screenshots/day-09/evidence.md)。
 
 ```text
-7/7 cases matched
-Raw credential persisted: no
+human_delegated        ACCEPT
+scheduled_service      ACCEPT
+a2a_unknown_workload   ACCEPT
+missing_workload_slot  REJECT  REQUIRED_FIELD_MISSING
 ```
 
-如果要把結果交給 CI 或其他工具處理，可以輸出 JSON：
+![Delegation Context Lab 的七組實際 CLI 結果。Human delegated、排程與明確標示未知身分的案例通過。缺欄位、null、Agent 順序錯誤及 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/screenshots/day-09/01-delegation-context-results.png)
 
-```bash
-uv run --directory labs/02-identity-boundary \
-  identity-boundary delegation \
-  --artifact-root labs/02-identity-boundary/artifacts \
-  --output json
-```
+Lab 跑的是 JSON Schema 與語意檢查：必填欄位、Agent 委派順序、哪些角色不存在、哪些角色只是暫時未知。這已經能擋掉 `actor` 以外什麼都沒留的紀錄，也能讓後續查詢使用同一套欄位。合成請求沒有真的穿過 Gateway 或 Kubernetes，`ACCEPT` 也不表示授權成功。
 
-每次 run 會寫入 schema snapshot、contexts、expected results、summary、manifest 與 JSONL events。Day 9 截圖保留的是 2026-08-26 完成這個 slice 時的輸出，當時共用 Lab 有 37 個測試。Day 10–12 後來繼續擴充同一套 Lab。2026-09-01 重新執行 `make lab-02-check` 為 72 tests passed、branch coverage 91.17%，`make lab-02-delegation` 仍是 7/7 matched，dependency audit 也維持通過。
+## 誰填的欄位，會改變這份紀錄的用途
 
-清理仍由 ownership marker 限制範圍：
+整理這份格式時，我最在意的不是 enum 要取什麼名字，而是誰能填它。Lab 的 Human 來自合成的已驗 Token，Agent 版本來自受控 metadata，Workload 來自合成 Pod 設定。這些欄位都能放進 Context，但不能因為排在同一個 JSON 裡，就當成經過同一種驗證。
 
-```bash
-make lab-02-down
-```
+例如 client 可以自己送出 `evidence_level="VERIFIED"`。Schema 會認得這個合法值，卻無法確認 Gateway 是否真的驗過 Token。若平台要用 Context 做正式稽核，Gateway 就必須掌握自己驗過的身分欄位。Agent 版本與 Workload 身分也要有明確的填寫來源，不能讓任意呼叫者替自己掛上可信標籤。這是平台在交接點要設計的寫入權限，公開 Lab 目前只做到資料格式。
 
-## 正式環境的 Context integrity 與 workload attestation
-
-v0.1 固定了資料形狀，沒有替 production 完成四件事：
-
-1. **Context integrity**：哪個元件有權新增或修改 Agent／Workload slot？跨 trust boundary 時要用簽章、受信任 envelope 或由 Gateway 重建，不能相信 client 自報。
-2. **Workload attestation**：deployment label 與 ServiceAccount 名稱不等於當次 workload 已驗證。要決定是否採 bound token、SPIFFE、cloud identity 或其他機制。
-3. **Propagation 與降級策略**：A2A／MCP hop 拿不到 Human 或 Workload context 時，是拒絕、縮小 scope，還是只允許低風險 Tool？`UNKNOWN` 讓 policy 有資料可判斷，不替 policy 做決定。
-4. **Privacy 與 retention**：Human principal、trace、Agent chain 與 credential fingerprint 都能被關聯。它們不該全部變成 metric label，也不能無期限保存。這筆帳會在 Day 22–23 詳算。
-
-## Token Passthrough 會破壞 Attribution
-
-Day 9 解決的是 audit data model。現在一筆事件能回答：值班工程師提出目的、Copilot 委派、Investigator 決定執行、哪個 workload 送出 request，以及它使用的 credential 對哪個 resource 有效。
-
-但資料結構畫得再完整，也擋不住一條常見捷徑：Copilot 收到值班工程師的 access token，原封不動傳給 Investigator，再一路送到 MCP Server。
-
-這樣每個 hop 都「有 Token」，整條 network path 卻只看得到值班工程師。Workload attribution 消失，resource audience 也可能被迫放寬。
-
-下一篇直接跑這條捷徑：Token passthrough 為什麼最好接，後來卻最難說清楚。
+Day 9 先解決的是「一次 Agent 動作該怎麼留下完整責任鏈」。但就算 Audit 能查到值班工程師、Investigator 與 Workload，下游 MCP 收到的仍可能只是值班工程師原來的 access token。Context 無法把那枚 Token 變成下游專用憑證。下一篇會讓同一枚 Token 走到兩個不同 resource，看看嚴格驗 audience 與直接放寬驗證各會留下什麼問題。

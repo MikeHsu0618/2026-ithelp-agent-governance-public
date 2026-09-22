@@ -1,94 +1,86 @@
 # Day 28｜從既有 LGTM 開始：Agent Governance 的導入順序
 
-[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-27/capability-ledger.md) 一共有十四列：六列 `KEEP`、兩列 `ADOPT`、四列 `DEFER`，還有兩列 `UNKNOWN`。只看狀態，最刺眼的 `UNKNOWN` 好像應該先處理。照產品架構圖走，又很容易先裝 kagent、Registry 或另一套 Identity Center。這兩種排序都沒有回答一件事：誰現在有能力把它接進值班、升級和事故流程？
+[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-27/capability-ledger.md) 同時留下 `KEEP`、`ADOPT`、`DEFER` 與 `UNKNOWN`。只看風險，最刺眼的 `UNKNOWN` 好像應該優先處理。照產品架構圖走，又很容易先裝 kagent、Registry 或另一套 Identity Center。這兩種排序都忽略同一件事：誰現在有能力把新增控制接進值班、升級和事故流程？
 
-我手上的現況其實很不平均。LGTM 已經是 production 核心，有人維護，也有既有查詢和告警習慣。Cognito 的 Human／M2M 路徑已經跑通。agentgateway 也有明確的 LLM／MCP／A2A traffic boundary。相較之下，統一 Identity Center、跨團隊 Agent control plane 與 Catalog 都還缺共同需求或長期 owner。
+我手上的現況並不平均。LGTM 是 Production 核心，有人維護，也有既有查詢和告警習慣。Cognito 的 Human／M2M 路徑已經跑通，agentgateway 也有明確的 LLM／MCP／A2A Traffic Boundary。相較之下，企業 Identity Center、跨團隊 Agent Control Plane 與 Catalog 仍缺共同需求或長期 Owner。
 
-這篇的導入圖改用幾個可以單獨判斷的 trigger：Tool 是否產生副作用、共同 traffic policy 是否開始漂移、Artifact 是否跨環境流動、團隊是否需要 self-service、成本是否進入正式分攤，以及證據是否有完整性或保存義務。每一個 trigger 都要同時找到 owner 與驗收證據。條件尚未成立時，現有架構就是可以被正式接受的停留點。
+導入順序因此不該是一座所有團隊都要爬完的成熟度階梯。這篇改用實際 Trigger 排序：Tool 是否產生副作用、共同 Policy 是否開始漂移、Artifact 是否跨環境流動、團隊是否需要 Self-service、成本是否進入正式分攤，以及證據是否有完整性義務。Trigger 尚未成立時，現有架構可以是正式停留點，不是「還沒做完」。
 
-![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。Workload identity 和 tamper-evident Audit 依個別需求開啟。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-28/adoption-path.png)
+![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。Workload identity 和 tamper-evident Audit 依個別需求開啟。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-28/adoption-path.png)
 
-## 最小可維運基線：Identity、Git-owned Runtime 與 LGTM
+## 最小可維運基線
 
-Human 使用者走 Authorization Code／PKCE，M2M 走 Client Credentials。Agent runtime、Tool callback 與 dependency 由應用 repository 維護。執行過程透過 Alloy 進入 Loki、Tempo 與 Prometheus／Mimir 相容介面。這三邊都有 owner，也都有前面 Lab 能重跑的 contract，因此可以組成判斷是否要再加控制的最小基線。
+Human 使用者走 Authorization Code／PKCE，M2M 走 Client Credentials。Agent Runtime、Tool Callback 與 Dependency 由應用 Repository 維護，執行過程透過 Alloy 進入 Loki、Tempo 與 Prometheus／Mimir 相容介面。Identity、Git-owned Runtime 與 LGTM 都有既有 Owner，也有前面 Lab 能重跑的 Contract，因此足以構成第一個停留點。
 
-這張圖不是目前 production topology 的快照。我們的環境已經出現跨 Runtime 的共同 traffic boundary，所以 agentgateway 也在現行架構裡，位置相當於圖中的第二個停留點。保留前一層，是讓還沒有共同 policy 問題的團隊不用照抄 Gateway。
+這張圖不是我們 Production Topology 的快照。我們已經遇到跨 Runtime 的共同 Traffic Boundary，所以 agentgateway 也在現行架構裡。圖仍保留前一層，是因為沒有共同 Policy 問題的團隊，不需要為了跟上系列進度照抄 Gateway。
 
-組織本來就會操作這套 LGTM，新的 Agent span、Tool event 或 Gateway metric 可以沿用既有 collector、retention、query 與 on-call 流程，所以我們先從這裡接。它先回答 latency、error、Tool outcome 和跨服務 correlation。Audit integrity 仍留在另一列，沒有被一張 Grafana Dashboard 自動補完。
+LGTM 先回答 Latency、Error、Tool Outcome 與跨服務 Correlation。Audit Integrity 留在另一項 Capability，沒有被 Grafana Dashboard 自動補完。讀者也可以把 LGTM 換成組織已經有 Owner 的 Telemetry Backend，判斷方式不變。
 
-這個起點只描述我們的現況。讀者可以換成自己已經有 owner 的 IdP、application repository 與 telemetry backend，判斷方式不變：先使用組織真的會維護的系統，再看下一個 trigger 是否值得增加控制面。
+如果 Agent 仍由單一團隊維護、只讀資料，也沒有共用 MCP／A2A 入口，架構可以停在這裡。前提是 Credential Scope 已受限、Tool Outcome 查得到，而且失敗有人接手。此時增加 Controller 和 CRD，還沒有對應的共享需求。
 
-如果 Agent 仍是單一團隊維護、只讀資料、沒有共用的 MCP／A2A 入口，基線可以先停在這裡。停留條件是 credential scope 已受限、Tool outcome 能查到，而且失敗有人接手。此時增加一組 controller 和 CRD，還沒有對應的共享需求。
+## Tool 產生副作用後的第一批控制
 
-## Tool 副作用決定第一批控制
+只要 Tool 開始能寫入、刪除、部署或批准，單純把 Trace 接進 LGTM 就不夠。執行前需要 Resource-aware Policy，執行後則要留下 Action ID、Policy Version、關鍵 Arguments、Effect Receipt，以及當時真正執行的 Commit 或 Artifact Digest。
 
-Day 1 的 `delete_demo_database` 是 no-op canary，但它示範了實際的判斷點。只要 Tool 開始能寫入、刪除、部署或批准，單純把 trace 接進 LGTM 已經不夠。執行前要有 resource-aware allowlist 或 policy，執行後要留下 action ID、policy version、Tool arguments、effect receipt，以及當時實際執行的 commit 或 Artifact digest。
+這批控制不必等集中式平台。只有一個 Runtime 時，ADK Callback、應用自己的 Authorization 與 Git Review 仍能形成清楚的 Enforcement Path。驗收要確認 `DENY` 發生在 Tool 執行前，事故回放也找得到當時 Decision。Day 27 因此先 `ADOPT` Immutable Digest、Promotion Evidence 與 Governance Event Contract，它們比 Catalog UI 更早進入基線。
 
-這批控制不必等集中式平台。只有一個 Runtime 時，ADK callback、應用自己的 authorization 與 Git review 仍可以形成清楚的 enforcement path。驗收時要確認 DENY 發生在 Tool 執行前，而且事故回放找得到當時的 decision。Day 27 因此把 immutable digest、promotion evidence 與 Governance Event contract 記成 `ADOPT`，它們比 Catalog UI 更早進入基線。
+Tool 若需要人工核准，HITL 也不能只看畫面上有 Approve／Reject。Production 還要驗 Approver Authentication、Authorization、Task／Context Continuity、Decision Receipt 與 Resume Callback。Day 18 只跑通相容的 Pause／Resume Contract，共享 HITL Control Plane 因此仍是 `DEFER`。
 
-當有副作用的 Tool 需要人工批准，HITL 也不能只看畫面上有 Approve／Reject。導入前還要驗 approver authentication、authorization、task／context continuity、decision receipt 與 resume callback。Day 18 只跑通相容的 pause／resume contract，這些 production 邊界尚未完成，所以共享 HITL control plane 仍是 `DEFER`。
+## Policy 漂移才是 Gateway Trigger
 
-## 共同 Policy 開始漂移，才需要 Agent Gateway
+單一 Runtime 可以在應用裡完成 Policy。兩個 Agents 共用同一個 LLM Provider，也不代表中間一定需要 Gateway。真正的 Trigger 是多個 Runtime 各自重複處理 JWT、Retry、Timeout、Provider Credential、Tool Policy 與 Telemetry，設定開始分岔，事故時又缺少共同 Observation Point。
 
-單一 Runtime 可以在應用內完成 policy。即使兩個 Agent 使用同一個 LLM provider，也不表示中間一定要多放一層 Gateway。Gateway 的 trigger 出現在多個 Runtime 各自重複處理 JWT、retry、timeout、provider credential、Tool policy 與 telemetry，設定開始分岔，事故時又缺少一致的 observation point。
+這時 agentgateway 才有清楚責任：收斂 LLM／MCP／A2A Traffic 的 Authentication、Routing、Policy 與 Telemetry。既有 Ingress 可以繼續處理 TLS、Host Routing 與 Access Log。Tool 的業務合法性、Agent Workflow，以及資料庫裡某筆 Resource 能不能修改，仍由 Runtime 或 Resource Server 決定。
 
-這些責任需要共同 checkpoint 時，我們才加入 agentgateway。它收斂 LLM／MCP／A2A traffic 的 authentication、routing、policy 與 telemetry，既有 Ingress 仍可保留 TLS、host routing 與 access log。Tool 的業務合法性、Agent workflow 和資料庫裡某筆資源能不能改，依然由 Runtime 或 Resource Server 判斷。
+Day 24 的成本也沿用這個 Boundary。Model Catalog 可以把 Token Usage 換成 Request-level Estimate，Validated Caller／Team Mapping 則提供 Showback 維度。正式 Chargeback 再補 Pricing Version、Provider Billing Attribution、Credit／Discount 與 Invoice Reconciliation。失敗 Request 沒有 Usage 時保持 `UNKNOWN`，不能為了報表完整而寫成零。
 
-Day 24 的成本資料也沿用這個 boundary。Model catalog 可以把 token usage 換成每筆請求的 cost，validated caller／team mapping 則提供 showback 維度。到了正式 chargeback，還要補 pricing version、Provider billing attribution、credit／discount 與 invoice reconciliation。失敗請求若沒有 usage，也要明確保留為 `UNKNOWN`。這一段提升的是成本證據的精度，仍然沿用原本的 Gateway 與 Observability boundary。
+BYO Agent、Git、單一 Gateway 與 LGTM 若已能穩定交付，架構可以停在這裡。Gateway 上線後，不會自動產生下一張 kagent 或 Registry 採用單。
 
-如果團隊使用 BYO Agent、Git 部署與單一 Gateway 已經能穩定交付，架構可以停在這裡。kagent 或 Registry 並不會因為 Gateway 已上線就成為下一個必選元件。
+## 不必綁成同一包的平台能力
 
-## Identity 只擴到目前能維護的範圍
+企業 Identity Center、Artifact Trust、Deployment Control Plane、Workload Identity 與 Audit Storage 各有自己的 Trigger，不該因為「要做 Agent Platform」就一起導入。
 
-Keycloak 曾在 Kubernetes 跑通 federated login、JWT role、agentgateway per-tool RBAC 與 MCP。技術驗收通過後，企業 Identity Center 的共同 owner 仍未成立，IT 團隊也暫時沒有足夠人力，把 joiner／mover／leaver、下游服務與 SaaS 入口一起接進來。最後的選擇是 Cognito。
+Keycloak 曾跑通 Federated Login、JWT Role、agentgateway Per-tool RBAC 與 MCP。技術驗收通過後，企業 Identity Center 的 Lifecycle Owner 和跨團隊整合範圍仍未成立，所以我們選擇 Cognito。Human／M2M 有明確需求與 Production 驗證，Cognito 因而是正式 `KEEP`，不是等待升級成自建 Identity Center 的過渡品。
 
-目前 Human／M2M 路徑有明確需求，也有 production 驗證，因此 Cognito 保持 `KEEP`。統一 Identity Center 要等企業 lifecycle scope、IT／Identity owner 和 migration 資源同時成立。在只有少數 AI 服務的階段，managed identity bridge 可以直接記成正式決策，不必假裝它只是過渡方案。
+Artifact 這一側，Agent Registry `0.4.0` 已能做 Catalog 與 Declarative Reconciliation，但相同 `approved` Tag 仍可指向不同 Image。導入順序應先補 Immutable Digest、Build Provenance、Promotion Record 與必要的 Admission Policy。這些控制能沿用 Git、OCI Registry 與現有交付流程，不必等 Catalog。
 
-Workload instance identity 則沒有被 Cognito Client Credentials 解掉。當政策需要分辨實際 Pod／Runtime instance、要移除長效 client secret，或 Audit 必須綁到 workload attestation 時，才重開 Kubernetes ServiceAccount、workload-bound Token 或 SPIFFE 類機制的選型。Day 27 保留 `UNKNOWN`，是因為目前沒有 live E2E 可以支持任何一種答案。
+kagent 的 Trigger 則是跨團隊 Self-service。當不同團隊重複處理 Deployment、Agent Card、Discovery 或 Approval 操作面，而且 Platform Team 願意維護 CRD、Controller、Upgrade 與 Exception Flow，kagent 才有清楚採用理由。Registry 另外需要 Catalog Owner、Git／Registry Write Path、Authn／Authz 與 Promotion Model。兩套 Control Planes 不必綁在同一張 Roadmap。
 
-## Artifact trust 早於 Catalog
+若這些需求都沒有出現，BYO Runtime + Git + agentgateway + LGTM 就是可以正式接受的目標架構，不需要預先留下「之後再平台化」的待辦。
 
-Agent Registry `0.4.0` 已能做 catalog 與 declarative reconciliation，Day 19 也實際跑過 deploy、更新與 undeploy。相同的 `approved` tag 仍可指向不同 image，說明 reconciliation 成功沒有回答 Artifact 是否不可變，也沒有留下 promotion 經誰批准的證據。
+## Workload、Audit 與成本的平行分支
 
-導入順序因此先放 immutable digest、build provenance、promotion record 和必要的 admission policy。這些控制可以沿用 Git、OCI registry 與現有交付流程，不必先建立 Agent Catalog。等跨團隊真的需要搜尋 Agent、宣告 desired state、統一部署與下架，再決定 Registry 是否值得成為新的 source of truth。
+有些能力不是下一個共同平台階段，而是由特定義務觸發：
 
-Git、immutable digest 與 promotion record 可以形成一條可驗收的 Artifact path。Catalog UI 要等搜尋、跨團隊 lifecycle 與 reconciliation 需求出現後再加。即使有了畫面，signature、promotion authorization 與 runtime admission 仍要另外驗證。
+| Trigger | 需要補的能力 | 在條件成立前的處理 |
+| --- | --- | --- |
+| 需要分辨實際 Pod／Runtime，或移除長效 Secret | Workload Identity、Credential Binding、Rotation | 保持 `UNKNOWN`，不把 Client Credentials 當 Instance Identity |
+| 事件需要不可否認、Legal Hold 或 Privileged Deletion Detection | Event-time Signature、Append-only／WORM Storage、Security／Risk Owner | LGTM 繼續負責 Operational Telemetry |
+| Showback／Chargeback 成為正式流程 | Pricing Version、Provider Attribution、Invoice Reconciliation | 保留 Gateway Estimate 與 `PARTIAL` Gap |
 
-## 跨團隊 Self-service 才重開平台評估
-
-kagent 已證明可以接手 deployment、discovery、Agent-as-Tool 入口，以及相容的 HITL pause／resume。它沒有接走 BYO Runtime 的 dependency、memory、filesystem、Tool policy 或 framework upgrade。A2A 能讓自寫 Agent 被其他 Agent 找到和呼叫，也不會自動把這些 runtime 責任搬進平台。
-
-當多個團隊開始重複處理 deployment、Agent Card、discovery 或 approval 操作面，而且 Platform Team 願意維護 CRD、controller、版本升級與例外流程，kagent 才有清楚的採用理由。Registry 的 trigger 另外判斷：它需要 catalog owner、Git／Registry write path、Authn／Authz 與 promotion model 一起成立。兩套 control plane 不必綁在同一張採購單上。
-
-若這些條件都沒有出現，正式目標就停在 BYO Runtime + Git + agentgateway + LGTM。這套組合有明確 owner、重驗路徑和事故證據，沒有必要預先排一個「之後再平台化」的待辦。
-
-## Audit 與 Workload Identity 是平行分支
-
-Operational telemetry 的 retention、sampling 和存取模型，是為除錯與維運設計。若事件必須支援不可否認、legal hold、privileged deletion detection 或長期證據保存，就要另外指定 Security／Risk owner，評估 event-time signature、hash chain、append-only 或 WORM storage。這條分支由保存義務觸發，與團隊有沒有採用 kagent、Registry 無關。
-
-Workload identity 處理 instance attribution、credential binding 與 rotation。當 per-instance policy 或 secretless authentication 成為需求，就另外選定 trust domain 與驗證路徑。證據還沒跑出來以前，Capability Ledger 繼續寫 `UNKNOWN`，不會因為 Agent 數量增加就自行變成 `ADOPT`。
+Workload Identity 是否採用 Kubernetes ServiceAccount、Workload-bound Token 或 SPIFFE，要等 Trust Domain 與 Live E2E 確定。Tamper-evident Audit 也不會因為組織導入 kagent 或 Registry 就自然成立。這些分支可以和 Control Plane 評估平行進行。
 
 ## Trigger、控制與停留條件
 
-下面是正文的精簡版。完整表格另放在 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-28/adoption-trigger-matrix.md)，可以直接換成自己的 owner 與 evidence。
+完整版本放在 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-28/adoption-trigger-matrix.md)。正文保留最常見的八種情境：
 
 | Trigger | 先補的控制 | 合理停留點 |
-|---|---|---|
-| 單一團隊、只讀 Agent | Human／M2M identity、Tool outcome、LGTM correlation | Git-owned BYO Runtime + LGTM |
-| Tool 開始有副作用 | Action contract、resource policy、immutable Artifact、Governance Event | 單一 Runtime 的 callback／authorization |
-| 多個 Runtime 的 auth、policy 或 telemetry 開始重複／漂移 | agentgateway 的 auth、route、policy、telemetry | BYO Runtime + Git + Gateway + LGTM |
-| Showback／chargeback 成為正式需求 | Validated caller／team、pricing version、Provider billing attribution、invoice reconciliation | 尚未正式分攤時，保留 Gateway cost + `PARTIAL` gap |
-| 跨團隊 deployment／discovery／HITL | 分開評估 kagent 與 approval contract | 沒有 owner 就維持既有交付方式 |
-| 跨團隊 catalog／reconciliation | Source of truth、promotion、Registry authz | Git + immutable OCI digest |
-| Per-instance attribution 或 secretless auth | Workload identity 與 credential binding | 維持 `UNKNOWN`，直到 live E2E 成立 |
-| 完整性或長期保存義務 | Tamper-evident Audit event 與 storage | LGTM 繼續負責 operational telemetry |
+| --- | --- | --- |
+| 單一團隊、只讀 Agent | Human／M2M Identity、Tool Outcome、LGTM Correlation | Git-owned BYO Runtime + LGTM |
+| Tool 開始有副作用 | Action Contract、Resource Policy、Immutable Artifact、Governance Event | 單一 Runtime Callback／Authorization |
+| 多個 Runtime 的 Policy 或 Telemetry 開始漂移 | agentgateway 的 Auth、Route、Policy、Telemetry | BYO Runtime + Git + Gateway + LGTM |
+| 正式成本分攤 | Validated Team、Pricing Version、Provider Billing | Gateway Estimate 保留 `PARTIAL` Gap |
+| 跨團隊 Deployment／Discovery／HITL | 分開評估 kagent 與 Approval Contract | 沒有 Owner 就維持既有交付方式 |
+| 跨團隊 Catalog／Reconciliation | Source of Truth、Promotion、Registry Authz | Git + Immutable OCI Digest |
+| Per-instance Attribution／Secretless Auth | Workload Identity | Live E2E 成立前保持 `UNKNOWN` |
+| 完整性或長期保存義務 | Tamper-evident Audit Event 與 Storage | LGTM 負責 Operational Telemetry |
 
-這張表不會替所有團隊產生同一份 roadmap。它只要求每一次擴張都能回答三件事：什麼事件觸發新增控制、誰接手長期維運，以及什麼證據能讓團隊安全地停在這一層。
+這張表不會替每個團隊產生相同 Roadmap。它要求每次擴張都回答：哪個事件觸發新增控制、誰接手長期維運、用什麼 Evidence 驗收，以及哪些條件允許架構停在這一層。
 
-## 共同控制之後的責任
+## 共同控制之後的責任交接
 
-照這條路徑導入，共同控制會由不同角色接手。IT／Identity 維護使用者與服務的 lifecycle，Platform Team 提供 traffic checkpoint、telemetry pipeline、Artifact promotion 或 deployment control plane，Application Team 則保留 Tool 與 Resource 的業務規則。把這些責任都寫成「平台負責」，只會在出事時重新拆一次。
+控制集中後，Owner 仍然分散。IT／Identity 維護 Human 與 Service Lifecycle，Platform Team 提供 Traffic Checkpoint、Telemetry Pipeline、Artifact Promotion 或 Deployment Control Plane，Application Team 保留 Tool 與 Resource 的業務規則。把它們全部寫成「平台負責」，出事時仍得重新拆一次。
 
-以一筆會改寫 production 狀態的 action 為例，IdP 證明呼叫者，Gateway 驗證 credential、route 與共用 policy，Runtime 判斷目標資源和參數，Tool 執行後再把 operational receipt 送進 LGTM。整條技術路徑都可能正常運作，Business Owner 仍要確認這個動作是否符合業務意圖，並接受批准後留下的 residual risk。
+一筆會改寫 Production 狀態的 Action 可能經過完全正常的技術路徑：IdP 證明 Caller，Gateway 驗證 Credential、Route 與共同 Policy，Runtime 判斷目標 Resource 和 Parameters，Tool 執行後將 Receipt 送進 LGTM。Business Owner 仍要確認這個動作符合業務意圖，並接受核准後留下的 Residual Risk。
 
-Day 29 會沿用同一筆有副作用的 action，整理成 Production Responsibility Contract。下一個問題不再是要不要多裝一套平台，而是 credential、policy、Tool decision 與 residual risk 在 IT／Identity、Platform、Application、Security 和 Business Owner 之間怎麼交接。
+Day 29 會沿用這筆有副作用的 Action，把 Credential、Policy、Tool Decision、Approval 與 Residual Risk 整理成 Production Responsibility Contract。下一個問題不再是多裝哪套平台，而是每一段控制由誰決定、誰執行、誰對最後結果負責。

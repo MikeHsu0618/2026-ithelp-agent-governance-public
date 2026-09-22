@@ -1,86 +1,91 @@
 # Day 29｜Agent 做錯事，責任算誰的：平台控制、業務決策與 HITL 核准
 
-Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可信 Log 讀到操作指令後提出 Tool Call，open policy 按照設定回了 `ALLOW`，Google ADK 也正常把參數交給 Tool。公開 Lab 的 Tool 不會碰資料庫，只留下一筆 `CANARY_TRIGGERED` receipt。換成真的 Resource Server，同樣的判斷就可能改到 production 資料。
+Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可信 Log 讀到操作指令，Open Policy 按設定回 `ALLOW`，Google ADK 也把參數交給 Tool。公開 Lab 的 Tool 只寫下一筆 `CANARY_TRIGGERED`，不會碰資料庫。換成真實 Resource Server，同樣的判斷就可能改到 Production 資料。
 
-當時存在的控制都照規則運作，規則本身卻沒有回答「不可信 Log 能不能要求這個動作」。這才是這篇要處理的責任缺口。控制由誰維護、規則由誰決定，以及誰有權接受執行後的影響，不能全部塞給同一個 Platform owner。
+當時存在的控制都照規則運作，規則本身卻沒有回答「不可信 Log 能不能要求這個動作」。這才是責任缺口。維護控制的人、決定規則的人，以及有權接受執行後影響的人，不能全部塞進同一個 Platform Owner。
 
-[Day 26](https://ithelp.ithome.com.tw/articles/10412919) 回放這筆 action 時，Tool、resource、policy decision 與 canary result 都找得回來。Principal、delegation、Agent Artifact、approval，以及原始紀錄是否完整，則只能寫 `UNKNOWN`。即使把這些欄位全部補齊，Identity 仍只證明誰來了，Gateway 只證明哪版規則放行，Runtime 只證明送了哪些參數。它們無法替目標服務確認這張工單、這個帳戶或這次 deployment 此刻是否應該被修改。
+Day 26 回放這筆 Action 時，Tool、Resource、Policy Decision 與 Canary Result 找得回來，Principal、Delegation、Agent Artifact、Approval 和原始紀錄完整性仍是 `UNKNOWN`。即使把所有欄位補齊，Identity 也只證明誰來了，Gateway 只證明哪版共同規則放行，Runtime 只證明送了哪些參數。目標服務仍要判斷這張工單、這個帳戶或這次 Deployment 此刻能不能修改。
 
-Day 27 的 [Capability Ledger](https://ithelp.ithome.com.tw/articles/10413859) 把每項能力的來源、證據和維運 owner 分開，[Day 28](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-28/article.md) 再依既有 LGTM、Identity 與 Gateway 排出導入順序。共同控制交給平台之後，單次 action 的業務決策並沒有跟著移過去。這一篇會沿同一筆 action 製作 Production Responsibility Contract，記下誰維護控制、誰能做決定、下一站要收到什麼證據，以及哪種差異必須升級處理。
+這篇沿同一筆 Action 建立 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-29/production-responsibility-contract.md)，把 Control Owner、Decision Owner、Handoff Evidence、Escalation 與 Residual Risk 放回執行順序裡。
 
-![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-29/responsibility-handoff.png)
+![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-29/responsibility-handoff.png)
 
-## 三種「通過」不能混成一個綠燈
+## 三種通過代表不同判斷
 
-一筆 action 進入 Tool 以前，至少會遇到三種性質不同的判斷。第一種是 credential evidence：Token 是否由可信 issuer 簽發、audience 是否正確、是否過期，這些問題由 Identity 與驗證端回答。第二種是 technical enforcement：route、shared policy、resource allowlist、argument constraint 是否允許，控制可能落在 Gateway、Runtime callback 或 Resource Server。第三種才是 business intent：這次變更是否有正確工單、是否落在允許時段、目標資源和影響範圍是否符合當下需求。
+Action 進入 Tool 前，至少有三種不同的綠燈：
 
-前兩種判斷可以由程式穩定執行。第三種必須先由目標服務的 owner 把規則說清楚，某些高風險動作還需要具名的人在完整 context 下批准。把三者壓成一個 `authorized=true`，事故發生後只會看到所有現有檢查都通過，卻找不到哪個角色原本應該拒絕這次變更。
+1. **Credential Evidence**：Issuer、Audience、Expiry 與 Signature 是否正確。
+2. **Technical Enforcement**：Route、Shared Policy、Resource Allowlist 與 Argument Constraint 是否允許。
+3. **Business Intent**：工單、時段、目標 Resource 與影響範圍是否符合當下需求。
 
-Day 1 的 policy engine 沒有故障，它只是執行了一條沒有 resource 與 argument constraint 的 open policy。Tool／resource 層少了 authorization，規則也沒有 decision owner。若這兩個 owner 沒有分開，事後很容易把 policy 內容也算在維護 Gateway 的 Platform Team 頭上。
+前兩種可以由程式穩定執行，第三種要先由目標服務 Owner 定義規則。高風險 Action 還需要具名的人在完整 Context 下核准。若把三者壓成 `authorized=true`，事故發生時只會看到所有檢查都通過，卻不知道哪個角色原本應該拒絕。
 
-## 沿著同一筆 action 交接責任
+Day 1 的 Policy Engine 沒有故障，它忠實執行缺少 Resource 與 Argument Constraints 的 Open Policy。Platform Team 可以維護 Gateway 和 Policy Engine，不能自動取得 `delete_demo_database` 業務規則的決定權。
 
-前面系列用過的角色可以整理成五組。Business Owner 在這裡指有權替目標 resource 或業務流程批准變更、判讀影響並接受剩餘風險的角色。修改服務或資料時可能是 service owner 或 data owner，deployment 則可能交給指定的 change owner。
+## 一筆 Action 的責任交接
 
-| Action stage | Control owner | Decision owner | 必須交給下一站的 evidence |
-|---|---|---|---|
-| Human／Service admission | IT／Identity | IT／Identity 決定 principal／client lifecycle | issuer、audience、subject／client、assurance、expiry、token fingerprint |
-| Gateway／shared guardrail | Platform／SRE | Security／Risk 核准最低共用 guardrail | route、policy ID／version／decision、reason、request ID |
-| Tool／Resource authorization | Agent Application | Resource／Business Owner 定義可接受範圍，Application owner 將規則落成 policy | Tool、normalized arguments、resource、Artifact digest、application decision |
-| High-impact approval | Platform 傳遞 pause／resume，Application 綁定 action context | Business Owner 決定這次 action 是否符合業務意圖 | approver principal／authorization、action digest、expiry、decision、resume ID |
-| Effect／incident evidence | Application／Resource Server 產生 receipt，Platform 維護 correlation | Security／Risk 決定事件與保存要求，Business Owner 判讀 impact | effect receipt、resource revision、trace ID、Governance Event、retention class |
+Business Owner 在這裡不是抽象的高階主管，而是有權替目標 Resource 或流程批准變更、判讀影響並接受剩餘風險的人。修改服務時可能是 Service Owner，資料操作可能是 Data Owner，Deployment 則交給指定的 Change Owner。
 
-Identity 能確認 `user/sre-oncaller` 的 credential，不代表這個人可以刪除某個 production resource。Gateway 可以檢查 JWT、route 與共同 policy，不知道工單裡批准的是 staging 還是 production。Application 負責把 resource 規則落成可執行的 authorization，規則的可接受範圍仍要由目標 resource 的 owner 決定。這些判斷需要接力，不能靠同一個 `owner=platform` 欄位一次帶過。
+| Action Stage | Control Owner | Decision Owner | 交給下一站的 Evidence |
+| --- | --- | --- | --- |
+| Human／Service Admission | IT／Identity | IT／Identity 決定 Principal／Client Lifecycle | Issuer、Audience、Subject／Client、Assurance、Expiry |
+| Gateway Shared Guardrail | Platform／SRE | Security／Risk 核准最低共用 Guardrail | Route、Policy ID／Version／Decision、Reason、Request ID |
+| Tool／Resource Authorization | Agent Application | Resource／Business Owner 定義可接受範圍 | Tool、Normalized Arguments、Resource、Artifact Digest、Application Decision |
+| High-impact Approval | Platform 傳遞 Pause／Resume，Application 綁 Action Context | Business Owner 決定這次 Action 是否符合意圖 | Approver Principal／Authorization、Action Digest、Expiry、Decision、Resume ID |
+| Effect／Incident Evidence | Application／Resource Server 產生 Receipt，Platform 維護 Correlation | Security／Risk 決定保存要求，Business Owner 判讀 Impact | Effect Receipt、Resource Revision、Trace ID、Governance Event、Retention Class |
 
-完整的 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-29/production-responsibility-contract.md) 會先固定 request origin、business intent、Tool、resource、arguments digest、Artifact、policy 與有效期，再填 control owner、decision owner、handoff evidence、escalation 和 residual risk。正文按 action 發生的順序走，RACI 只放在附錄，因為單看 `R`、`A`、`C`、`I` 看不出 Token、policy decision、approval 和 receipt 是否真的屬於同一筆 action。
+Identity 確認 `user/sre-oncaller` 的 Credential，不代表這個 Principal 可以修改某個 Production Resource。Gateway 知道 JWT、Route 和共同 Policy，不知道工單批准的是 Staging 還是 Production。Application 負責把 Resource 規則落成 Authorization，規則的可接受範圍仍由 Resource Owner 決定。
+
+完整 Contract 會固定 Request Origin、Business Intent、Tool、Resource、Arguments Digest、Artifact、Policy 與有效期，再填 Owner、Handoff Evidence、Escalation 和 Residual Risk。RACI 留在附錄，因為單看 `R`、`A`、`C`、`I`，看不出 Token、Policy Decision、Approval 和 Receipt 是否屬於同一筆 Action。
 
 ## Control Owner 與 Decision Owner
 
-Keycloak 的技術鏈跑通後，企業 Identity Center 仍沒有進入我們的正式方案。IT 團隊當時缺少共同承擔 onboarding、offboarding、下游服務與 SaaS 入口的人力和整合共識。PoC owner 可以安裝 Operator、設定 realm 與 client，卻不能代替 IT 決定整個組織的 identity lifecycle。最後選 Cognito，是因為當時能長期承擔的範圍只有 Human／M2M path。
+這兩種 Owner 的差別，在前面的選型已經出現過。Keycloak 技術鏈跑通，不代表 PoC Owner 有權決定整個企業的 Onboarding、Offboarding、下游服務與 SaaS Lifecycle。最後選 Cognito，是因為當時能長期承擔的範圍只有 Human／M2M Path。
 
-相同的差異也出現在 agentgateway。Platform／SRE 要讓 JWT validation、route、共同 policy、telemetry 和升級後重驗都能工作，這是 control ownership。`delete_demo_database` 可以接受哪些 database、ticket 與 arguments，則由目標 resource 的 owner 決定，再交給 Agent Application 落成 policy。若 action 還需要人工批准，Business Owner 也要確認目標、時段與最大影響範圍。
+agentgateway 也一樣。Platform／SRE 負責 JWT Validation、Route、Shared Policy、Telemetry 與升級重驗。`delete_demo_database` 可以接受哪些 Database、Ticket 與 Arguments，則由 Resource Owner 決定，再交給 Agent Application 實作。若 Action 需要人工批准，Business Owner 還要確認目標、時段與最大影響範圍。
 
-Control owner 和 decision owner 有時會落在同一團隊，契約仍要分欄。分開以後，升級時找操作控制的人，修改規則時找有權改變可接受範圍的人，不會再用一句「平台已經處理」跳過中間的責任。
+Control Owner 和 Decision Owner 有時落在同一團隊，Contract 仍應分欄。升級時找操作控制的人，修改規則時找有權改變接受範圍的人，不再用一句「平台已處理」跳過中間責任。
 
-## HITL 的 Approve 必須綁住原本那筆 action
+## HITL Approval 必須綁定原始 Action
 
-[Day 18](https://ithelp.ithome.com.tw/articles/10409155) 的 BYO Agent 已跑過 pause／resume。Approve 與 Reject 都沿用同一組 task ID 和 context ID，Reject 不會執行 Tool。這證明 workflow contract 可以互通，但該次 Lab 沒有驗 approver authentication 與 authorization，因此不能把 `PASS` 延伸成 production approval 已完成。
+Day 18 的 BYO Agent 已跑過 Pause／Resume。Approve 與 Reject 沿用相同 Task ID 和 Context ID，Reject 不會執行 Tool。這證明 Workflow Contract 能互通，沒有驗證 Approver Authentication 與 Authorization，因此不能把那次 `PASS` 寫成 Production Approval 已完成。
 
-一份可用的批准證據，至少要綁住 approver principal、這個人是否有權批准、Tool、resource、normalized arguments、Agent Artifact、policy version、到期時間與一次性的 resume ID。任何一項在批准後改變，原 decision 都不該繼續沿用。Platform 可以提供 pause／resume、UI 和 receipt transport，Application 必須保證 action context 沒被替換，Business Owner 才是那個決定「這一次可以做」的人。
+一份可用的 Approval Evidence 至少要綁住：
 
-所以我沒有把 HITL 收斂成 Agent Platform 的一個功能勾選。畫面上出現 Approve 按鈕，只能證明有人可以點。責任契約還得證明誰點、憑什麼能點，以及按下去後執行的仍是剛才看過的 action。
+- Approver Principal 及其批准權限。
+- Tool、Resource 與 Normalized Arguments。
+- Agent Artifact 與 Policy Version。
+- Action Digest、Expiry 與一次性 Resume ID。
 
-## LGTM 保存操作證據，Audit 另有完整性責任
+批准後只要其中一項改變，原 Decision 就不應繼續沿用。Platform 可以提供 Pause／Resume、UI 與 Receipt Transport，Application 要保證 Action Context 沒被替換，Business Owner 才負責決定「這一次可以做」。Approve 按鈕只證明有人能點，不能證明誰點、憑什麼能點，以及執行的仍是剛才看過的 Action。
 
-既有 LGTM 是這個系列最穩定的核心。Gateway、Runtime 與 MCP 的 trace、log、metric 都能沿同一個 action 查詢，對 on-call、效能問題與事故重建很實用。Production Responsibility Contract 因此把 operational telemetry 交給 Platform／SRE 維護，Application 與 Resource Server 負責產生正確的 Tool result 和 effect receipt。
+## Operational Telemetry 與 Audit Responsibility
 
-Security／Risk 要回答的是另一組問題：哪些事件必須保存、保存多久、誰能讀或刪、是否需要 event-time signature、append-only／WORM、legal hold 或 privileged deletion detection。Day 26 沒有驗證這些機制，Day 27 也把 Tamper-evident Audit 留在 `UNKNOWN`。把 Loki retention 拉長，仍不能直接把 operational log 升格成不可否認的 Audit record。
+既有 LGTM 可以沿同一個 Action 查 Gateway、Runtime 與 MCP 的 Trace、Log 和 Metrics，適合 On-call、效能問題與事故回放。Responsibility Contract 因此把 Operational Telemetry 交給 Platform／SRE 維護，Application 與 Resource Server 則產生正確的 Tool Result 和 Effect Receipt。
 
-兩條路徑可以共用 action ID、trace ID 和 Governance Event schema，保存目的與證據等級仍要分開。這樣事故發生時，SRE 不需要替法遵目的作決定，Security／Risk 也不會把每一筆高基數 telemetry 都要求成永久 Audit。
+Security／Risk 要決定哪些 Events 必須保存、保存多久、誰能讀或刪，以及是否需要 Event-time Signature、Append-only／WORM、Legal Hold 或 Privileged Deletion Detection。把 Loki Retention 拉長，不會自動把 Operational Log 升格成不可否認的 Audit Record。
 
-## Risk Register 只收已經看見的缺口
+兩條路徑可以共用 Action ID、Trace ID 與 Governance Event Schema，保存目的和證據等級仍然分開。SRE 不必替法遵目的作決定，Security／Risk 也不需要把每一筆高基數 Telemetry 永久保存。
 
-整理責任時很容易順手列出「模型幻覺、法規、資安、擴充性」等泛稱風險。這種清單沒有 evidence、owner 或關閉條件，很難拿來決定是否上線。目前的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-29/residual-risk-register.md) 有六項，每一項都能回到前面的 Lab 或決策紀錄：
+## Residual Risk 只收有證據的缺口
 
-| Residual risk | 證據來源 | 目前處理 |
-|---|---|---|
-| 不可信內容誘導高風險 Tool Call | Day 1／3 | Tool／resource authorization，不能只靠 keyword inspection |
-| Workload instance attribution 不足 | Day 7／27 | 維持 `UNKNOWN`，出現 per-instance policy 時重驗 |
-| 實際 Agent Artifact 無法證明 | Day 19／26 | 採 immutable digest、promotion evidence 與 admission |
-| HITL approver authn／authz 未驗 | Day 18／26 | 集中式 production HITL 維持 `DEFER` |
-| Operational telemetry 沒有 tamper evidence | Day 26／27 | Governance Event 先 `ADOPT`，Audit storage 保持 `UNKNOWN` |
-| 共同 policy 不懂業務意圖 | Day 1／28 | Resource／Business Owner 定義範圍，Application 落成 authorization |
+責任審查若只列「模型幻覺、資安、法規、擴充性」，很難決定是否上線。本文的 [Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-29/residual-risk-register.md) 只收前文已經出現的六項缺口：
 
-Risk owner 負責追蹤與降低風險，risk acceptance authority 則有權決定剩餘風險能否進 production。兩個角色不能再塞進同一欄。接受者要知道現有控制能證明什麼、缺少什麼，以及什麼事件會讓決策失效。Tool contract、Identity flow、policy schema、Artifact promotion 或 evidence backend 改變後，都要依對應條件重驗。
+| Residual Risk | Evidence | 目前處理 |
+| --- | --- | --- |
+| 不可信內容誘導高風險 Tool | Day 1／3 | Tool／Resource Authorization，不能只靠 Keyword Inspection |
+| Workload Instance Attribution 不足 | Day 7／27 | 維持 `UNKNOWN`，出現 Per-instance Policy 時重驗 |
+| Agent Artifact 無法證明 | Day 19／26 | Immutable Digest、Promotion Evidence、Admission |
+| Approver Authn／Authz 未驗 | Day 18／26 | 集中式 Production HITL 維持 `DEFER` |
+| Telemetry 沒有 Tamper Evidence | Day 26／27 | Governance Event 先 `ADOPT`，Audit Storage 保持 `UNKNOWN` |
+| Shared Policy 不懂業務意圖 | Day 1／28 | Resource Owner 定義範圍，Application 實作 Authorization |
 
-## NIST AI RMF 放在組織層
+Risk Owner 負責追蹤和降低風險，Acceptance Authority 才有權決定剩餘風險能否進 Production。接受者要知道現有控制能證明什麼、缺少什麼，以及哪些改變會讓決策失效。
 
-[NIST AI RMF 1.0 Core](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/) 的 Govern function 要求組織記錄清楚的角色、責任與溝通路徑，也把領導層對 AI system 風險決策的責任列進治理工作。[Govern Playbook](https://airc.nist.gov/airmf-resources/playbook/govern/) 還涵蓋持續監控、人機配置、事件與下架。這些是組織與 lifecycle 層的治理工作，不是一張 action contract 能取代的範圍。
+[NIST AI RMF 1.0](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/) 的 Govern Function 也要求組織記錄角色、責任與溝通路徑，並由領導層承擔 AI System 的風險決策。這是組織與 Lifecycle 層的工作，本文 Contract 只處理一筆 Action 的責任交接。Framework 不能替我們補出缺失的 Principal、Approval 或 Artifact Evidence，Action Contract 也不能取代完整法遵與企業治理。
 
-Production Responsibility Contract 只處理一筆 action 如何跨過控制與組織邊界。NIST 文件不能替我們補出 Day 26 缺失的 principal、approval 和 Artifact evidence，這份契約也不處理完整的法遵、模型風險或企業治理。兩者尺度不同，交集只有角色、決策責任與持續追蹤。
+## 帶進設計審查的方式
 
-## 把責任契約帶進設計審查
+這份 Contract 不是另一套 Control Plane。設計審查時先填 Control Owner 與 Decision Owner，上線前用同一筆 Fixture 驗證 Handoff Evidence，並演練 Policy Missing、Approval Mismatch 與 Effect Receipt Missing。事故發生後再拿 Contract 對照 Timeline，缺少的欄位保持 `UNKNOWN`，不靠事後口述補成已驗證紀錄。
 
-我不打算把這份契約再做成一套 control plane。設計審查時填好 control owner 和 decision owner。上線前用同一筆 fixture 檢查 evidence 能否綁回 action，並演練 policy missing、approval mismatch 與 effect receipt missing。事故發生後再拿它對照 timeline，缺欄位就保留 `UNKNOWN`，不靠事後口述補成已驗證紀錄。
-
-最後一天會把這些責任放回 Reference Architecture。Day 30 不會再貼一次 Capability Ledger 或 RACI，而是沿 Day 1 的同一筆 action，把 request path、identity／policy context、Artifact source，以及 telemetry／audit path 畫在同一張可供設計審查的圖上。Principal、approval 或 Audit integrity 若仍缺證據，圖上就直接標 `UNKNOWN`。
+最後一天會把責任放回 Reference Architecture。Day 30 不再重貼 Capability Ledger 或 RACI，而是沿 Day 1 的同一筆 Action，將 Request Path、Identity／Policy Context、Artifact Source，以及 Telemetry／Audit Path 放進同一張設計審查圖。Principal、Approval 或 Audit Integrity 若仍缺 Evidence，架構圖上就直接標 `UNKNOWN`。

@@ -1,182 +1,77 @@
-# Day 10｜Token Passthrough 實測：Request 通了，Audit 卻只剩值班工程師
+# Day 10｜Agent 沿用使用者的 OAuth Access Token：身分歸屬與權限邊界實測
 
-Day 9 把一次 Agent 任務裡的 Human、Agent 與 Workload 都放回 Delegation Context。欄位補齊之後，下一個麻煩很快就出現了。值班工程師已經拿著一枚有效的 access token 進入 Copilot，Investigator runtime 要呼叫 Observability MCP 時，最省事的做法似乎就是沿用它。
+值班工程師已經登入 SRE Copilot，Investigator Agent 接著要去 Observability MCP 查 Log。這時最省事的接法，是 runtime 收到使用者的 access token 後，原樣放進下一個 `Authorization` header。功能不用等另一條取 Token 的流程，Agent 也不必先管理自己的 OAuth client。
 
-這條路徑不必另外取得下游 Token，也少了一組 OAuth client 與 credential flow。只看功能測試，它很可能一次就通過。可是把 caller 逐跳寫在架構圖上，問題就藏不住了。第一跳確實是值班工程師發起任務，第二跳真正送出 `query_logs` 的卻是 Agent runtime。如果兩跳都拿同一枚 Human Token，下游 Audit 還有辦法分辨是誰動用了查詢權限嗎？
+把 Human Token 原樣轉送看起來很有誘惑力，因為 Human SSO 和 M2M credential 的接法本來就不同，後者還要處理 client 註冊與憑證生命週期。但 Day 9 剛把值班工程師、Agent 和執行的 Workload 分開記下來，若第二跳又只帶著值班工程師的 Token，Observability MCP 根本看不出請求是由哪個 runtime 送來的。公開 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/labs/02-identity-boundary/README.md) 便故意試了這條路：同一枚合成 Token 先到 Agent entry，再原封不動送往另一個 resource。
 
-我把這個疑問做成 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/labs/02-identity-boundary/README.md) 的離線 policy simulation。它沒有啟動兩個 HTTP MCP Server，也沒有假裝接上 Cognito，而是以本機 ephemeral issuer、兩個合成 protected resource 與七組正負向 case，驗證 audience、credential attribution 和 Delegation Context binding。最關鍵的四筆結果如下：
+## 同一枚 Token 到了第二個 resource
 
-```text
-user_to_entry_resource        ALLOW  ALLOW                 TOKEN_SUBJECT_AT_ENTRY
-passthrough_to_tool_strict    DENY   AUDIENCE_MISMATCH     NOT_EVALUATED
-passthrough_shared_audience   ALLOW  ALLOW                 COLLAPSED_TO_TOKEN_SUBJECT
-audience_bound_downstream     ALLOW  ALLOW                 FULL_CHAIN
-```
-
-值班工程師的 Token 在入口可以使用，原樣送到第二個 resource 時被 audience validation 擋下。接著我故意讓下游接受入口 audience，Request 果然變成 `ALLOW`，但是 Agent 與 Workload 也一起從 Audit 消失。第四筆改用只發給下游的 runtime Token，再帶上 Day 9 的 Delegation Context，三種身分才重新出現在同一筆事件裡。
-
-![Day 10 Lab 實際 CLI 結果。嚴格的下游驗證拒絕 Human Token passthrough，接受共用 audience 雖然允許 Request，attribution 卻塌縮成 Token subject。下游專用 Token 與綁定過的 Context 才得到 FULL_CHAIN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/screenshots/day-10/01-passthrough-results.png)
-
-圖片由 `make lab-02-passthrough` 的實際輸出重新排版。可複製指令、完整 JSONL 與 run manifest 都保留在 [Day 10 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/assets/screenshots/day-10/evidence.md)，讀者不必從圖片抄字。
-
-## 第一版常見的 Token Passthrough 捷徑
-
-把 Agent 接上企業 Identity 時，Token passthrough 很容易成為第一版答案。值班工程師已經登入，Gateway 也驗過 `user/sre-oncaller` 的 access token，Agent 呼叫 MCP 時直接沿用即可。少一段 credential flow、少一組 client，出問題時還能拿同一個 `sub` 搜尋 log，對趕著把路徑打通的團隊確實很有吸引力。
-
-我一開始也覺得這個做法夠簡單，直到重新整理 Cognito、Agent runtime 與 Gateway 的 Identity path，並把 Day 9 的 Human、Agent、Workload 逐跳放回去。第一跳記成值班工程師沒有問題，因為入口 Token 表示 `user/sre-oncaller` 要求 Copilot 開始工作。到了第二跳，送出 `query_logs` Request 的已經是 Investigator runtime，Observability MCP 收到的 credential 卻還在說 `sub=user/sre-oncaller`。
-
-這枚 Token 並沒有突然變成偽造憑證，它只是繼續描述上一跳的身分與授權。麻煩在於執行主體已經改變，credential 的語意卻沒有跟著改變。若平台只保存 Token subject，後續看到的每一個下游動作都會繼續算在值班工程師身上。
-
-## Audience Mismatch 劃出第二個 Resource Boundary
-
-Day 10 的 policy simulation 定義了兩個合成 resource：
+Lab 給值班工程師的 Token 設定了明確的接收對象：
 
 ```text
-Agent entry       https://agent.lab.example/mcp
-Observability MCP https://observability.lab.example/mcp
+Token subject      user/sre-oncaller
+Token audience     https://agent.lab.example/mcp
+下一個接收者       https://observability.lab.example/mcp
 ```
 
-值班工程師 Token 的主要 claims 如下：
+Agent entry 驗過 Token，第一跳得到 `ALLOW`。Investigator runtime 把它送往 Observability MCP 時，下游要求的 audience 已經變成自己的 resource，因此回 `AUDIENCE_MISMATCH`。這枚 Token 並沒有過期，甚至帶著 `observability.query` scope。它只是沒有發給這個接收者。
 
-```json
-{
-  "aud": "https://agent.lab.example/mcp",
-  "sub": "user/sre-oncaller",
-  "client_id": "sre-console",
-  "scope": "agent.delegate observability.query"
-}
-```
+![值班工程師的入口 Token 到了 Observability MCP。嚴格檢查 audience 時拒絕。改讓下游接受入口 audience 時雖能通過，Audit 卻只剩 Human。另一條路改用下游專用 Token 和 Delegation Context。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-10/passthrough-vs-bound-token.png)
 
-這枚 Token 進入 Agent entry 時會得到 `ALLOW`。Investigator 隨後把完全相同的 compact Token 送到 Observability MCP，這次 validator 預期的是下游自己的 resource ID，因此在 claims validation 階段回傳：
+我現在比較願意把這種錯誤當成架構提示，而不是急著把 verifier 調到能通。`scope` 說的是這枚 Token 被授予哪種能力，`audience` 說的是哪個 resource 應該接收它。兩個欄位不會互相補位。[RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html) 讓 client 在取 Token 時指出目標 resource，好讓 Authorization Server 限制 Token 的使用位置。[MCP Authorization Security Considerations](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations#token-passthrough) 也要求 MCP Server 驗證 Token 是否發給自己，並禁止把收到的 client Token 直接轉交下游。
 
-```text
-DENY  AUDIENCE_MISMATCH
-```
+## 下游接受入口 audience
 
-這項檢查沒有在刁難整合，而是 protected resource 正在守住自己的邊界。[MCP Authorization Security Considerations `2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations#token-passthrough) 要求 MCP Server 驗證 access token 是否發給自己。當 Server 還要呼叫 upstream API，它必須取得發給該 upstream service 的另一枚 Token，不能把 MCP Client 送來的 Token 原樣轉傳。
+Lab 接著測另一種常見的整合捷徑：不換 Token，而是讓 Observability MCP 也接受 Agent entry 的 audience 和 `sre-console` client profile。這不是關閉所有 Token 驗證。下游仍驗 signature、issuer、scope 等條件，只是放寬了「這枚 Token 是發給誰的」這條邊界。
 
-[RFC 8707 Resource Indicators](https://www.rfc-editor.org/rfc/rfc8707.html) 也說明了 audience restriction 的理由。Authorization Server 知道 Token 要送往哪個 protected resource，才能把權限限制在正確接收者。規格鼓勵每次授權請求指向單一 resource，因為多 audience bearer token 會讓其中一個 resource 有機會拿同一枚 Token 呼叫其他 resource，只適合彼此高度信任的環境。
+結果很容易讓功能驗收滿意：`query_logs` 變成 `ALLOW`。但下游從這枚 Token 讀到的仍是 `sub=user/sre-oncaller`，`client_id` 也仍屬於使用者登入時的 `sre-console`。在這條架構路徑上，請求是 Investigator runtime 送出的，它卻沒有因此變成 Token 的 subject。Audit 裡的 Agent 和 Workload 都是 `UNKNOWN`。當天查得出某位工程師發起任務，查不出是哪個 runtime 替他用了權限。
 
-因此，`AUDIENCE_MISMATCH` 提供的是一項很有價值的訊號：第二跳已經跨過新的 resource boundary。若修法只是關掉這項檢查，Request 雖然可能恢復，原本應該存在的隔離也會跟著被抹平。
+我們已把互動式 Human 與無人 M2M 分成不同的 credential 路徑。如果為了讓 Agent 快速呼叫更多下游，就讓 Human Token 多帶 scope、讓更多 resource 接受同一個 audience，原本分好的兩條路會在執行時重新混在一起。請求成功不代表責任也跟著交代清楚。
 
-## 共用 Audience 讓 Request 通過，也讓 Attribution 塌縮
+## 第二跳的憑證代表誰
 
-Strict path 被拒絕後，專案真正面對的壓力往往是先讓功能上線。Lab 的 `passthrough_shared_audience` 就模擬這種修法。Observability MCP 接受入口的 audience 與 OAuth client profile，Human Token 也預先帶上 `observability.query` scope，最後確實得到 `ALLOW`：
+另一條路是讓 Investigator runtime 在呼叫 Observability MCP 時，使用只發給該 resource 的 Token。Lab 讓它的 subject 是 `client/sre-investigator-runtime`，audience 是 Observability MCP，scope 只有 `observability.query`。這枚 Token 拿回 Agent entry 會因 audience 不符而遭拒絕。
 
-```json
-{
-  "case_id": "passthrough_shared_audience",
-  "decision": "ALLOW",
-  "attribution": "COLLAPSED_TO_TOKEN_SUBJECT",
-  "human_principal": "user/sre-oncaller",
-  "token_subject": "user/sre-oncaller",
-  "executing_agent": "UNKNOWN",
-  "workload_principal": "UNKNOWN"
-}
-```
+下游因此能驗證眼前這枚 Token 以 runtime client 為 subject，而且是發給自己的。Day 9 的 Delegation Context 另外保存「這筆查詢最初由值班工程師交辦，經過哪版 Agent，最後由哪個 Workload 執行」。兩者放在同一筆 Audit 裡，可以同時看到：
 
-這份結果表面上已經修好功能，實際上只是把拒絕換成另一種治理缺口。為了讓一枚 Token 到處可用，resource 開始共用 audience，Human Token 也逐漸累積每個下游可能需要的 scope。原本只該處理 `delegate_task` 的入口 credential，現在可以直接用來執行 `query_logs`，但 Token 本身不再回答是哪一個 runtime 動用了這份權限。
+| 這次查詢要回答的事 | Lab 留下的值 |
+| --- | --- |
+| 任務從誰而來 | `user/sre-oncaller` |
+| 目前 Token 代表誰 | `client/sre-investigator-runtime` |
+| 哪版 Agent 送出 Tool Call | `agent/sre-investigator@v1` |
+| 程式跑在哪個 Workload | `k8s://lab/identity-boundary/sa/sre-agent` |
 
-有人可能會想到另一個折衷方案，在 passthrough Token 旁邊多傳一份 Workload context。這確實可以增加 Audit 欄位，卻無法把值班工程師的 Token 變成已驗證的 runtime credential。下游驗證通過的 `sub` 仍然是值班工程師，所以 Context 與 credential 必須分開保留，不能用呼叫端自報的欄位假裝 workload authentication 已經完成。
+Runtime 的 OAuth client 與 Kubernetes ServiceAccount 也不是同一個身分。前者是這一跳 Token 的 subject，後者指出執行位置與 Workload。只憑 ServiceAccount 名稱，不能推論下游已驗過它的工作負載憑證。Lab 的 `FULL_CHAIN` 表示這幾個欄位都能在 Audit 裡對上，不表示每個角色都經過相同強度的驗證。
 
-Lab 以 SHA-256 fingerprint 關聯每一跳。前三個 case 的 fingerprint 完全相同，足以證明同一枚合成 Human Token 被重用，而且不必將 raw bearer token 寫進 artifact。被 `AUDIENCE_MISMATCH` 擋下的事件也不會先把未驗證 claims 當成 authenticated principal，只保存 fingerprint、失敗階段與 stable decision code。
+## Context 與下游 Token 的綁定
 
-這種 SHA-256 fingerprint 只適合示範問題。Production 若真的需要跨系統關聯 bearer credential，我會改用 keyed HMAC，限制查詢權限並設定短 retention。即使沒有保存原始 Token，fingerprint 仍然是可關聯資料，不適合放進 metric label 或無限期留存。
+下游 Token 與 Delegation Context 各司其職，仍需要確認它們描述的是同一次動作。否則拿一份合法的委派紀錄，配上另一枚合法 Token，就可能把不相干的人與請求拼成一筆看似完整的 Audit。
 
-## Downstream Token 與 Delegation Context 各自回答不同問題
+Lab 先把 Context 的 credential 指紋、issuer、subject、client、audience，連同 target resource 與 action，對上這一跳實際收到的 Token 和請求。只給下游 Token、沒帶 Context 時回 `DELEGATION_CONTEXT_REQUIRED`。把 Context 的指紋換成另一筆，則回 `DELEGATION_CONTEXT_MISMATCH`。這兩組拒絕案例提醒我：資料結構有值，不等於它真是這次請求的資料。
 
-修正後的路徑沒有把值班工程師從 Audit 拿掉，而是讓 credential 和 Delegation Context 各自回答不同的問題：
+這項比對是離線 Lab 的檢查，還不能防止任意 client 自己改寫 Context，再把欄位填得彼此一致。正式環境要由受信任的元件建立或重建委派資訊，或保護跨元件傳遞時的完整性。下游驗過目前 Token，也不會順便替前面每個 Agent 的版本和 Workload metadata 背書。
 
-- Downstream credential 表示目前這一跳由誰呼叫，以及它能使用哪一個 resource。
-- Delegation Context 保存最初由誰提出要求、經過哪些 Agent，以及目前由哪個 Workload 執行。
-
-![Token Passthrough 在第二跳的兩種結果，以及 resource-bound downstream Token 搭配 Delegation Context 後保留下來的 Human、Agent 與 Workload attribution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-10/passthrough-vs-bound-token.png)
-
-Lab 另外簽出一枚下游專用的合成 Token：
-
-```json
-{
-  "aud": "https://observability.lab.example/mcp",
-  "sub": "client/sre-investigator-runtime",
-  "client_id": "sre-investigator-runtime",
-  "scope": "observability.query"
-}
-```
-
-它只帶 Observability MCP 所需的 scope，回放到 Agent entry 時會得到另一個 `AUDIENCE_MISMATCH`。這項負向測試用來確認兩個 resource 的 credential 確實分開，沒有把 Human 萬用 Token 換成另一枚 runtime 萬用 Token。
-
-通過下游驗證後，Audit 會同時保存目前 Token subject 與上游 delegation：
-
-```json
-{
-  "decision": "ALLOW",
-  "attribution": "FULL_CHAIN",
-  "human_principal": "user/sre-oncaller",
-  "token_subject": "client/sre-investigator-runtime",
-  "token_client_id": "sre-investigator-runtime",
-  "executing_agent": "agent/sre-investigator@v1",
-  "workload_principal": "k8s://lab/identity-boundary/sa/sre-agent"
-}
-```
-
-這幾個欄位不是要在 Human 與 Workload 之間選出唯一答案。值班工程師是委派來源，runtime 是目前 credential subject，Agent 和 Kubernetes Workload 則保存版本與執行位置。它們各自回答不同問題，少掉任何一格都會讓事後調查失去一段重要上下文。
-
-證據強度也需要如實標示。這枚 downstream Token 的 runtime subject 通過本機 validator，Human 來自已驗證的上游 Token。公開 Lab 裡的 Agent metadata 與 Kubernetes ServiceAccount 仍然只是 `ASSERTED`，因為這裡沒有實作 workload attestation。`FULL_CHAIN` 代表欄位與 binding 完整，不代表每個欄位都具有相同的驗證強度。
-
-## Credential Binding 防止 Context 被任意拼接
-
-把 Token 與 Context 分開後，還有一個不能省略的檢查。若 client 能拿值班工程師的一份合法 Context，再任意搭配另一枚合法 runtime Token，`FULL_CHAIN` 反而會變成一筆格式漂亮、內容卻不可信的假證據。
-
-Day 10 因此要求下游檢查 Context 是否真的屬於當次 credential 與 target：
-
-```text
-credential fingerprint
-issuer / subject / client_id / audiences
-target resource / action
-```
-
-缺少 Context 時，policy 回傳 `DELEGATION_CONTEXT_REQUIRED`。若把 Context 裡的 fingerprint 換成 Human Token fingerprint，再搭配 runtime Token，則回傳 `DELEGATION_CONTEXT_MISMATCH`。這兩個拒絕路徑確保 client 不能只靠湊齊欄位就取得看似完整的 attribution。
-
-這個 Lab 只完成 credential 與 target binding，還沒有完成 production 等級的 Context integrity。資料一旦跨越 trust boundary，應由受信任的 Gateway 重建，或放進具有完整性保護的 envelope，也可以採用等價的簽章機制。下游不能直接相信呼叫端自報 `human=user/sre-oncaller`。Day 9 定義的是資料形狀，Day 10 加上 credential 與 target binding，兩篇都沒有把這份 Context 包裝成新的 OAuth 標準。
-
-## 七組 Case 對照兩條路徑
-
-完整的 Day 10 slice 除了成功案例，也包含 Token 回放、缺少 Context 與錯誤 binding：
-
-| Case | Decision | Code | Attribution |
-| --- | --- | --- | --- |
-| `user_to_entry_resource` | ALLOW | `ALLOW` | `TOKEN_SUBJECT_AT_ENTRY` |
-| `passthrough_to_tool_strict` | DENY | `AUDIENCE_MISMATCH` | `NOT_EVALUATED` |
-| `passthrough_shared_audience` | ALLOW | `ALLOW` | `COLLAPSED_TO_TOKEN_SUBJECT` |
-| `audience_bound_downstream` | ALLOW | `ALLOW` | `FULL_CHAIN` |
-| `downstream_token_replay_entry` | DENY | `AUDIENCE_MISMATCH` | `NOT_EVALUATED` |
-| `missing_delegation_context` | DENY | `DELEGATION_CONTEXT_REQUIRED` | `NOT_EVALUATED` |
-| `mismatched_delegation_context` | DENY | `DELEGATION_CONTEXT_MISMATCH` | `NOT_EVALUATED` |
+## 重現兩種接法
 
 從 repo root 執行：
 
 ```bash
 make lab-02-up
-make lab-02-check
 make lab-02-passthrough
 ```
 
-預期最後看到：
+Lab 會印出七組結果。對這篇最有用的是下面四筆。其餘包含下游 Token 回放到入口、缺少 Context 與 Context 不匹配，完整輸出在 [Day 10 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/assets/screenshots/day-10/evidence.md)。
 
 ```text
-7/7 cases matched
-Same Human token reused across passthrough hops: yes (fingerprint only)
-Raw credential persisted: no
+CASE                               DECISION   CODE                           ATTRIBUTION
+user_to_entry_resource             ALLOW      ALLOW                          TOKEN_SUBJECT_AT_ENTRY
+passthrough_to_tool_strict         DENY       AUDIENCE_MISMATCH              NOT_EVALUATED
+passthrough_shared_audience        ALLOW      ALLOW                          COLLAPSED_TO_TOKEN_SUBJECT
+audience_bound_downstream          ALLOW      ALLOW                          FULL_CHAIN
 ```
 
-若想直接比較兩條 `ALLOW` path，可以使用 [Token Passthrough Audit Reading Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/articles/day-10/token-passthrough-audit-guide.md) 裡的 `jq` 指令。每次執行都會保存 manifest、summary、JSONL events、合成 issuer-input claims、Context 與 Token fingerprints，圖片只是閱讀輔助，不是唯一證據。
+![Day 10 的七組實際 CLI 結果。入口 Token 在自己的 resource 通過，下游嚴格驗 audience 時拒絕。共用 audience 雖通過但只剩 Human 歸屬，下游專用 Token 加 Context 才保留完整責任鏈。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/screenshots/day-10/01-passthrough-results.png)
 
-Day 10 slice 完成時，共用 Lab 當時有 46 tests，branch coverage 為 91.33%。因為同一個 Lab 後來又加入 Day 11 與 Day 12 的 OAuth case，發稿前重新執行整包測試的結果已變成 72 tests passed、branch coverage 91.17%。測試母體已經不同，這兩個 coverage 數字不能直接拿來解讀成上升或退步。最新 dependency audit 沒有找到已知漏洞，wheel 與 source distribution 也已實際 build。
+想查同一枚 Token 究竟被送過哪些 resource，以及兩條 `ALLOW` 路徑的 Audit 差在哪裡，可以直接使用 [Token Passthrough Audit Reading Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/articles/day-10/token-passthrough-audit-guide.md) 的查詢。這裡用本機 issuer 與兩個離線 protected-resource validator 測授權結果，沒有啟動兩個 HTTP MCP Server，也沒有實作 Cognito 或 Token Exchange。Lab 的下游 Token 由本機 issuer 直接簽出，只用來比較 Token 與 Context 應具有的性質。
 
-## 下游 Token 的取得方式留給 Day 11
-
-`audience_bound_downstream` 使用本機 ephemeral issuer 直接簽出 Token，證明的是修正後應具備的幾項性質：它有不同的 fingerprint，只發給 Observability MCP，scope 比 Human Token 更窄，runtime subject 也能和 Delegation Context 綁定。這個實驗沒有聲稱平台已經完成 Token Exchange，更沒有模擬 Cognito 或任何 IdP 的真實換發流程。
-
-[RFC 8693 OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html) 定義了 resource server 以收到的 subject token 向 Authorization Server 換取 backend token，也提供 delegation 與 `act` claim。真正落地時，平台仍要確認 IdP 支援範圍、Human 是否在線、目前 actor 應該是 runtime 還是 Service，以及無人工作是否應改走 Client Credentials。
-
-因此，Audience 與 Attribution 的問題在 Day 10 先被拆開，credential flow 的選擇則留到下一篇。Day 11 會把互動式 Human、背景 Agent、Client Credentials 與 Token Exchange／OBO 放在同一張決策表裡，避免它們因為都叫 OAuth 就被塞進同一條 flow。
+到這裡，第二跳該帶什麼已經比較清楚：Observability MCP 要收到發給自己的憑證，也要能把 runtime 的動作和原本的 Human 委派連起來。更難的問題是下游憑證從哪裡來，以及它究竟應代表 runtime 自己，還是明確表達 runtime 正代表某位使用者。Day 11 會把 Client Credentials、Token Exchange／OBO 與互動式 Human 的 PKCE 路徑放在一起比較。

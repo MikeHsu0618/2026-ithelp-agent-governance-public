@@ -3,7 +3,7 @@
 這份表以「一個 action」為單位。不要一開始就評整個 AI 平台，先選一條真的會發生的路徑，例如：
 
 ```text
-值班工程師 → SRE Agent → Runtime Workload → query_metrics → payments-demo
+值班工程師 → SRE Agent → Runtime Workload → query_metrics → payments-api
 ```
 
 狀態沿用 repo 的證據規則：
@@ -15,6 +15,8 @@
 - `N/A`：經 review 確認此 action 不需要，並且已寫下原因。
 
 ## Day 1–4 快照
+
+這份快照以 `query_metrics(service="payments-api")` 作為要 Review 的 action。Enforcement 欄引用同一個 callback 曾拒絕 `delete_demo_database` 的證據，只能證明目前有執行前拒絕點，不能證明 `query_metrics` 已具備 resource-aware authorization。
 
 | 治理問題 | 現有 evidence | 狀態 | 還缺什麼 |
 | --- | --- | --- | --- |

@@ -43,7 +43,8 @@ DAY17_GATEWAY_HOST := http://agentgateway-proxy.agentgateway-system.svc.cluster.
 KIND_BIN ?= kind
 KUBECTL_BIN ?= kubectl
 
-.PHONY: lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
+.PHONY: verify-all \
+	lab-01-up lab-01-test lab-01-check lab-01-fixture lab-01-live lab-01-replay lab-01-down \
 	lab-02-up lab-02-test lab-02-check lab-02-demo lab-02-delegation lab-02-passthrough lab-02-oauth \
 	lab-02-cognito lab-02-cognito-config-check lab-02-down \
 	lab-03-check lab-03-fixture lab-03-live \
@@ -56,11 +57,21 @@ KUBECTL_BIN ?= kubectl
 	lab-03-runtime-registry-down \
 	lab-03-runtime-down \
 	lab-04-up lab-04-check lab-04-run lab-04-identity lab-04-broken-trace lab-04-negative lab-04-down \
-	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-run \
+	lab-04-cardinality-up lab-04-cardinality-check lab-04-cardinality-config-check lab-04-cardinality-run \
 	lab-04-cardinality-dashboard lab-04-cardinality-down \
-	lab-04-cost-up lab-04-cost-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down \
-	lab-04-mcp-check lab-04-mcp-up lab-04-mcp-run lab-04-mcp-down \
+	lab-04-cost-up lab-04-cost-check lab-04-cost-config-check lab-04-cost-run lab-04-cost-dashboard lab-04-cost-down \
+	lab-04-mcp-check lab-04-mcp-config-check lab-04-mcp-up lab-04-mcp-run lab-04-mcp-down \
 	lab-05-check lab-05-up lab-05-run lab-05-down
+
+verify-all:
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-01-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-02-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-03-runtime-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-04-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-04-cardinality-config-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-04-cost-config-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-04-mcp-config-check
+	$(MAKE) -f "$(SELF_MAKEFILE)" lab-05-check
 
 lab-01-up:
 	uv sync --directory "$(LAB01)" --all-groups
@@ -515,6 +526,9 @@ lab-04-cardinality-check:
 	uv run --directory "$(LAB04)" pytest -q
 	uv run --directory "$(LAB04)" ruff check .
 	uv run --directory "$(LAB04)" ruff format --check .
+	$(MAKE) lab-04-cardinality-config-check
+
+lab-04-cardinality-config-check:
 	uv run --directory "$(LAB04)" traceability-lab cardinality-prepare \
 		--runtime-dir "$(LAB04)/.runtime/day23"
 	@for variant in bounded user conversation; do \
@@ -571,6 +585,9 @@ lab-04-cost-check:
 	uv run --directory "$(LAB04)" pytest -q
 	uv run --directory "$(LAB04)" ruff check .
 	uv run --directory "$(LAB04)" ruff format --check .
+	$(MAKE) lab-04-cost-config-check
+
+lab-04-cost-config-check:
 	printf '%s  %s\n' \
 		'1380d6720d4eb1814546264fe1ce22a38ea6a33dfa0ef2c7a4fa9283baab253f' \
 		'$(LAB04)/configs/day-24/official-dashboard/agentgateway-dashboard-v1.5.0.json' \
@@ -621,6 +638,9 @@ lab-04-mcp-check:
 	uv run --directory "$(LAB04)" pytest -q
 	uv run --directory "$(LAB04)" ruff check .
 	uv run --directory "$(LAB04)" ruff format --check .
+	$(MAKE) lab-04-mcp-config-check
+
+lab-04-mcp-config-check:
 	@for variant in grafana html; do \
 		docker run --rm \
 			-v "$(LAB04)/configs/day-25/agentgateway-$$variant.yaml:/config.yaml:ro" \

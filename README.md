@@ -100,6 +100,14 @@ Lab 保留 README、source code、tests、fixture 與 lockfile。文章中的圖
 
 ## 快速驗證
 
+先安裝 `uv` 與 Docker，便可從 repo 根目錄重跑五套 Lab 的 test、coverage、lint、format、設定驗證與 incident replay：
+
+```bash
+make verify-all
+```
+
+也可以只執行正在閱讀的 Lab：
+
 ```bash
 make lab-01-check
 make lab-01-fixture

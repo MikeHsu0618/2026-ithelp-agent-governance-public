@@ -2,9 +2,9 @@
 
 三十天前，Gemini 從一段混入操作指令的 Log 讀到 `delete_demo_database`，接著提出 Tool Call。Google ADK 把參數交給 Tool，open policy 也照設定回了 `ALLOW`。公開 Lab 沒有真的刪除資料庫，只留下 `CANARY_TRIGGERED` receipt。換成有副作用的 Resource Server，這條正常運作的 action path 就可能改到 production 資料。
 
-三十天後，模型仍可能提出同一個 Tool Call。最後一篇只處理兩個比較務實的問題：同一筆 action 現在會在哪些地方遇到決策點？如果它真的執行了，事後能找回哪些證據？Reference Architecture 的工作，就是把這些決策點與證據來源放進同一條可檢查的路徑。
+三十天後，模型仍可能提出同一個 Tool Call。真正改變的是這筆 Action 現在會在哪裡遇到決策點，以及執行後能留下哪些證據。Reference Architecture 的工作，就是把兩者放進可檢查的路徑，不再寄望模型突然變得永遠正確。
 
-## Day 1 留下了哪些證據
+## Day 1 留下的 Evidence Gap
 
 `delete_demo_database` 的歷史紀錄不會因為三十天後畫出新架構，就自動補齊 principal、Artifact 或 approval。下面只使用已鎖定的 Day 1／3／26 資料，不拿今天的設計回頭改寫當年的事件。
 
@@ -22,15 +22,15 @@
 
 Day 3 用改寫過的惡意 Log 做了另一組對照。兩次 live run 使用同一份輸入與模型設定，Gemini 都提出 `delete_demo_database`。全部放行時，安全標記增加一筆。換成 Tool allowlist，function 執行前就被拒絕，安全標記維持零。Agent 收到拒絕結果後，改用 `query_metrics` 完成原本的唯讀調查。這組結果只證明 Lab 裡的執行前拒絕點有效，沒有證明完整的企業授權已經到位。
 
-完整事件與回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30/labs/05-incident-replay/README.md)。對下一筆真的有副作用的 action，架構還得補上可信身分、delegation、實際執行的 Artifact 與業務授權。執行後也要留下能對回同一筆 action 的 effect receipt。
+完整事件與回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r2/labs/05-incident-replay/README.md)。對下一筆真的有副作用的 action，架構還得補上可信身分、delegation、實際執行的 Artifact 與業務授權。執行後也要留下能對回同一筆 action 的 effect receipt。
 
-## 一筆 action 的決策與證據路徑
+## Reference Architecture 的四條路徑
 
-圖的中央是真正可能觸發副作用的 request。Identity 與 policy context 跟著 action 往下傳，Artifact provenance 和事後 evidence 則各自放在下方。產品名稱是目前的實作選擇。架構審查要看的仍是誰能決定、實際跑了什麼，以及事後查得到什麼。
+三十天最後收斂成四條路徑。Request Path 安排每一層能做的決策，Context Rail 保存這些決策依賴的身分與政策資料，Artifact Path 對回實際執行版本，Evidence Path 則保留事後查詢與 Audit 所需的紀錄。產品名稱是目前的實作選擇，架構審查真正要看的仍是誰能決定、實際跑了什麼，以及事後查得到什麼。
 
-![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。Context 隨 action 傳遞。下方兩張卡片分別說明 Git／OCI Artifact provenance，以及 Alloy／LGTM 與 Governance Event 的 evidence 路徑。kagent、Agent Registry 是條件式選項，Audit 保存與防竄改仍待獨立驗證。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30/assets/diagrams/day-30/reference-architecture.png)
+![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。Context 隨 action 傳遞。下方兩張卡片分別說明 Git／OCI Artifact provenance，以及 Alloy／LGTM 與 Governance Event 的 evidence 路徑。kagent、Agent Registry 是條件式選項，Audit 保存與防竄改仍待獨立驗證。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r2/assets/diagrams/day-30/reference-architecture.png)
 
-## Request path：每一層只做自己能決定的事
+## Request Path：Identity、Gateway 與 Resource Authorization
 
 Human 與 M2M 先走各自的 OAuth flow，從 Cognito 取得 Token，再把 Token 帶進 request。Cognito 完成 token issuance 後就退出資料面，業務流量不必穿過 IdP。Keycloak 的 federated login、角色 claim 與 Tool RBAC 曾經跑通，但當時組織還沒有足夠共識與人力維護一套完整 Identity Center，因此目前先用 Cognito 承擔需要的 Human／M2M 路徑。等 onboarding、offboarding、SaaS 入口與更多下游服務需要統一時，才有理由重開這個決策。
 
@@ -38,13 +38,13 @@ Human 與 M2M 先走各自的 OAuth flow，從 Cognito 取得 Token，再把 Tok
 
 Google ADK Runtime 接手 workflow、state、Tool schema、argument normalization、delegation 與 pause／resume。真正有副作用的 Tool／Resource Server 仍保留最後授權：它要看受信任 principal、current actor、目標 resource 與 normalized arguments，再依自己的 business rule 決定是否執行並回傳 effect receipt。Gateway 已經回 `ALLOW`，不代表任何 Tool 參數都合理。
 
-### Context rail：每一站只補自己能證明的欄位
+### Context Rail：Principal、Policy、Artifact 與 Approval
 
 Gateway 從驗過的 JWT 加入 principal／client 與 policy decision。Runtime 再加入 delegation、Tool、resource、normalized arguments、Artifact digest 和必要的 approval digest，Resource Server 最後補 effect receipt。Action ID 與 trace ID 負責 correlation，已產生的欄位繼續往下游傳，但每個值都要保留自己的 evidence source。JSON 裡出現一個欄位，不等於事故調查時就能相信它。
 
 高風險 action 若需要人工批准，Runtime 可以提供 pause／resume，平台可以提供 UI 與傳遞機制，Business Owner 則必須在完整 action context 下決定。一次批准要綁住 Tool、目標 resource 與參數摘要，並記下 approver、Artifact digest、policy version 與 expiry。任一內容改變，原本的批准就不能繼續使用。Day 18 跑通的是 pause／resume，包括 BYO Agent 的有限路徑。它沒有證明 approver 身分與授權，也沒有涵蓋所有跨 A2A／HITL 的 context 傳遞。這些不能因為畫面上有個「Approve」按鈕就算完成。
 
-## Artifact path：目錄裡看得到，不等於執行中的版本可信
+## Artifact Path：Desired State 與 Runtime Digest
 
 我在 Day 19 評估 Agent Registry `0.3.3` 時，原本期待 catalog、版本與部署狀態可以一起成為 provenance control plane。實際部署、讀 source 再拆除後，留下來的問題是 source of truth 與 promotion ownership。`0.4.0` 後來重作成 declarative control plane，補上了部分舊缺口，但 catalog entry 仍不能單獨證明某個 Pod 實際跑的是哪份程式。
 
@@ -52,7 +52,7 @@ Gateway 從驗過的 JWT 加入 principal／client 與 policy decision。Runtime
 
 控制面說明「應該部署什麼」，執行中的 workload 則要證明「這次實際跑了什麼」。兩條路徑靠 Artifact digest 會合，事故發生後才不會只剩 deployment 宣告。
 
-## Evidence path：查得到，不等於不能被竄改
+## Evidence Path：Operational Telemetry 與 Audit Integrity
 
 既有 LGTM 是我們日常查 Log、Metric 與 Trace 的地方。Day 26 的公開 Lab 另跑了一筆新 action：Tempo 看得到跨服務路徑，Loki 查得到帶相同 action ID 的事件，Prometheus 則回答聚合數據。這筆新紀錄證明現行觀測路徑能查回什麼，不能拿來補 Day 1 當時沒留下的資料。
 
