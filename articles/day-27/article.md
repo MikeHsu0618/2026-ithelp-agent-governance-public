@@ -6,7 +6,7 @@ Day 26 回放了那筆危險 Tool Call。Tool、Policy Decision 與 Canary Resul
 
 問題不在比較表少了更多功能，而是比較單位錯了。Keycloak、agentgateway、kagent、Registry 與 LGTM 解的是不同問題，硬排成同一張排行榜，只會把採用後的責任藏在總分後面。Day 27 不再增加產品或 Lab，而是把前 26 天的實測與取捨整理成 Capability Ledger。
 
-![Day 26 留下 principal、delegation、artifact 與 approval 等 evidence gap。這些問題先轉成 capability，再記錄 current source、evidence、owner、revalidation、gap 和 decision。產品名稱只出現在實作來源，不作為比較表欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r3/assets/diagrams/day-27/capability-ledger-method.png)
+![Day 26 留下 principal、delegation、artifact 與 approval 等 evidence gap。這些問題先轉成 capability，再記錄 current source、evidence、owner、revalidation、gap 和 decision。產品名稱只出現在實作來源，不作為比較表欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r1/assets/diagrams/day-27/capability-ledger-method.png)
 
 ## 產品名稱不能替 Evidence Gap 作答
 
@@ -59,7 +59,7 @@ Routing、UI 或 Protocol Support 的分數，不應抵銷 Identity Lifecycle �
 
 ## 本系列目前的能力摘要
 
-完整版本放在 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r3/articles/day-27/capability-ledger.md)，另有可匯入試算表的 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r3/articles/day-27/capability-ledger.csv)。正文只留下會改變決策的能力群組：
+完整版本放在 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r1/articles/day-27/capability-ledger.md)，另有可匯入試算表的 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r1/articles/day-27/capability-ledger.csv)。正文只留下會改變決策的能力群組：
 
 | Capability | Current Source | Evidence | Decision |
 | --- | --- | --- | --- |
