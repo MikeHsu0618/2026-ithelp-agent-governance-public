@@ -10,7 +10,7 @@
 
 Gateway 看得到目前進站的 Token，能識別這次登入的值班工程師。Agent runtime 知道 Copilot 把任務交給哪版 Investigator，以及後者呼叫了什麼 Tool。Kubernetes 則知道程式以哪個 ServiceAccount 執行。單獨查任何一邊，都只能看見一段。
 
-![值班工程師請 Copilot 調查，Copilot 委派 Investigator，再由 Kubernetes workload 呼叫 query_logs。圖下方是同一次 Tool Call 保存的 actor chain、credential、target 與事件關聯欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r1/assets/diagrams/day-09/delegation-sequence.png)
+![值班工程師請 Copilot 調查，Copilot 委派 Investigator，再由 Kubernetes workload 呼叫 query_logs。圖下方是同一次 Tool Call 保存的 actor chain、credential、target 與事件關聯欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19-r1/assets/diagrams/day-09/delegation-sequence.png)
 
 Delegation Context 是每筆 Tool Call 附帶的交接紀錄。它讓事後查詢能分清「誰要求」和「誰執行」，不用從 `actor`、Pod 名稱與幾段 log 猜一條故事。`trace_id` 可以幫忙找到同一條請求的事件，但它本身不會告訴我們每個角色在這次委派裡做了什麼。接收請求的系統仍要自己判斷能不能執行。
 
@@ -20,7 +20,7 @@ Delegation Context 是每筆 Tool Call 附帶的交接紀錄。它讓事後查�
 
 ## Delegation Context 怎麼記
 
-公開 Lab 的 [Human delegated 範例](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/assets/screenshots/day-09/evidence/demo-context-human-delegated.json) 將這次 `query_logs` 留成一筆事件。`actor_chain` 記下值班工程師、Copilot、Investigator 與執行的 Workload。`credential` 記當前觀測點所見的 issuer、subject、client、audience 與指紋，`target` 則記這次碰的是哪個 resource、哪個 action。`event_id`、時間與 `trace_id` 方便回頭找同一次動作。完整欄位與 schema 放在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/articles/day-09/delegation-context-field-guide.md)，正文先拿它回答值班時最直接的問題。
+公開 Lab 的 [Human delegated 範例](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19-r1/assets/screenshots/day-09/evidence/demo-context-human-delegated.json) 將這次 `query_logs` 留成一筆事件。`actor_chain` 記下值班工程師、Copilot、Investigator 與執行的 Workload。`credential` 記當前觀測點所見的 issuer、subject、client、audience 與指紋，`target` 則記這次碰的是哪個 resource、哪個 action。`event_id`、時間與 `trace_id` 方便回頭找同一次動作。完整欄位與 schema 放在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19-r1/articles/day-09/delegation-context-field-guide.md)，正文先拿它回答值班時最直接的問題。
 
 從 repo root 執行以下查詢，可以從同一筆紀錄取出任務來源、最後執行的 Agent 版本、Workload 與 Tool：
 
@@ -57,14 +57,14 @@ Lab 對這幾種情況給出不同結果：
 
 ## 用 Lab 檢查責任鏈有沒有寫完整
 
-[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/labs/02-identity-boundary/README.md) 使用合成的值班工程師、Agent 與 ServiceAccount，檢查這份資料契約是否能區分上述情境。在 repo root 執行：
+[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19-r1/labs/02-identity-boundary/README.md) 使用合成的值班工程師、Agent 與 ServiceAccount，檢查這份資料契約是否能區分上述情境。在 repo root 執行：
 
 ```bash
 make lab-02-up
 make lab-02-delegation
 ```
 
-下面是最能看出差異的四組結果。其餘負向案例與原始紀錄在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r1/assets/screenshots/day-09/evidence.md)。
+下面是最能看出差異的四組結果。其餘負向案例與原始紀錄在 [Day 9 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-19-r1/assets/screenshots/day-09/evidence.md)。
 
 ```text
 human_delegated        ACCEPT
@@ -73,7 +73,7 @@ a2a_unknown_workload   ACCEPT
 missing_workload_slot  REJECT  REQUIRED_FIELD_MISSING
 ```
 
-![Delegation Context Lab 的七組實際 CLI 結果。Human delegated、排程與明確標示未知身分的案例通過。缺欄位、null、Agent 順序錯誤及 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r1/assets/screenshots/day-09/01-delegation-context-results.png)
+![Delegation Context Lab 的七組實際 CLI 結果。Human delegated、排程與明確標示未知身分的案例通過。缺欄位、null、Agent 順序錯誤及 actor-only 紀錄被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-19-r1/assets/screenshots/day-09/01-delegation-context-results.png)
 
 Lab 跑的是 JSON Schema 與語意檢查：必填欄位、Agent 委派順序、哪些角色不存在、哪些角色只是暫時未知。這已經能擋掉 `actor` 以外什麼都沒留的紀錄，也能讓後續查詢使用同一套欄位。合成請求沒有真的穿過 Gateway 或 Kubernetes，`ACCEPT` 也不表示授權成功。
 
