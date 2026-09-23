@@ -45,11 +45,11 @@ Provenance 最容易被 source repository 誤導。Repo 裡看得到 Agent 定�
 
 Enforcement 和 Traceability 也不能互相代替。Callback 成功擋過 `delete_demo_database`，證明副作用前存在一個拒絕點，但沒有補上 principal-aware authorization。Ordered events 能重播模型提案、policy decision 和 Tool result，也無法憑空還原沒有記錄的 workload identity 或 Agent revision。
 
-![值班工程師的 session label 經 SRE Agent、runtime workload 與 Tool policy 呼叫 query_metrics。盤點結果顯示 Identity、Enforcement、Traceability 都有部分證據，Provenance 則缺少能綁定本次執行的版本證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-20-r2/assets/diagrams/day-05/reference-architecture-v0.1.png)
+![值班工程師的 session label 經 SRE Agent、runtime workload 與 Tool policy 呼叫 query_metrics。盤點結果顯示 Identity、Enforcement、Traceability 都有部分證據，Provenance 則缺少能綁定本次執行的版本證據。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/diagrams/day-05/reference-architecture-v0.1.png)
 
 ## 從四個缺口選下一個工作
 
-我把這四個問題整理成 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-20-r2/articles/day-05/governance-four-question-checklist.md)。拿自己的 Agent 使用時，先挑一個實際會做的動作，再查它在每個邊界留下什麼。完整狀態代碼和填寫方式放在 Checklist，正文先用這筆查詢決定下一步。
+我把這四個問題整理成 [Agent Governance 四問 Checklist](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r3/articles/day-05/governance-four-question-checklist.md)。拿自己的 Agent 使用時，先挑一個實際會做的動作，再查它在每個邊界留下什麼。完整狀態代碼和填寫方式放在 Checklist，正文先用這筆查詢決定下一步。
 
 四格不能平均成一個治理分數。唯讀 Metrics Agent 缺少 workload identity，和能修改 Kubernetes Deployment 的 Agent 缺少同一項資訊，修補順序不會一樣。
 
