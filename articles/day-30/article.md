@@ -15,13 +15,13 @@ Day 1 的 Lab 留下了危險動作的安全標記，Day 3 則試出一個有效
 | 真正的執行結果 | Tool 只寫安全標記，沒有刪除資料庫 | Resource Server 回傳可對回同一筆 Action 的實際修改紀錄 |
 | 事故發生後 | 能找回當時留下的 Event 與 Trace ID，卻缺可信發起者和執行映像 | 沿同一筆 Action 查回身分、政策、實際映像、必要的核准與結果 |
 
-Day 3 用相同輸入做了放行與拒絕對照：換成 Tool Allowlist 後，危險 Function 沒有執行，Agent 仍改用 `query_metrics` 完成唯讀調查。這筆對照的回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r2/labs/05-incident-replay/README.md)。
+Day 3 用相同輸入做了放行與拒絕對照：換成 Tool Allowlist 後，危險 Function 沒有執行，Agent 仍改用 `query_metrics` 完成唯讀調查。這筆對照的回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r2/labs/05-incident-replay/README.md)。
 
 ## Reference Architecture 的四條路徑
 
 最後的圖只有一條主要動作路徑：呼叫者提出請求，Gateway 檢查共同規則，Agent Runtime 決定下一步，Tool 所屬的服務決定資源能否修改。另外兩條支線回答執行版本從哪裡來、事後資料送到哪裡。架構審查不用先背完產品名稱，先沿這筆 Action 問誰能拒絕、誰能批准、實際跑了什麼。
 
-![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。下方 Artifact 卡片標明完整 Agent Image Digest、批准及執行映像核對仍是待驗證的設計目標。Evidence 卡片區分 Alloy／LGTM 與尚待獨立驗證的 Audit 保存。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r2/assets/diagrams/day-30/reference-architecture.png)
+![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。下方 Artifact 卡片標明完整 Agent Image Digest、批准及執行映像核對仍是待驗證的設計目標。Evidence 卡片區分 Alloy／LGTM 與尚待獨立驗證的 Audit 保存。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r2/assets/diagrams/day-30/reference-architecture.png)
 
 ## Request Path：Identity、Gateway 與 Resource Authorization
 
