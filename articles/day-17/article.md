@@ -19,7 +19,7 @@ POST /api/a2a/api/a2a/day16-lab/day16-agent                     -> 404
 
 第二行不是手動拼錯，而是 Client 照著 `supportedInterfaces[].url` 呼叫。Discovery 成功了，Discovery 提供的下一站卻是錯的。
 
-![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r2/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
+![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r2/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
 
 ## 重複 Prefix 來自 Base URL 的語意誤判
 
@@ -93,7 +93,7 @@ A2A `1.0` 的 Task State 包含 `TASK_STATE_INPUT_REQUIRED` 與 `TASK_STATE_AUTH
 
 ## 同一支 Probe 先重現，再驗證修正
 
-[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r2/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 Disposable Kind Cluster、kagent、agentgateway 與 Synthetic LLM，不需要外部 LLM API Key。一條命令會先放入錯誤 Base URL，再恢復 Host-only 設定並重跑正向路徑：
+[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r2/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 Disposable Kind Cluster、kagent、agentgateway 與 Synthetic LLM，不需要外部 LLM API Key。一條命令會先放入錯誤 Base URL，再恢復 Host-only 設定並重跑正向路徑：
 
 ```bash
 make lab-03-runtime-a2a
@@ -106,9 +106,9 @@ make lab-03-runtime-a2a
 | 錯誤 Base URL | `200` | `404` | `404` | 重複 `/api/a2a/api/a2a/...` |
 | 修正後 A2A Route | `200` | `200`，Task Completed | `200`，事件走到 Completed | `/agents/day16` |
 
-![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r2/assets/screenshots/day-17/01-a2a-path-results.png)
+![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-18-r2/assets/screenshots/day-17/01-a2a-path-results.png)
 
-完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r2/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字結果都在 Repo。我另整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r2/articles/day-17/a2a-checklist.md)。遇到「Card 正常、Invocation 失敗」時，可以沿 URL、Version、Route 與 Task State 逐站排查。
+完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r2/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字結果都在 Repo。我另整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-18-r2/articles/day-17/a2a-checklist.md)。遇到「Card 正常、Invocation 失敗」時，可以沿 URL、Version、Route 與 Task State 逐站排查。
 
 ## Protocol 接通後，Runtime 能力仍然原封不動
 
