@@ -1,6 +1,6 @@
 # Day 4｜Agent 拿誰的權限做事：Tool Allowlist 沒回答的身分問題
 
-Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r2/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
+Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r2/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
 
 ```python
 decision = policy.authorize(tool.name)
@@ -67,7 +67,7 @@ store.record(
 
 Prompt Injection 是造成這種偏離的一種方式，但不是 Confused Deputy 的定義。即使系統裡沒有 LLM，只要低信任輸入能控制目標，而受信任程式又拿自己的權限照做，同樣的問題就會出現。
 
-![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r2/assets/diagrams/day-04/confused-deputy-sequence.png)
+![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28-r2/assets/diagrams/day-04/confused-deputy-sequence.png)
 
 ## 授權至少要回答三件事
 
@@ -98,7 +98,7 @@ authorize(
 | Action | Tool name | 可以作為 action | 是 |
 | Resource | Tool arguments 裡的 requested target | 還要由資源端解析與驗證 | 否 |
 
-完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r2/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
+完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r2/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
 
 Policy 做決定時只需要當下可驗證的欄位，Audit 則要保存較完整的責任鏈，讓事後能查出誰提出目的、哪個 Agent 做了選擇，以及哪個 workload 真正送出 request。兩者使用的資料有交集，但用途不同。
 
