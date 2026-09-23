@@ -19,7 +19,7 @@ POST /api/a2a/api/a2a/day16-lab/day16-agent                     -> 404
 
 第二行不是手動拼錯，而是 Client 照著 `supportedInterfaces[].url` 呼叫。Discovery 成功了，Discovery 提供的下一站卻是錯的。
 
-![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
+![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
 
 ## 重複 Prefix 來自 Base URL 的語意誤判
 
@@ -57,7 +57,7 @@ kagent `0.10.0` 的 [Controller Source](https://github.com/kagent-dev/kagent/blo
 - `contextId` 存在，後續 Turn 才能使用相同 Conversation Context。
 - History 或 Artifact 真的包含預期回覆 `boundary-ok`。
 
-kagent `0.10.0` 產生的 Card 同時公告 `0.3` 與 `1.0` JSON-RPC Interface，外部 Caller 可以用 `A2A-Version` 選擇。這是 Migration Compatibility，不代表整條內部路徑只剩單一版本。對平台驗收來說，「Card 寫了 1.0」與「外部 1.0 Request 實際跑通」是兩份不同的證據。
+kagent `0.10.0` 產生的 Card 同時公告 `0.3` 與 `1.0` JSON-RPC Interface，外部 Caller 可以用 `A2A-Version` 選擇。Client 讀到 `1.0` 仍得照 Card 上的 URL 真正發一次 Request。否則只知道它宣告了能力，不知道入口能不能接住。
 
 ## Streaming 要看事件是否走到終態
 
@@ -89,11 +89,11 @@ A2A `1.0` 的 Task State 包含 `TASK_STATE_INPUT_REQUIRED` 與 `TASK_STATE_AUTH
 
 這些狀態沒有回答誰顯示 Approve／Reject、誰驗證 Approver、Decision 存在哪裡，以及 Runtime 如何 Resume。Agent Card 能宣告 Security Scheme，Gateway 也能驗 Transport Credential，仍不會自動建立 Human → Service → Agent 的 Delegation Chain。
 
-A2A 解決的是不同 Agent 如何交換 Message、Task 與 Artifact。Business Authorization、Approval Workflow、Memory 和 Execution Sandbox 仍有各自的 Owner。本篇只把實際跑到的 `TASK_STATE_COMPLETED` 標為通過，不會因為規格定義了 Waiting State，就寫成 kagent HITL 已經完成驗收。
+這次跑通的是 Completed Task。Waiting State 把「Agent 正在等」說清楚，真正的批准者、核准規則與恢復執行仍要由 Runtime 和應用流程接手。Day 18 會拿 BYO Agent 實際走一次 Pause／Resume。
 
 ## 同一支 Probe 先重現，再驗證修正
 
-[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 Disposable Kind Cluster、kagent、agentgateway 與 Synthetic LLM，不需要外部 LLM API Key。一條命令會先放入錯誤 Base URL，再恢復 Host-only 設定並重跑正向路徑：
+[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/03-gateway-runtime/README.md) 沿用 Day 16 的 Disposable Kind Cluster、kagent、agentgateway 與 Synthetic LLM，不需要外部 LLM API Key。一條命令會先放入錯誤 Base URL，再恢復 Host-only 設定並重跑正向路徑：
 
 ```bash
 make lab-03-runtime-a2a
@@ -106,9 +106,9 @@ make lab-03-runtime-a2a
 | 錯誤 Base URL | `200` | `404` | `404` | 重複 `/api/a2a/api/a2a/...` |
 | 修正後 A2A Route | `200` | `200`，Task Completed | `200`，事件走到 Completed | `/agents/day16` |
 
-![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-17/01-a2a-path-results.png)
+![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-17/01-a2a-path-results.png)
 
-完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字 Evidence 都在 Repo。我另外整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-17/a2a-checklist.md)，把 Agent Card、Version、Routing、Streaming、Identity、Trace 與 HITL 分開勾選。讀者不需要從圖片抄指令，也不必把 Kubernetes 環境驗收細節塞進閱讀主線。
+完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字結果都在 Repo。我另整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-17/a2a-checklist.md)。遇到「Card 正常、Invocation 失敗」時，可以沿 URL、Version、Route 與 Task State 逐站排查。
 
 ## Protocol 接通後，Runtime 能力仍然原封不動
 
@@ -116,4 +116,4 @@ make lab-03-runtime-a2a
 
 Protocol Interoperability 不會讓 Runtime 突然多出原本沒有的 Workflow、Memory、Tool Approval 或 Credential Lifecycle。Declarative Runtime 接不住需求時，A2A 做得再完整，也只是讓其他人更穩定地呼叫一個能力仍受限的 Agent。
 
-下一步就是自己寫 Agent，再用 BYO 方式註冊回 kagent。Day 18 會把 Declarative Agent 與 BYO Agent 放在同一張能力表，實際看 Discovery、A2A、HITL、Memory、Skill、Sandbox、Identity 與 Telemetry 中，哪些能沿用平台，哪些仍由自建 Runtime 負責。
+下一步是自己寫 Agent，再用 BYO 方式接回 kagent。這樣其他 Agent 仍能找到它。至於讓它處理複雜流程要花多少工夫，得看平台究竟接走了哪些事、又把哪些留給 Runtime 作者。

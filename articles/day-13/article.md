@@ -4,11 +4,11 @@
 
 把方案放進 Kubernetes 後，評估的問題開始改變。除了 Proxy，我們還要接手 PostgreSQL、Redis、Migration、Team／User State，以及為了配合 GitOps 補上的 API 與 Terraform Glue。這些元件都能運作，真正難回答的是「誰要長期維運這套平台」「Git 能不能重建狀態」「員工離職時要從哪裡撤權」。
 
-LiteLLM 並沒有在評估途中突然少掉某項功能，改變的是我們手上的選型權重。需求從統一 LLM Endpoint，逐漸擴大到 LLM、MCP 與 A2A 共用的 Policy 和 Telemetry Boundary。這篇不做產品排行榜，而是把當時從功能比較走到 Operating Model 的轉折寫清楚。
+LiteLLM 並沒有在評估途中突然少掉某項功能。當需求從統一 LLM Endpoint，擴大到 LLM、MCP 與 A2A 共用的 Policy 和 Telemetry Boundary，原本排在前面的 UI 與 Virtual Key，便不再是最重要的選型條件。真正讓決定翻轉的，是我們要長期經營哪一種平台。
 
 ## LiteLLM 為什麼會先進入候選名單
 
-![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/litellm/litellm-logo.jpg)
+![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/third-party/litellm/litellm-logo.jpg)
 
 [LiteLLM](https://www.litellm.ai/) 同時是一層多 Provider Translation／Routing Layer 與 LLM Gateway。應用程式只要更換 `base_url`，便能用相近的介面呼叫不同模型。真正的 Provider Key 留在 Proxy，Application Repository 不必各自保存一份。再加上 Virtual Key、Rate Limit、Budget、Spend Tracking、Fallback 和 UI，它很自然會成為共用模型入口的候選方案。
 
@@ -43,7 +43,7 @@ Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬�
 
 ## Scorecard 先寫 Owner，再填產品能力
 
-最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
+最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
 
 正文只留下最影響這次結果的六列：
 
@@ -60,7 +60,7 @@ Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬�
 
 ## agentgateway 對齊既有的交付方式
 
-![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/agentgateway/agentgateway-logo.png)
+![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/third-party/agentgateway/agentgateway-logo.png)
 
 [agentgateway](https://agentgateway.dev/) 的 Data Plane 能代理 HTTP、gRPC、LLM、MCP 與 A2A 流量，Kubernetes 模式則由 Controller Watch Gateway API 與相關 Resource，產生 Runtime Config，再透過 xDS 送到 Data Plane。Route、Backend、Policy 與 Gateway Lifecycle 都從 Kubernetes API 進場，變更能沿用原本的 Git Review 與 Reconciliation。
 
@@ -99,11 +99,11 @@ MCP client → agentgateway → JWT / Tool policy → MCP server
 
 下圖把原始選型與事後事件分成兩條時間線。上半部是當時真正影響決定的 Operating Model 與 Identity Mapping，下半部則是轉向 agentgateway 後才發生的 LiteLLM 供應鏈事件，以及後續改善。
 
-![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-13/selection-timeline.png)
+![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-13/selection-timeline.png)
 
 [官方事件 Issue](https://github.com/BerriAI/litellm/issues/24518) 列出 PyPI `1.82.7` 與 `1.82.8` 遭植入惡意程式，可能蒐集並外傳 Credential。維護團隊移除受影響套件、輪替 Maintainer 帳號，並在調查期間暫停 Release。Issue 也說明，當時使用 Proxy Docker Image 的人不在公告列出的影響範圍。
 
-這次事件發生在我們完成轉向之後，不能倒過來冒充早期決策理由。它真正改變的是往後的選型表。Image Signature、SBOM、Dependency Audit、Release Provenance、Patch SLA 與 Incident Response 都應固定列入檢查，不必等產品先出事才想起 Software Supply Chain。
+這次事件發生時，我們已經完成轉向。當初的決定仍是維運與身分模型的取捨。事件讓往後的評估多了一組固定問題：Image 和套件從哪裡來、出事後誰能確認影響範圍，以及平台要花多久取得修補版本。Signature、SBOM 與 Release Provenance 因此進入後續選型，不會改寫當時的時間線。
 
 2026 年 8 月重新查證時，[LiteLLM Security Working Group](https://github.com/BerriAI/litellm-security-wg) 已列出完成與尚待處理的 Hardening 項目，Release 也提供 Image Verification。LiteLLM 同時有一個 Rust Gateway Staging Project，目前公開內容仍偏向 Realtime Hot Path 與 Python Bridge，不能直接解讀成整套 Proxy 已重寫。這些改善值得記錄，卻尚未回答 Team／User State、Identity Mapping 與 GitOps Reconciliation。它們是不同層次的問題。
 

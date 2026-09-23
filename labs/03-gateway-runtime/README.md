@@ -229,7 +229,7 @@ make lab-03-runtime-registry-run
 Probe 先用未帶 credential 的 `POST /v0/apply` 寫入 `day19byo@approved`，再透過
 `Deployment` 將它轉成 kagent `Agent`。接著，Lab 不改 tag，只把 image reference 從
 `1.0.0` 改成 `1.0.1`。controller 正常把新 image reconcile 到 runtime，這在功能上是成功，
-在 provenance 上卻是一筆風險證據：`approved` 不是 immutable digest，也不是簽章。
+在 provenance 上卻是一筆風險證據：`approved` 不是 immutable digest，也不是簽章。可以和 Day 18 的 [Pod Security 執行紀錄](../../assets/screenshots/day-18/evidence/pod-security.txt) 對照：該檔同時列出固定的 BYO **base image** digest 與實際 Image ID。它只鎖定基底映像，不等於已驗證 Day 19 完整 Agent Image 的建置、批准、部署與執行鏈。
 
 預期輸出：
 

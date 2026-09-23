@@ -2,6 +2,12 @@
 
 這份契約用來回答一筆有副作用的 Agent action 在進入 production 前，哪個團隊維護控制、誰有權做決定、證據如何交給下一站，以及剩餘風險由誰接受。它不取代 RACI，也不需要新增一套 approval 平台。本文的 Business Owner 是有權替目標 resource 或業務流程批准變更並接受影響的角色，依情境可能是服務 owner、change owner 或資料 owner。
 
+## 上線前的設計審查情境
+
+這是用來審查控制是否足夠的假設，不是已發生的事故或 Lab 結果：工單只允許處理測試環境，Agent 卻對可產生副作用的 `delete_demo_database` 提出正式環境參數。Gateway 即使認得呼叫者、允許這條 Route，Application／Resource Server 仍應依工單與目標 Resource 拒絕；若流程要求人工核准，批准必須綁住原本的目標與參數，不能在核准後替換。正式接入資料庫前，應用團隊需把這些拒絕與批准失效情境做成可重跑測試，並由資料或服務 Owner 確認接受範圍。
+
+下方範例則回到 Day 1／26 已保存的 no-op canary，展示現有證據能填到哪裡。兩個情境不能合併成同一筆已驗證事件。
+
 ## 填寫範例：Day 1／26 no-op canary
 
 > 證據邊界：`delete_demo_database` 只會寫入合成 canary event，不連資料庫、shell、Kubernetes 或外部 API。表格沿用 Day 26 replay，沒有把缺失欄位補造成已驗證資料。

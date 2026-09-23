@@ -10,13 +10,13 @@ Day 22 先用 Alloy Fixture 定義資料落點。這次讓同一批已簽章 Req
 
 三組 agentgateway 都以 Public JWKS 驗證 RS256 JWT 的 Issuer、Audience、Expiry 與 Signature，再由 CEL 讀取 `jwt.team`、`jwt.sub` 和 Request Header，產生原生 `agentgateway_requests_total`、Trace 與 OTLP Access Log。
 
-正式送流量前，Lab 先以 Missing Token 與 Wrong Audience 各打一筆，兩者都必須由 Gateway 回 `401`。如果這兩個 Guard 沒通過，後面即使 Telemetry 有 `user_id`，也不能宣稱欄位來自已驗證 Identity。
+正式送流量前，先試沒有 Token 和 Audience 錯誤的請求，Gateway 都回 `401`。後面從 `jwt.sub` 取出的 `user_id`，才有明確的驗證入口。否則 Dashboard 上看似完整的身分欄位，其實可能只是任意字串。
 
 Python 只負責建立臨時 RSA Key、替合成 Principal 簽 Token、送出固定流量，以及查詢三個 Backend。Upstream 是 Deterministic No-op Service，只回 HTTP `200`。如果 agentgateway 沒有真的驗 JWT 或投影 Claim，Verifier 就拿不到需要的 Label、Span Attribute 與 Access Log Field。
 
 下圖的 A、B、C 是三個平行實驗組，不是三層 Proxy 串在 Production Data Path。每一組收到完全相同的 90 筆 Request，唯一改變的是 Metric Label 設計。
 
-![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-23/cardinality-experiment.png)
+![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-23/cardinality-experiment.png)
 
 流量矩陣固定為 30 位合成使用者、3 個 Team，每人 3 段 Conversation。每組 Gateway 處理 90 筆 Request，所以整次實驗共有 270 次成功請求，另有兩筆預期被拒絕的 Authentication Guard。所有 Principal 都使用 `user/sre-oncaller-000` 這類 Lab 名稱，不對應真實帳號。
 
@@ -38,7 +38,7 @@ Per-user 組再加入 `user_id: jwt.sub`，Per-conversation 組則增加從 `x-c
 
 三組都使用 agentgateway 原生 [Metric Field Projection](https://agentgateway.dev/docs/standalone/latest/observability/metrics/overview/)，Alloy 再 Scrape `agentgateway_requests_total`。這裡沒有讓 Python 另建一個 `requests_total` 模仿 Gateway。
 
-Runtime 會在 Ignored Directory 產生 Private Key，只有 Public JWKS 掛進 Container。JWT、Authorization Header 與 Private Key 都不進公開 Evidence。這些執行安全細節保留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/04-telemetry-pipeline/README.md)，正文專注在 Label Design。
+Runtime 會在 Ignored Directory 產生 Private Key，只有 Public JWKS 掛進 Container。JWT、Authorization Header 與 Private Key 都不進公開 Evidence。這些執行安全細節保留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/04-telemetry-pipeline/README.md)，正文專注在 Label Design。
 
 ## Prometheus 實際得到 3、30、90 條 Series
 
@@ -63,7 +63,7 @@ count(
 
 Grafana 上的三個 Bar Gauge 直接查原生 `agentgateway_requests_total`。下方 Access Logs 則是三組 Gateway 實際送進 Alloy 的 OTLP Log，不是拿 Report JSON 做成靜態圖。
 
-![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
+![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
 
 這不是 `team × user × conversation` 的笛卡兒積。每位使用者只屬於一個 Team，加入 `team + user_id` 後是實際出現的 30 組。每段 Conversation 也只屬於一位使用者，所以第三組是 90 組，而不是 3 × 30 × 90。
 
@@ -73,7 +73,7 @@ Grafana 上的三個 Bar Gauge 直接查原生 `agentgateway_requests_total`。�
 
 Metrics 不保存 `user_id`，不等於事故調查只能看 Team Aggregate。三組 Gateway 的 Access Log 都將驗證後 Subject 與 Team 寫入 OTLP Log Field，Trace 也保留 `jwt.sub`。
 
-流量產生器替每筆 Request 加入唯一 W3C `traceparent`，並將第一筆合法 Request 的 `trace_id` 保存到 Run Report。Verifier 直接用該 ID 向 Tempo 取回同一條 Trace，再核對 `jwt.sub` 是 `user/sre-oncaller-000`。這證明 Identity 由本輪 agentgateway Span 留下，不是 Python 補值，也不是舊資料恰好命中。
+流量產生器替每筆 Request 加入唯一 W3C `traceparent`，並將第一筆合法 Request 的 `trace_id` 保存到 Run Report。用該 ID 在 Tempo 查回同一條 Trace，Gateway Span 裡的 `jwt.sub` 是 `user/sre-oncaller-000`。單筆調查於是可以沿 Trace 回到 Gateway 當時處理的請求，不必把每個使用者都做成 Metric Label。
 
 Sampling 仍是限制。目標 Request 沒留下 Trace 時，不能拿 Metric 猜出不存在的執行路徑。這時應調整 Sampling Policy，或使用保留較完整事件的資料層。
 
@@ -105,7 +105,7 @@ Production Review 還要加入 Metric Name、既有 Labels、尖峰 Active Serie
 
 若真的需要長期做 Per-user 使用分析，我會把它當成另一種分析資料產品，明確規劃 Schema、權限與成本，而不是順手把 Operational Metric 變成使用者明細表。Dashboard 可以先用 Bounded Metrics 找到異常時間與 Route，再跳到 Trace 或用 Log Metadata 縮小範圍。
 
-## 兩次修正比漂亮的 PASS 更有價值
+## 重跑三組 Gateway 設定
 
 完整實驗可以從 Repo Root 重跑：
 
@@ -116,11 +116,7 @@ make lab-04-cardinality-run
 make lab-04-cardinality-down
 ```
 
-第一次啟動時，Static Validator 全部通過，Alloy Runtime 卻拒絕 Prometheus Scrape。原因是 `scrape_interval` 設為 2 秒，仍沿用預設 10 秒 Timeout。語法正確，執行語意卻不成立。最後將 Timeout 明確改成 1 秒，加入 Regression Test 後才重新跑完整 Traffic。
-
-第二次修正發生在 Tempo Verifier。最初使用 TraceQL 搜尋固定使用者，重新建環境後可能受 Sampling 與 Index Delay 影響，也可能命中上一輪資料。最後改成讓 Request 自帶唯一 `traceparent`，直接查本輪已知 Trace ID，才排除搜尋延遲與舊資料兩個變因。
-
-這兩個修正都提醒我，Config Validation 與漂亮 Dashboard 只是必要條件，不能代替 Live Evidence。完整 Gateway YAML、Queries 與 Machine-readable Report 都留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/04-telemetry-pipeline/README.md)。
+Runner 會對三組設定送相同流量，再查 Prometheus 實際建立的 Series。Tempo 查詢則使用這次 Request 的 Trace ID。完整 Gateway YAML、查詢與 Collector 設定都留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/04-telemetry-pipeline/README.md)。同一批請求只因 Metric 多放了身分欄位，就讓常駐的時序資料從 3 組長到 30、90 組。
 
 ## 下一篇開始算 Fallback 的成本
 

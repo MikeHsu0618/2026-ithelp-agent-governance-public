@@ -87,6 +87,8 @@ make lab-04-cardinality-down
 
 這組數字是本次 traffic matrix 實際出現的 label set，不是把所有維度做笛卡兒積得到的理論上限。完整 query 與時間窗在 [`assets/screenshots/day-23/evidence/backend-report.json`](../../assets/screenshots/day-23/evidence/backend-report.json)。
 
+重跑時若設定檔檢查通過、Alloy 卻拒絕啟動 Scrape，先確認 `scrape_timeout` 小於 `scrape_interval`；本 Lab 曾在 2 秒 interval 沿用較長的預設 timeout，修成 1 秒後才完成 Runtime 驗證。Tempo 也不要只用固定使用者的 TraceQL 搜尋判定成功，搜尋可能受取樣、索引延遲或上一輪資料影響。本輪 Request 會帶唯一 `traceparent`，Verifier 直接查保存的 Trace ID；這是實際重跑時排除假陽性的依據。
+
 ## 驗證 LLM Fallback 與成本證據
 
 Day 24 先使用 agentgateway `1.5.0` 內建的 LLM Analytics。兩份 Gateway config 都啟用暫存 SQLite request-log database 與 model catalog，`client-retry` instance 的官方 UI 可從 <http://127.0.0.1:28095/ui/llm/analytics> 開啟。跑完 Fallback 情境後，畫面會顯示 OpenAI／Anthropic 各一筆 request、兩個 calls，以及只有成功 backup response 能證明的 10 tokens／`USD 0.000066`。

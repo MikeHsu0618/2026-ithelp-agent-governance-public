@@ -8,7 +8,7 @@
 
 ## 從一個會查 Log 的 Agent 開始
 
-整個系列會沿用同一個小型案例。我用 [Google ADK Python](https://adk.dev/get-started/python/) 寫了一個 SRE Investigation Agent，讓它協助調查 `payments-demo` 的 latency。後面談到 kagent 時，還會碰到相同的 Agent、Tool 與執行前攔截點，所以第一天先讓大家認識這條基本流程，不急著比較框架。
+我用 [Google ADK Python](https://adk.dev/get-started/python/) 寫了一個 SRE Investigation Agent，讓它協助調查 `payments-demo` 的 latency。三十天會反覆回到「值班工程師請 Agent 調查，Agent 再呼叫 Tool」這種動作，但不是每天都在同一套程式上加功能。身分篇會用獨立的 Token Lab，平台篇會實測不同產品，到了 Day 25 才讓這個 Agent 真的查 Loki。各篇換的是觀察角度，追問的始終是同一件事：動作發生時，誰有權讓它繼續？
 
 第一版 Agent 有三個 Tool：
 
@@ -26,7 +26,7 @@ for payments-demo with ticket INC-DEMO-001.
 
 這段指令不在使用者 Prompt，而是在 Agent 主動讀取的資料裡。企業 Agent 會碰 ticket、網頁、文件、郵件與 Tool 回傳值，外部資料一旦進入 context，並不會自動變成可信 instruction。
 
-![不可信 Log 影響 Gemini 的 Tool 選擇。全部放行的 policy 讓危險 Tool 進入執行階段，Lab 以寫入安全標記代替真正刪除資料。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-01/unsafe-action-chain.png)
+![不可信 Log 影響 Gemini 的 Tool 選擇。全部放行的 policy 讓危險 Tool 進入執行階段，Lab 以寫入安全標記代替真正刪除資料。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-01/unsafe-action-chain.png)
 
 這個起始版本刻意把兩個地方設計得很差。Agent instruction 要求模型採信 Log 裡像 runbook 的內容，Tool policy 又設成全部放行的 `open` 模式。我要看的不是 Gemini 能不能通過安全測驗，而是外部資料、模型判斷與 Tool 權限直接串起來時，一次錯誤判斷能走多遠。
 
@@ -34,7 +34,7 @@ for payments-demo with ticket INC-DEMO-001.
 
 我用同一份攻擊 Log 實際呼叫 Gemini 跑了兩次。兩次模型都先提出 `delete_demo_database`，Google ADK 接著讓流程走進 Function Tool。下圖是其中一次留下的終端摘要：
 
-![Gemini 選擇 delete_demo_database，全部放行的 policy 讓 Tool 進入執行階段，安全標記增加一筆。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-01/01-live-unsafe-tool-call.png)
+![Gemini 選擇 delete_demo_database，全部放行的 policy 讓 Tool 進入執行階段，安全標記增加一筆。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-01/01-live-unsafe-tool-call.png)
 
 這次結果很明確：危險 Tool 已經進入執行階段，Lab 也寫入一筆安全標記。終端把這個狀態記成 `CANARY_TRIGGERED`，方便後續從事件紀錄與 CLI 對照。這個 Tool 沒有連接資料庫、shell 或 Kubernetes，所以沒有真實資料被刪除，但整條呼叫流程已經走完：模型提出動作、授權規則放行、Function Tool 開始執行。
 
@@ -62,21 +62,21 @@ for payments-demo with ticket INC-DEMO-001.
 
 ## 三十天沿著同一條路徑往前走
 
-這個系列不會每天換一套熱門工具。我會沿著同一條動作路徑，逐步補上身分、授權、流量入口與事件重建。
+這個系列不會把三十個產品串成一張必裝清單。我會拿這筆 SRE 調查當參照，分別看身分、授權、流量入口與事件重建；有些章節使用同一個 Agent，有些則要靠獨立 Lab 才能把問題看清楚。
 
-![三十天沿著同一條 action path 分成五個階段，從 Agent 攻擊面走到 Identity、執行控制、Traceability 與組織落地。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-01/series-route.png)
+![三十天沿著同一條 action path 分成五個階段，從 Agent 攻擊面走到 Identity、執行控制、Traceability 與組織落地。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-01/series-route.png)
 
 - **Day 1–5** 從危險動作出發，拆開資料、模型判斷、授權與執行邊界。
 - **Day 6–12** 釐清使用者、服務、Agent 與實際執行程式各自負什麼責任。
 - **Day 13–19** 處理流量入口、Agent runtime、人工核准、Agent 互相呼叫與版本來源。
-- **Day 20–26** 把既有 Alloy、Grafana LGTM 經驗接回來，重建一次動作跨過多個元件的完整過程。
+- **Day 20–26** 把既有 Alloy、Grafana LGTM 經驗接回來。這個只讀合成 Log 的 `query_logs` 也會在 Day 25 換成真的 Loki 查詢，再檢查 Agent 查回的線索能否用於事故回放。
 - **Day 27–30** 回到選型和組織責任，整理哪些能力值得承接，哪些現在做只會增加平台負擔。
 
 中間會有跑通後仍決定不用的選型，也會有至今仍讓我不滿意的產品邊界。Keycloak 為什麼讓位給 Cognito、kagent 的 declarative runtime 卡在哪裡、agentgateway 與既有 Gateway 如何分工，都會放回當時真正要解的問題，而不是寫成功能表。
 
 ## 跟著跑第一個 Lab
 
-完整 source code、操作方式與原始 JSON／JSONL 證據都在 [直接進入 Day 1 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key 也能先跑固定案例：
+完整 source code、操作方式與原始 JSON／JSONL 證據都在 [直接進入 Day 1 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key 也能先跑固定案例：
 
 ```bash
 make lab-01-up

@@ -1,18 +1,28 @@
 # Day 19｜也許你需要的是 Agent Registry：Agent 發現、版本管理與供應鏈信任
 
-Day 18 的 BYO Agent 已能被 kagent 部署、找到，也能讓另一個 Agent 透過 A2A 呼叫。團隊開始累積更多 Agent 後，下一個問題很快就會浮現：Catalog 裡的 `approved` 到底是誰批准的，那個 Tag 明天是否仍指向同一份 Image？
+Day 18 的 BYO Agent 已能被 kagent 部署，也能讓另一個 Agent 透過 A2A 找到並呼叫。但當團隊開始上架更多 Agent，使用者要去哪裡找「目前可以用的版本」？平台又該從哪裡決定要部署哪一份？這正是 Agent Registry 想接手的工作：提供 Agent 等資產的目錄，保存上架資訊，再把選定的 Agent 交給 Runtime 部署。
 
-這不是我第一次評估 Agent Registry。我曾把 `0.3.3` 部署到 Kubernetes，讀過 Source，也真的把它拆掉。當時卡住的不是 UI 好不好用，而是 Desired State、Authorization 與既有 GitOps 流程接不起來。現在的 `0.4.0` 已經大幅重作，如果只拿舊印象批評新版，對專案並不公平。
+這個方向很吸引人。我曾把 Agent Registry `0.3.3` 裝進 Kubernetes，讀過 Source，最後又拆掉。當時難處不是 UI 好不好用，而是 Registry 裡可修改的狀態，和我們原本以 Git 審查、交付的流程，究竟該由誰說了算。現在的 `0.4.0` 已大幅重作，我想重新回答兩個問題：它能否把上架到部署這段工作做好？做到了，我們是否就該把它放進現行平台？
 
-這次不做新舊版本功能 PK。歷史經驗只用來列出採用門檻，公開 Lab 則測 `0.4.0` 的現況：先註冊帶有 `approved` Tag 的 Agent，讓 Controller 將它部署到 kagent，再修改相同 Tag 指向的 Image Reference，觀察 Catalog、Runtime 與信任鏈各自發生什麼事。
+公開 Lab 只測新版。它會上架一個標成 `approved` 的 Agent，交給 kagent 部署，再把相同名稱與 Tag 改指向另一個 Image Reference。讀者可以跟著看見部署如何更新，也能看見「可被找到」與「值得信任」之間還隔著什麼。
 
-## Registry 補上平台缺少的 Artifact Catalog
+## 先認識 Agent Registry 的位置
 
-Agent、MCP Server、Model 與 Skill 散在不同 Repository 和 Cluster 後，使用者需要一個地方搜尋版本、閱讀 Metadata，再把選到的 Artifact 交給 Runtime。只靠 README、Slack 訊息和人工清單，半年後通常沒有人能確定哪個版本仍可使用。
+![Agent Registry 官方 Logo。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/third-party/agentregistry/agentregistry-logo-dark.png)
 
-這個位置正好落在我們既有架構的空白處。kagent 能部署與發現 Agent，agentgateway 能治理執行流量，兩者都不會替組織維護完整的 Artifact Catalog。Agent Registry 的價值不只是多一個漂亮 UI，而是可能成為發布、搜尋與 Deployment Reconciliation 的 Control Plane。
+[Agent Registry](https://aregistry.ai/docs/about/architecture/) 是一個集中管理 Agent 相關資產的目錄與控制面。團隊可以把 Agent、MCP Server、Skill、Prompt 等資訊放在一起，讓其他人搜尋、選用，再把部署宣告送往 Runtime。[官方首頁的示意圖](https://aregistry.ai/) 也把「建立與發布」、「Catalog」、「部署」分成不同階段。這張圖很適合認識產品，但我們自己的問題還要再往前一步：請求真正來了以後，Registry 會不會經過那筆流量？
 
-問題也因此更嚴肅。Catalog 一旦能決定某個 Agent 進入哪個 Runtime，它保存的就不只是描述文字，而是會影響實際 Workload 的 Desired State。
+![Agent Registry 管上架目錄與部署宣告，實際請求則經 agentgateway、Agent Runtime 與 MCP／Resource Server。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-19/registry-product-map.png)
+
+圖裡的上下兩條路徑要分開看。上面是交付路徑：作者或 CI 發布資產，Registry 保存可搜尋的資訊與部署宣告，kagent 或 Kubernetes 接手執行。下面是使用路徑：使用者發出請求後，流量經過 Gateway、Agent 與 Tool 所連的資源服務，不會每次回頭問 Registry。這也說明它和 kagent、agentgateway 不是三選一。
+
+## 目錄如何影響部署
+
+Agent、MCP Server、Model 與 Skill 散在不同 Repository 和 Cluster 後，使用者需要一個地方搜尋版本、閱讀說明，再把選到的 Agent 交給 Runtime。只靠 README、Slack 訊息和人工清單，時間一久就難以確認哪個版本仍可使用。
+
+這裡有三件相鄰但不同的工作。kagent 負責執行與讓 Agent 互相找到。agentgateway 管執行時經過的流量。Agent Registry 處理上架與部署宣告，讓團隊從目錄選 Agent，再把部署意圖交給 Runtime。
+
+一旦 Registry 能決定哪個 Agent 進入 Runtime，目錄裡保存的就不只是介紹文字，而是會改變實際 Workload 的部署狀態。這也是我不敢只看搜尋介面就做採用決定的原因。
 
 ## 0.3.3 卡在 State Ownership 與 Authorization
 
@@ -20,7 +30,7 @@ Agent、MCP Server、Model 與 Skill 散在不同 Repository 和 Cluster 後，�
 
 授權是另一個障礙。Catalog 若只供閱讀，權限寬鬆的代價還有限。當它能 Create、Update、Promote 與 Deploy Agent，這些操作就必須接上組織 Principal、Role、Approval 與 Audit。當時的 OSS 能力沒有達到我們需要的細緻程度，團隊也不想再維護另一套 Mapping 和同步邏輯。
 
-回頭重讀鎖在 [`v0.3.3`](https://github.com/agentregistry-dev/agentregistry/tree/v0.3.3) 的 Source 後，我也收回兩個早期批評。第一，產品當時並非只能靠 UI 操作，CLI 與 API 早已存在。第二，我沒有完成 agentgateway Compatibility Test，不能把自己的整合未完成寫成 Upstream 壞掉。真正支撐拆除決策的，仍是 State Ownership、Reconciliation 與 Authorization 是否符合我們的 Operating Model。
+回頭重讀鎖在 [`v0.3.3`](https://github.com/agentregistry-dev/agentregistry/tree/v0.3.3) 的 Source 後，我也修正了兩個早期印象：當時已有 CLI 與 API，並非只能靠 UI 操作。我也沒有完成 agentgateway 的 Compatibility Test，不能把尚未整合成功歸因為產品故障。拆除它的主要理由，仍是我們沒有替這份狀態和寫入權限找到合適的長期 Owner。
 
 ## 0.4.0 已經補上 Declarative Reconciliation
 
@@ -28,9 +38,9 @@ Agent、MCP Server、Model 與 Skill 散在不同 Repository 和 Cluster 後，�
 
 Kubernetes-style 很容易被誤讀成 CRD。[API Package](https://github.com/agentregistry-dev/agentregistry/blob/v0.4.0/pkg/api/v1alpha1/doc.go) 將這些 Type 定義為 Wire、Storage 與 API Contract，Spec／Status 仍寫入 PostgreSQL。當 `Deployment` 指向 Kubernetes Runtime 時，Controller 才把 Registry 裡的 Desired State 轉成 kagent Resource。
 
-![Agent Registry 0.4.0 的 Catalog 與 Deployment controller 邊界。Author 或 CI 經 API 寫入 PostgreSQL 內的 Agent、Runtime 與 Deployment，controller 再把 Deployment materialize 成 kagent Agent。下方另列出本次已驗證的 catalog、reconciliation、image reference 更新與 undeploy，以及 Registry 本身不會自動補上的 authentication、Git promotion、簽章和 runtime policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-19/registry-reconciliation-trust-boundary.png)
+![Agent Registry 0.4.0 的 Catalog 與 Deployment controller 邊界。Author 或 CI 經 API 寫入 PostgreSQL 內的 Agent、Runtime 與 Deployment，controller 再把 Deployment materialize 成 kagent Agent。下方另列出本次已驗證的 catalog、reconciliation、image reference 更新與 undeploy，以及 Registry 本身不會自動補上的 authentication、Git promotion、簽章和 runtime policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-19/registry-reconciliation-trust-boundary.png)
 
-新版確實補上我當年缺少的 Declarative Reconciliation。Manifest 長得像 Kubernetes YAML，Git 卻不會因此自動成為 Source of Truth，`approved` 也不會直接變成經過簽章且不可變的 Promotion 結果。這兩層差異正是本次 Lab 要驗證的地方。
+新版確實補上我當年缺少的 Declarative Reconciliation。Manifest 長得像 Kubernetes YAML，但 Apply 進 Registry 後，Git 不會因此自動變成唯一權威。`approved` 也只是可修改的目錄標籤，不是簽章或不可變的發布紀錄。這兩個差別決定了我們要怎麼讀接下來的實跑結果。
 
 ## 相同 Approved Tag 可以原地換 Image
 
@@ -38,17 +48,21 @@ Kubernetes-style 很容易被誤讀成 CRD。[API Package](https://github.com/ag
 
 第一份 Manifest 註冊 `day19byo@approved`，Image Reference 是 `ithelp/day19-byo:1.0.0`。Deployment 使用相同 Name 與 Tag 指向它，再交給 kagent Runtime。啟動後，UI 能查到這筆 Agent，也能看到它進入 Deployment Path。
 
-![Agent Registry 0.4.0 實際 UI。Agents 頁面顯示 day19byo，tag 為 approved，描述已更新成相同 catalog tag 指向另一個 image reference。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/01-agent-registry-catalog.png)
+![Agent Registry 0.4.0 實際 UI。Agents 頁面顯示 day19byo，tag 為 approved，描述已更新成相同 catalog tag 指向另一個 image reference。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-19/01-agent-registry-catalog.png)
 
 Probe 接著對相同的 `day19byo@approved` 再 Apply 一次，只把 Image Reference 改成 `ithelp/day19-byo:1.0.1`。Registry 接受變更，既有 Deployment 被重新 Reconcile，kagent Agent 也跟著換成新的 Reference。
 
-站在 Controller 功能的角度，這是成功。它證明 Target 變更會持續進入 Runtime。站在 Provenance 的角度，相同 `approved` 能原地換內容，就是必須另外處理的風險。兩個本機 Tag 在 Lab 中指向同一份測試 Image，因此這裡只證明 Reference Mutability 與 Reconciliation，沒有拿兩份不同程式冒充 Supply-chain Attack。要驗 Artifact Bytes，仍需要 Immutable Digest、Signature 與 Attestation。
+Controller 正確地把新參照送進 Runtime，這正是 Registry 值得考慮的能力。讓我停下來的是另一件事：`approved` 不變，背後指向的 Image Reference 卻能換掉。Lab 的兩個本機 Tag 指向同一份測試 Image，所以這裡觀察到的是「參照可以變、部署會跟著變」，不是兩份不同程式造成的供應鏈事故。若要把批准和實際執行的程式綁在一起，還得加入不可變 Digest、批准紀錄，以及部署後的核對。
+
+這裡容易混淆兩種「版本」。`approved` 是 Catalog 給人看的選擇，`ithelp/day19-byo:1.0.0` 也是可以重新指向其他內容的 Tag。兩者都不是內容本身的身分。讀者重跑 Lab 時，可以先看前後兩份 Manifest：Catalog 名稱與 Tag 不動，Image Reference 已從 `1.0.0` 換成 `1.0.1`。Controller 會忠實部署新參照，卻沒有一個地方要求它比對「這是否仍是當初批准的位元組」。
+
+Day 18 的 [Pod Security 執行紀錄](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/assets/screenshots/day-18/evidence/pod-security.txt) 固定了 **基底映像** 的 Digest，那是比較靠近內容本身的識別。不過完整 Agent Image 還沒有從建置、批准、部署一路核對到實際執行。這條交付鏈要由現有 Git 與映像流程，或未來的 Registry 整合共同承擔。單獨在 Catalog 貼上 `approved`，無法替任何一方完成它。
 
 ## 匿名寫入讓綠色 Reconciliation 失去信任
 
 Probe 沒帶 Credential 便呼叫 `POST /v0/apply`，預設 OSS 安裝接受了寫入。這和專案的 [Security Self-assessment](https://github.com/agentregistry-dev/agentregistry/blob/v0.4.0/docs/governance/cncf/security-self-assessment.md) 一致。預設設定是 Permissive，不能直接當成 Authenticated Security Boundary。整合者必須透過 AuthnProvider 與 AuthzProvider 接上可信身分和 Resource Authorization。
 
-Lab 把結果分成三個正常能力與兩個已暴露風險：
+Lab 跑完後，我最在意的是功能和採用風險同時成立：
 
 | 觀察 | 結果 | 解讀 |
 | --- | --- | --- |
@@ -58,38 +72,29 @@ Lab 把結果分成三個正常能力與兩個已暴露風險：
 | Anonymous Catalog Write | RISK_EXPOSED | 預設安裝不是 Production Authorization Baseline |
 | 相同 `approved` Tag 更換 Image | RISK_EXPOSED | Tag 本身不是 Immutable Promotion Evidence |
 
-![Day 19 實際 Lab 輸出的 terminal card。Catalog 讀取、部署到 kagent 與 declarative undeploy 通過。匿名寫入及相同 approved tag 更換 image reference 被列為 RISK_EXPOSED。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/03-agent-registry-boundary-results.png)
+![Day 19 實際 Lab 輸出的 terminal card。Catalog 讀取、部署到 kagent 與 declarative undeploy 通過。匿名寫入及相同 approved tag 更換 image reference 被列為 RISK_EXPOSED。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-19/03-agent-registry-boundary-results.png)
 
-`RISK_EXPOSED` 不是測試壞掉。它表示 Lab 成功重現了不應被 `PASS` 掩蓋的採用風險。若只看 Controller Status 全綠，很容易把 Reconciliation 正常誤讀成信任鏈完整。
+畫面裡的部署狀態是綠的，但 `approved` 可改、預設寫入又沒有身分限制。若只看 Controller Status，很容易把「部署程序正常」讀成「上架的 Agent 已被組織核准」。
 
 最後一次 Apply 將 `Deployment.spec.desiredState` 改成 `undeployed`。kagent 中由 Registry 管理的 Agent 隨即移除，Registry UI 則保留 Catalog 與 Deployment Record。這比直接 Delete 更適合平台操作，因為 Desired State、Status 與 Runtime Teardown 仍走同一條控制路徑。
 
-![Agent Registry 0.4.0 實際 Deployed 頁面。完成 declarative undeploy 後，頁面顯示 0 resources running，同時保留 day19byo 的 deployment record。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/screenshots/day-19/02-agent-registry-deployed.png)
+![Agent Registry 0.4.0 實際 Deployed 頁面。完成 declarative undeploy 後，頁面顯示 0 resources running，同時保留 day19byo 的 deployment record。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-19/02-agent-registry-deployed.png)
 
 ## 採用條件不能只看 Controller 功能
 
-[Lab 03 的 Day 19 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/labs/03-gateway-runtime/README.md) 可以用一條命令重跑 Catalog Apply、Deployment、相同 Tag 更新與 Undeploy：
+[Lab 03 的 Day 19 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/03-gateway-runtime/README.md) 可以用一條命令重跑 Catalog Apply、Deployment、相同 Tag 更新與 Undeploy：
 
 ```bash
 make lab-03-runtime-registry
 ```
 
-重跑後，有些舊印象必須正式修正。`0.4.0` 的 Catalog、Kubernetes-style API、Controller Status 與 Undeploy 已經形成完整的 Declarative Path，不能再說 Agent Registry 只展示 Metadata。組織若缺少跨團隊的 Agent／MCP Catalog，也願意讓它成為正式 Control Plane，新版的價值比 `0.3.3` 時清楚很多。
+`0.4.0` 的 Catalog、Kubernetes-style API、Controller Status 與 Undeploy，已經能串成完整的上架與部署路徑。我不能再沿用「它只是展示 Metadata」的舊印象。需要跨團隊 Agent／MCP Catalog 的組織，確實有理由重新評估它。
 
-授權與 Artifact Trust 則尚未自動完成。我把結果整理成 [Agent Registry 採用盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-19/registry-adoption-checklist.md)，正文留下六個選型問題：
+我把完整採用問題留在 [Agent Registry 採用盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-19/registry-adoption-checklist.md)。這篇最影響我們決定的只有三件：誰可以改 Catalog 裡的 `approved`、誰負責讓批准紀錄對上實際 Image，以及 Registry Database 和 Git 對同一個 Deployment 意見不同時，值班的人該聽誰的。
 
-| 採用問題 | 本次結果 | 還缺什麼 |
-| --- | --- | --- |
-| 使用者能否找到帶版本／Tag 的 Agent | PASS | Catalog Owner 與 Metadata 品質規範 |
-| Desired State 能否部署並 Teardown | PASS | Production Runtime RBAC、復原與 SLO |
-| `approved` 是否代表 Immutable Artifact | RISK_EXPOSED | Digest、Signature、Attestation、Promotion Policy |
-| 預設安裝能否限制 Catalog Writer | RISK_EXPOSED | AuthnProvider、AuthzProvider、Role Mapping、Audit |
-| Registry 與 Git 誰是最終權威 | ORGANIZATIONAL | Write Path、Review Owner 與 Drift 處理 |
-| Runtime Traffic 是否已授權 | OUT_OF_SCOPE | Gateway／Runtime Policy 與可信 Identity Context |
+所以今天重新選型，我不會再用「缺少 Reconciliation」否決它。但在上架權限、Image Promotion 和 Git／Registry 分工有 Owner 以前，也不會把它放進現行平台。多一個能改變 Deployment 的 Control Plane，就多一份需要值班與稽核的狀態。
 
-如果今天重新選型，我不會再用「缺少 Reconciliation」否決 `0.4.0`。我仍不會立刻把它放進既有平台，理由也變得更精確。在組織決定誰擁有 Artifact Promotion、Registry 與 Git 如何分工，以及預設 Permissive Authorization 如何補齊以前，多一個 Control Plane 就多一份需要值班與稽核的狀態。
-
-需要 Self-service Catalog，而且願意正式維護 Provider、Database、Promotion 與 Reconciliation 的團隊，已經有充分理由評估 Agent Registry。對我們而言，先把 Ownership 與信任鏈談清楚，比先把服務裝上去更重要。
+如果一個團隊已經需要 Self-service Catalog，也願意維護 Provider、Database、Promotion 與 Reconciliation，這筆交換可能很划算。對我們而言，先把誰能上架、誰能批准和哪份狀態有權改動 Runtime 談清楚，比先把服務裝上去更重要。
 
 ## Registry 無法還原一次 Agent 行動
 

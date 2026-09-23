@@ -53,3 +53,13 @@
 - Use：Day 16 第一次正式介紹 kagent
 - Modification：只縮放為 800 px PNG，未修改顏色、圖形或比例
 - SHA-256：`617e208bf194287efed6ea40d9f82679e32e5b26cd5c56c736a897ca59eaedba`
+
+## Agent Registry
+
+- Asset：`agentregistry/agentregistry-logo-dark.png`
+- Source：[Agent Registry 官方網站原始資產](https://github.com/agentregistry-dev/website/blob/main/static/landing/assets/agentregistry-logo-dark.png)
+- Owner／project：Agent Registry／Linux Foundation project
+- Terms：[Linux Foundation Trademark Usage Guidelines](https://www.linuxfoundation.org/legal/tm-usage)；僅作產品辨識，不暗示背書
+- Use：Day 19 首次介紹 Agent Registry
+- Modification：未修改顏色、圖形或比例
+- SHA-256：`e171a6faeec7cedc40f4367999099571616e1b872326c1625ea0da862897cf40`

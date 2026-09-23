@@ -1,18 +1,8 @@
 # Day 6｜雖然 Keycloak 十分強大，但最終我們選擇 AWS Cognito
 
-Day 5 把 Agent 的第一個治理缺口指向「可驗證的身分」。沿著這個問題往下做時，我們手上其實已經有一套跑在 Kubernetes 的 Keycloak，上游企業 IdP、JWT role、Gateway 和 MCP Tool RBAC 也都串了起來。
+要讓 Agent Gateway 根據「誰在呼叫」決定 MCP Tool 權限，我們需要一個能接上既有企業 IdP、再向 AI 服務發出穩定 Token 的入口。我們先把 Keycloak 部署到 Kubernetes，Federated Login、JWT Role、Gateway 到 MCP 的 Tool RBAC 都跑通了，最後卻選擇改用 Cognito。
 
-單看 PoC，Keycloak 沒有失敗：
-
-```text
-Federated login         PASS
-JWT role claim          PASS
-Gateway per-tool RBAC   PASS
-MCP request             PASS
-架構決策                 REPLACE
-```
-
-最後一列才是這次選型最值得談的地方。Keycloak 證明了技術鏈走得通，卻沒有替我們回答另一個問題：團隊現在準備經營一座企業級 Identity Center，還是只需要先替少數 AI 服務補上一層 OIDC bridge？
+這不是一次「PoC 失敗所以換產品」的故事。技術鏈通了，選型問題才看得更清楚：團隊現在準備經營一座企業級 Identity Center，還是只需要先替少數 AI 服務補上一層 OIDC bridge？
 
 這項組織限制從評估開始就存在。我們和 IT 團隊還沒有對企業 Identity Center 的範圍、owner 與導入順序取得共識，可投入的整合和維運人力也有限。人員到職、轉組與離職仍由既有流程和企業 IdP 掌握，近期明確排進時程的只有幾個 AI 服務。兩個方案因此都能發出合格的 Token，背後代表的工作量卻完全不同。
 
@@ -43,7 +33,7 @@ Human
 
 Gateway policy 如果直接判斷 `jwt.role == "mcp-observer"`，自然永遠對不到。我們後來改成檢查 `realm_access.roles` 的 membership，也評估過透過 protocol mapper 把 claim 轉成下游共同約定的形狀。
 
-調整後，沒有 Token 的 request 會收到 `401`，缺少角色時維持 deny by default，不同角色也只能看見自己被允許的 Tool 子集。這段驗收的意義很單純：Keycloak 可以接企業 IdP，也能把角色一路帶到 Gateway 與 MCP。它不是因為做不到才被換掉。
+調整後，沒有 Token 的 request 會收到 `401`，缺少角色時維持 deny by default，不同角色也只能看見自己被允許的 Tool 子集。Keycloak 可以接企業 IdP，也能把角色一路帶到 Gateway 與 MCP。後來影響選型的，是誰來長期維護這條路。
 
 [Keycloak Server Administration Guide](https://www.keycloak.org/docs/latest/server_admin/) 對 identity brokering、user federation、role 與 protocol mapper 都有完整說明。實際導入時，文件能告訴我們功能在哪裡，claim contract 要長什麼樣子，仍得由平台和下游服務共同決定。
 
@@ -74,7 +64,7 @@ Gateway policy 如果直接判斷 `jwt.role == "mcp-observer"`，自然永遠對
 
 ## 換成 Cognito，移走的是 Runtime
 
-![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-06/identity-center-before-after.png)
+![Keycloak 與 Cognito 兩條技術鏈都通過，差別是平台擁有的 runtime 維運面，兩者的人員生命週期仍在上游企業 IdP。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-06/identity-center-before-after.png)
 
 改用 Cognito User Pools 後，請求仍然經過相同的責任位置：
 
@@ -94,7 +84,7 @@ Cognito 可以 federation 外部 OIDC／SAML IdP，也能透過 resource server 
 
 |  | Keycloak | Amazon Cognito User Pools |
 | --- | --- | --- |
-| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/third-party/keycloak/keycloak-icon-color.png) | ![Amazon Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 技術驗收 | Federation、role claim、Gateway 與 MCP RBAC 已跑通 | Human 與 M2M 路徑已跑通 |
 | 平台要承擔的範圍 | Identity 設定加上完整服務 runtime | Identity 設定與整合，runtime 在 AWS 服務邊界 |
 | 當時的適配性 | 適合有人長期經營、服務多個系統的 Identity Platform | 適合先替少數 AI 服務提供清楚的 OIDC boundary |
@@ -102,9 +92,9 @@ Cognito 可以 federation 外部 OIDC／SAML IdP，也能透過 resource server 
 
 我們最後選 Cognito，換來的不是更多 IAM 功能，而是不用為少數服務先維運一整套 IdP runtime。相對地，Cognito 的限制也被寫進決策紀錄，不能因為它是 managed service 就把 portability 和成本問題略過。
 
-## 這個決定不是永久結論
+## 什麼條件會讓我們重選
 
-完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-06/identity-center-decision-matrix.md) 放在 repo。這次沒有替功能逐項打分，因為兩條技術鏈都已經跑通，先決條件在於組織準備承接哪一種 operating model。
+完整的 [Identity Center 組織選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-06/identity-center-decision-matrix.md) 放在 repo。這次沒有替功能逐項打分，因為兩條技術鏈都已經跑通，先決條件在於組織準備承接哪一種 operating model。
 
 出現以下情況時，我們會重開這份決策：
 
@@ -112,6 +102,6 @@ Cognito 可以 federation 外部 OIDC／SAML IdP，也能透過 resource server 
 - 多個非 AI 系統或 SaaS 願意接入共同的 federation、角色模型與生命週期流程。
 - Cognito 的 authentication flow、AWS coupling、quota、費用或復原目標開始限制平台。
 
-Keycloak PoC 的價值，是把「技術做不到」從淘汰理由裡拿掉。最後選 Cognito，反映的是當時只承諾 AI identity bridge，還沒有準備經營全公司的 Identity Center。
+Keycloak PoC 排除了技術不可行這個理由。最後選 Cognito，是因為當時只承諾 AI identity bridge，還沒有準備經營全公司的 Identity Center。
 
 產品選完後，Token 裡的身分仍然不能含糊帶過。Human 的 `sub`、Service 的 client identity、真正執行請求的 Workload，以及 Agent 正代表誰，都不能塞進同一個 `user_id`。Day 7 會把這些角色拆開，確認每一個責任位置應該留下什麼證據。

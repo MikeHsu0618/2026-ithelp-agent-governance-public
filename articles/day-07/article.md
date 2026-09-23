@@ -10,7 +10,7 @@
 
 圖中四張卡片分別對應同一筆 Agent action 的目的、服務驗證、決策邏輯和執行環境。
 
-![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 說明誰提出或核准目的，Service 說明哪個服務在目前 credential hop 完成驗證，Agent 記錄選擇動作的 artifact，Workload 記錄實際持有 credential 的 runtime。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r1/assets/diagrams/day-07/four-identity-slots.png)
+![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 說明誰提出或核准目的，Service 說明哪個服務在目前 credential hop 完成驗證，Agent 記錄選擇動作的 artifact，Workload 記錄實際持有 credential 的 runtime。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-07/four-identity-slots.png)
 
 Human 說明目的從哪裡來。這筆 latency 調查是值班工程師提出的，能驗證的識別應該來自 issuer 指派的 `sub`。Email、display name 或 `sre-oncaller` 方便人閱讀，卻可能被修改，也不能取代原始 subject。[OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) 對 `sub` 的定義，就是 issuer 對 End-User 指派的識別值。
 
@@ -67,10 +67,10 @@ Human 委派與排程任務放在一起，才能看出四類責任不是一張�
 | 值班工程師委派 Agent | 提出目的的 requester，必要時另記 approver | 只在完成服務驗證的 hop 出現 | artifact + version | 實際執行 runtime |
 | Scheduled Agent | 沒有互動式 Human caller | authenticated confidential client | artifact + version | 實際執行 runtime |
 
-## Audit 留完整路徑，Policy 只取必要欄位
+## 先把責任角色找齊
 
-完整的 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r1/articles/day-07/identity-flow-matrix.md) 可以直接拿去做 Agent／MCP design review。Review 從 credential hop 開始，逐段確認誰提出目的、哪個服務完成驗證、哪一版 Agent 做決定、哪個 Workload 實際送出 request，再為每個答案標明來源和驗證方式。現有 JWT 裡剛好有哪些 claims，不應反過來決定責任模型。
+拿 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-07/identity-flow-matrix.md) 檢查自己的 Agent 時，可以從兩種任務開始：有人登入後交辦，以及無人值守的排程。沿著 credential hop 找出誰提出目的、哪個服務取得權限、哪版 Agent 選了 Tool、哪個 Workload 送出 request。現有 JWT 剛好帶了哪些 claims，不應反過來決定要記哪些角色。
 
-Audit 適合保存完整路徑，因為事後重建需要知道責任如何轉手。Policy 的輸入可以小得多。M2M rate limit 主要關心 authenticated Service，高風險 Tool approval 可能同時看 Human、Agent 與 resource，MCP Server 則應驗證目前 credential 的 audience、scope、action 和 resource。
+Policy 不必在每一站讀取全部角色。M2M rate limit 關心目前取得權限的 Service。高風險 Tool 才可能需要 Human、Agent 和目標資源一起做判斷。Day 7 先找出這些角色，不急著規定整份事件該長什麼樣子。
 
-這樣拆開後，我們不再要求一個含義模糊的 `actor` 同時代表目的、服務身分、決策邏輯與執行環境。但四類責任目前還只是架構位置，入口 Token 是否真的能支撐其中某個答案，仍要回到 `iss`、`aud`、`sub`、`client_id`、有效期限與 scope 逐項驗證。Day 8 會用實際 validator 測試：一枚能成功驗簽的 JWT，離「可以交給這個 resource」還差多少條件。
+四類責任找齊後，不能只因 JWT 裡出現 `sub` 或 `client_id`，就認定欄位已經可信。下一篇會拿實際 Token 看 Signature、Issuer、Audience、期限與 Scope：Gateway 到底能接受哪一枚，哪一枚雖然能解碼，卻不該交給眼前的 Resource。
