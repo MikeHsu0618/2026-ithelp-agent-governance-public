@@ -1,12 +1,12 @@
 # Day 28｜從既有 LGTM 開始：Agent Governance 的導入順序
 
-同樣叫 Agent，一支只幫單一團隊查 Log，另一支卻能修改正式環境，兩者不該拿到同一份安裝清單。[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-27/capability-ledger.md) 把身分、流量、Agent、資料權限與觀測分回各自的系統；接下來要按這支 Agent 真正會做的事，決定先補哪一段。
+同樣叫 Agent，一支只幫單一團隊查 Log，另一支卻能修改正式環境，兩者不該拿到同一份安裝清單。[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r3/articles/day-27/capability-ledger.md) 把身分、流量、Agent、資料權限與觀測分回各自的系統；接下來要按這支 Agent 真正會做的事，決定先補哪一段。
 
 我手上的現況並不平均。LGTM 是 Production 核心，有人維護，也有既有查詢和告警習慣。Cognito 的 Human／M2M 路徑已經跑通，agentgateway 也有明確的 LLM／MCP／A2A Traffic Boundary。相較之下，企業 Identity Center、跨團隊 Agent Control Plane 與 Catalog 仍缺共同需求或長期 Owner。
 
 這篇用三個情境來排序：單一團隊的唯讀調查、開始共用流量入口的多個 Agent，以及會改變正式環境的高風險動作。每種情境都問同樣三件事：目前的控制夠不夠、誰接手新增的控制、什麼時候可以停下來。答案不會是一條所有團隊都得爬完的階梯。
 
-![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。另有 Workload identity 或法遵保存要求時再檢查既有機制。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-28/adoption-path.png)
+![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。另有 Workload identity 或法遵保存要求時再檢查既有機制。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r3/assets/diagrams/day-28/adoption-path.png)
 
 ## 一個團隊的唯讀 Agent，可以先停在這裡
 
@@ -54,6 +54,6 @@ Day 19 已經說明，Registry 能做部署宣告，卻不會替團隊決定誰�
 
 把前面三種情境放在一起，停留條件就比較清楚。單一團隊的唯讀 Agent，只要 Credential Scope、Tool Outcome、查詢證據和維護者都明確，可以停在 Git-owned BYO Runtime 與既有 LGTM。多個 Agent 的 Auth、Route、Policy 和 Telemetry 開始漂移時，加入 agentgateway 作為共同入口。如果這些設定已有 Owner，仍不必立刻加 Deployment Control Plane。能改動正式環境的 Agent 則先補目標資源授權、實際執行版本、必要時的人工核准和執行結果，無論它是否已上架到共同 Catalog。
 
-細項與重開評估條件留在可複製的 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/articles/day-28/adoption-trigger-matrix.md)。它是選擇時的核對表，不是要求每個團隊照順序採購的成熟度模型。我們自己的架構已經走到單一 Gateway 與既有 LGTM 並用。接下來真正要問的，是高風險動作由哪一層拒絕、哪個人有權批准。
+細項與重開評估條件留在可複製的 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r3/articles/day-28/adoption-trigger-matrix.md)。它是選擇時的核對表，不是要求每個團隊照順序採購的成熟度模型。我們自己的架構已經走到單一 Gateway 與既有 LGTM 並用。接下來真正要問的，是高風險動作由哪一層拒絕、哪個人有權批准。
 
 Day 29 會拿這種動作走一遍設計審查。共同入口可以擋下不合規的請求，仍不能替業務 Owner 判斷這次修改是否符合意圖。責任必須沿著同一筆 Action 交接，而不是在架構圖上統稱「平台負責」。

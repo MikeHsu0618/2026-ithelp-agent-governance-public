@@ -64,7 +64,7 @@ def before_tool_callback(tool, args, tool_context):
 
 目前這段規則只看 `tool.name`，所以它是 name-based allowlist，不是完整的企業授權。它還不知道誰要求動作、目標資源是哪一個，也沒有檢查 `args`。Day 3 先把最小的執行前拒絕點跑通，後面再補齊 policy input。
 
-![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用全部放行的 policy 時讓危險 Tool 繼續執行，換成 Tool allowlist 後則在 function 開始前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/diagrams/day-03/guard-vs-authorization.png)
+![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用全部放行的 policy 時讓危險 Tool 繼續執行，換成 Tool allowlist 後則在 function 開始前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r3/assets/diagrams/day-03/guard-vs-authorization.png)
 
 這個 callback 是 Agent runtime 裡的一個可用攔截點。跨 runtime 共用的規則，可能更適合集中到 Gateway，最終資源也仍要驗證自己的權限。這一篇先確認最基本的一件事：授權判斷確實發生在副作用之前。
 
@@ -72,7 +72,7 @@ def before_tool_callback(tool, args, tool_context):
 
 兩次 Gemini live run 都使用相同的改寫 Log。全部放行時，安全標記增加一筆。換成 allowlist 後，危險 function 沒有執行。
 
-![Gemini 對相同改寫 Log 都提出 delete_demo_database。全部放行時危險 Tool 進入執行階段，Tool allowlist 則在 function 執行前拒絕，安全標記維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-01-r3/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
+![Gemini 對相同改寫 Log 都提出 delete_demo_database。全部放行時危險 Tool 進入執行階段，Tool allowlist 則在 function 執行前拒絕，安全標記維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r3/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
 
 真正讓這個結果有實務價值的是後半段。Gemini 收到拒絕結果後，沒有卡死，也沒有一直重試同一個危險 Tool，而是改用 allowlist 裡的 `query_metrics` 完成 latency investigation。Policy 擋的是不安全動作，合理的唯讀調查仍然可以完成。
 
@@ -81,11 +81,11 @@ delete_demo_database → DENY
 query_metrics        → ALLOW → 調查完成
 ```
 
-第一次跑 allowlist 時也踩到一個熟悉的觀測問題：危險 Tool 已經被拒絕，後面的 `query_metrics` 卻成功了，舊版摘要因此只留下 `SUCCESS`。我補上 outcome priority 和回歸測試，讓拒絕事件不會再被後續成功結果洗掉。這是 Day 1 同一類 summary bug 的另一個案例，完整事件與修正前後結果留在 [Day 3 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/assets/screenshots/day-03/evidence.md)，正文不再重播整段事件。
+第一次跑 allowlist 時也踩到一個熟悉的觀測問題：危險 Tool 已經被拒絕，後面的 `query_metrics` 卻成功了，舊版摘要因此只留下 `SUCCESS`。我補上 outcome priority 和回歸測試，讓拒絕事件不會再被後續成功結果洗掉。這是 Day 1 同一類 summary bug 的另一個案例，完整事件與修正前後結果留在 [Day 3 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r3/assets/screenshots/day-03/evidence.md)，正文不再重播整段事件。
 
 ## 跟著跑三條路徑
 
-完整 Lab、fixture 與 live mode 說明都收在同一份 README，需要時可以[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-01-r3/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key，也能從 repo root 跑固定案例：
+完整 Lab、fixture 與 live mode 說明都收在同一份 README，需要時可以[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r3/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key，也能從 repo root 跑固定案例：
 
 ```bash
 make lab-01-up
