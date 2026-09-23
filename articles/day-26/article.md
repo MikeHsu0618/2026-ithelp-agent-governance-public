@@ -4,9 +4,9 @@ Day 25 的 SRE Agent 已經能從 Loki Result 拿到 `trace_id`。把這串 ID �
 
 我把 Day 1 那次危險 Tool Call 拿回來重建，第一個問題甚至不是缺少 Principal，而是同一條 Trace 裡有兩個 Actions。Agent 先提出 `delete_demo_database`，後面又呼叫 `query_metrics`。只依 `trace_id` 排序，很容易讓後一個 Tool 的成功結果蓋掉前面已觸發的 Canary，這正是 Day 1 曾經修過的 Summary Bug。
 
-更重要的是，Day 1 只留下本機 JSONL、Manifest 與 No-op Canary Receipt，沒有任何資料能證明這串 Trace ID 當時曾進入 Tempo 或 Loki。Day 26 的 [Lab 05 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r3/labs/05-incident-replay/README.md) 因此把兩件事分開：一邊回放鎖定的 Day 1／Day 3 歷史 Artifacts，另一邊重新跑一筆現行 Action，驗證今天的 LGTM Pipeline 能保存什麼。兩組資料可以比較，不能合併成同一場事故。
+更重要的是，Day 1 只留下本機 JSONL、Manifest 與 No-op Canary Receipt，沒有任何資料能證明這串 Trace ID 當時曾進入 Tempo 或 Loki。Day 26 的 [Lab 05 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-23-r2/labs/05-incident-replay/README.md) 因此把兩件事分開：一邊回放鎖定的 Day 1／Day 3 歷史 Artifacts，另一邊重新跑一筆現行 Action，驗證今天的 LGTM Pipeline 能保存什麼。兩組資料可以比較，不能合併成同一場事故。
 
-![上半部是 Day 1 歷史 Artifact，經 replay projection 產生帶證據狀態的 Governance Event。下半部是 Day 26 另跑的新 action，由 Tempo、Loki 與 Prometheus 分別提供 request path、structured event 與 aggregate metrics。兩個 run 以虛線分開，不能混成同一場事故。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/diagrams/day-26/replay-evidence-boundary.png)
+![上半部是 Day 1 歷史 Artifact，經 replay projection 產生帶證據狀態的 Governance Event。下半部是 Day 26 另跑的新 action，由 Tempo、Loki 與 Prometheus 分別提供 request path、structured event 與 aggregate metrics。兩個 run 以虛線分開，不能混成同一場事故。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-23-r2/assets/diagrams/day-26/replay-evidence-boundary.png)
 
 ## Trace、Action 與 Event 的粒度
 
@@ -68,7 +68,7 @@ Day 3 的 `POLICY_DENIED` 是一組重要對照。模型仍提出 `delete_demo_d
 
 歷史 Replay 完成後，Lab 另送一筆新的 `normal-call`，用它自己的 Action ID 和 Trace ID 分別查 Tempo、Loki 與 Prometheus。舊紀錄回答當年留下了什麼。新請求回答今天的 Instrumentation 能查到什麼。
 
-![Grafana Explore 的 Tempo trace 實跑畫面。查詢指定 trace ID，結果顯示 ithelp-lab-client、agentgateway、agent-runtime 與 mcp-adapter 四個 service，共八個 spans。路徑包含 Agent request、Gateway、Runtime、MCP Call 與 Tool execution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/screenshots/day-26/grafana-tempo-action-trace.png)
+![Grafana Explore 的 Tempo trace 實跑畫面。查詢指定 trace ID，結果顯示 ithelp-lab-client、agentgateway、agent-runtime 與 mcp-adapter 四個 service，共八個 spans。路徑包含 Agent request、Gateway、Runtime、MCP Call 與 Tool execution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-23-r2/assets/screenshots/day-26/grafana-tempo-action-trace.png)
 
 Tempo 顯示 `ithelp-lab-client → agentgateway → agent-runtime → agentgateway → mcp-adapter` 的 Request Path，Loki 找到四行帶相同 `action_id` 的 Structured Events。OpenTelemetry LogRecord 可以帶 Trace ID 與 Span ID，Resource 則描述哪個 Service 送出資料，三者本來就負責不同關聯層級。
 
@@ -98,7 +98,7 @@ make -f publication/Makefile.public lab-05-run
 
 Lab 會先檢查兩組 Evidence Locks，再啟動 self-hosted LGTM Stack，輸出 Day 1 Replay、Day 3 Control Case 與 Modern Reference 三份結果。啟動、清理、Schema、完整 Commands 與 Machine-readable Evidence 都留在 Lab README。
 
-欄位定義可直接查看 [AI Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r3/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json)，若要替自己的事件逐欄標示來源與狀態，Repo 另附 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r3/articles/day-26/incident-replay-field-guide.md)。
+欄位定義可直接查看 [AI Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-23-r2/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json)，若要替自己的事件逐欄標示來源與狀態，Repo 另附 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-23-r2/articles/day-26/incident-replay-field-guide.md)。
 
 ## Trace 之後的責任
 
