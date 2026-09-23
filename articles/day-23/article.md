@@ -16,7 +16,7 @@ Python 只負責建立臨時 RSA Key、替合成 Principal 簽 Token、送出固
 
 下圖的 A、B、C 是三個平行實驗組，不是三層 Proxy 串在 Production Data Path。每一組收到完全相同的 90 筆 Request，唯一改變的是 Metric Label 設計。
 
-![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r2/assets/diagrams/day-23/cardinality-experiment.png)
+![同一批 90 筆 request 通過三組平行 agentgateway。Metrics 依序只加入 team、加入 user_id、再加入 conversation_id，Tempo 與 Loki 保留單筆身分查詢。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r2/assets/diagrams/day-23/cardinality-experiment.png)
 
 流量矩陣固定為 30 位合成使用者、3 個 Team，每人 3 段 Conversation。每組 Gateway 處理 90 筆 Request，所以整次實驗共有 270 次成功請求，另有兩筆預期被拒絕的 Authentication Guard。所有 Principal 都使用 `user/sre-oncaller-000` 這類 Lab 名稱，不對應真實帳號。
 
@@ -38,7 +38,7 @@ Per-user 組再加入 `user_id: jwt.sub`，Per-conversation 組則增加從 `x-c
 
 三組都使用 agentgateway 原生 [Metric Field Projection](https://agentgateway.dev/docs/standalone/latest/observability/metrics/overview/)，Alloy 再 Scrape `agentgateway_requests_total`。這裡沒有讓 Python 另建一個 `requests_total` 模仿 Gateway。
 
-Runtime 會在 Ignored Directory 產生 Private Key，只有 Public JWKS 掛進 Container。JWT、Authorization Header 與 Private Key 都不進公開 Evidence。這些執行安全細節保留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r2/labs/04-telemetry-pipeline/README.md)，正文專注在 Label Design。
+Runtime 會在 Ignored Directory 產生 Private Key，只有 Public JWKS 掛進 Container。JWT、Authorization Header 與 Private Key 都不進公開 Evidence。這些執行安全細節保留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r2/labs/04-telemetry-pipeline/README.md)，正文專注在 Label Design。
 
 ## Prometheus 實際得到 3、30、90 條 Series
 
@@ -63,7 +63,7 @@ count(
 
 Grafana 上的三個 Bar Gauge 直接查原生 `agentgateway_requests_total`。下方 Access Logs 則是三組 Gateway 實際送進 Alloy 的 OTLP Log，不是拿 Report JSON 做成靜態圖。
 
-![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r2/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
+![Day 23 Grafana 實拍。三組 agentgateway 原生 metrics 分別出現 3、30、90 條 series，下方同時顯示 Gateway OTLP access logs。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r2/assets/screenshots/day-23/agentgateway-cardinality-dashboard.png)
 
 這不是 `team × user × conversation` 的笛卡兒積。每位使用者只屬於一個 Team，加入 `team + user_id` 後是實際出現的 30 組。每段 Conversation 也只屬於一位使用者，所以第三組是 90 組，而不是 3 × 30 × 90。
 
@@ -116,7 +116,7 @@ make lab-04-cardinality-run
 make lab-04-cardinality-down
 ```
 
-Runner 會對三組設定送相同流量，再查 Prometheus 實際建立的 Series。Tempo 查詢則使用這次 Request 的 Trace ID。完整 Gateway YAML、查詢與 Collector 設定都留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r2/labs/04-telemetry-pipeline/README.md)。同一批請求只因 Metric 多放了身分欄位，就讓常駐的時序資料從 3 組長到 30、90 組。
+Runner 會對三組設定送相同流量，再查 Prometheus 實際建立的 Series。Tempo 查詢則使用這次 Request 的 Trace ID。完整 Gateway YAML、查詢與 Collector 設定都留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r2/labs/04-telemetry-pipeline/README.md)。同一批請求只因 Metric 多放了身分欄位，就讓常駐的時序資料從 3 組長到 30、90 組。
 
 ## 下一篇開始算 Fallback 的成本
 
