@@ -4,7 +4,7 @@ agentgateway `1.5.0` 的 LLM Analytics 跑起來後，不用先畫 Grafana，就
 
 下面這張畫面來自一個故意觸發備援的 Lab。同一個 Agent Action 先打到 Primary Provider，收到 `503` 後由 Client 重送，再由 Backup Provider 成功完成。Dashboard 顯示 `2 calls`、10 個 Tokens 與 `USD 0.000066`。三個數字都是真的，卻不能直接讀成「這個 Action 完整花了 USD 0.000066」。
 
-![agentgateway 1.5.0 內建 Analytics 實跑畫面。相同 Fallback action 產生 OpenAI 與 Anthropic 各一筆 request，畫面顯示 2 calls，但只有成功 response 提供的 10 tokens 與 USD 0.000066。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r3/assets/screenshots/day-24/agentgateway-official-analytics-dashboard.png)
+![agentgateway 1.5.0 內建 Analytics 實跑畫面。相同 Fallback action 產生 OpenAI 與 Anthropic 各一筆 request，畫面顯示 2 calls，但只有成功 response 提供的 10 tokens 與 USD 0.000066。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r2/assets/screenshots/day-24/agentgateway-official-analytics-dashboard.png)
 
 Day 23 已經量過高基數 Label 的代價，這篇把注意力移到 Model、Provider、Tokens 與 Cost。Fallback 只是壓力測試，它讓 Dashboard 平常不明顯的三條界線一起浮出來：一次使用者動作可能包含多次 Provider Attempts、失敗回應不一定帶 Usage、Gateway Estimate 也不等於 Provider 最後開出的帳單。
 
@@ -20,7 +20,7 @@ agentgateway 也提供[官方 Grafana Dashboard](https://agentgateway.dev/docs/s
 
 ## Action 與 Attempt 的兩層帳本
 
-Day 24 的 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r3/labs/04-telemetry-pipeline/README.md) 啟動兩個本機 Provider Fixtures。Client 要求的是 Virtual Model `day24-resilient-agent`，Primary 使用 OpenAI 相容格式，Backup 使用 Anthropic 格式。兩邊都回傳固定結果，不需要外部 API Key，也不會把流量送出電腦。
+Day 24 的 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07-r2/labs/04-telemetry-pipeline/README.md) 啟動兩個本機 Provider Fixtures。Client 要求的是 Virtual Model `day24-resilient-agent`，Primary 使用 OpenAI 相容格式，Backup 使用 Anthropic 格式。兩邊都回傳固定結果，不需要外部 API Key，也不會把流量送出電腦。
 
 這裡需要先分開兩個識別：
 
@@ -33,7 +33,7 @@ Day 24 的 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-gove
 
 圖中的兩條路徑是兩組互不串接的實驗，不是 Production 裡的雙層 Proxy。每一次實際 Data Path 都只有 Client → agentgateway → Provider。
 
-![同一個 Agent action 經過兩次 HTTP request。第一次由 primary provider 回傳 503，第二次 client retry 才由 backup provider 成功服務，失敗 attempt 的 usage 與 cost 保持 UNKNOWN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r3/assets/diagrams/day-24/fallback-cost-evidence.png)
+![同一個 Agent action 經過兩次 HTTP request。第一次由 primary provider 回傳 503，第二次 client retry 才由 backup provider 成功服務，失敗 attempt 的 usage 與 cost 保持 UNKNOWN。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r2/assets/diagrams/day-24/fallback-cost-evidence.png)
 
 ## Health Eviction 的實測結果
 
@@ -85,7 +85,7 @@ Metrics 若只保留 Requested Model，所有流量看起來都屬於同一條 R
 
 官方 Analytics 適合查看 Model 與 Provider 趨勢，自訂 Grafana 畫面則把兩組實驗的 Gateway Metrics、Loki Logs 與 Tempo Traces 放在一起。上半部顯示 Primary Calibration 與 Backup 的原生 Token／Cost Metrics，下半部使用同一個 `correlation_action_id` 找到 Primary `503` 和 Backup `200`。
 
-![Day 24 Grafana focused extension 實拍。上半部使用 agentgateway 原生成本與 token metrics，下半部以相同 action_id 查到 primary 503 與 backup 200。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r3/assets/screenshots/day-24/agentgateway-cost-fallback-dashboard.png)
+![Day 24 Grafana focused extension 實拍。上半部使用 agentgateway 原生成本與 token metrics，下半部以相同 action_id 查到 primary 503 與 backup 200。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r2/assets/screenshots/day-24/agentgateway-cost-fallback-dashboard.png)
 
 畫面上的 `USD 0.00012975` 是兩筆成功 Responses 的合計，其中包含一筆獨立的 Primary Calibration，加上 Fallback Action 最後的 Backup Attempt。它能驗證兩種 Provider 格式都被 agentgateway 正確計價，卻不是某一個 Fallback Action 的價格。這也是自訂 Dashboard 必須保留 Action／Attempt 層級，而不是只畫另一張 Total Cost Stat 的原因。
 
