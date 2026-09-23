@@ -14,17 +14,17 @@ Agent Telemetry 已經多出另一層問題。以 [Claude Code Monitoring](https
 
 我在做 [`grafana-claudestats-app`](https://github.com/MikeHsu0618/grafana-claudestats-app) 時，也把 Claude Code 與 Codex 的 OpenTelemetry 接進 LGTM。Cost、Token、Tool、Skill、Trace 和操作活動都能看，Activity 頁還能對回程式碼修改、Commit 與 PR。這讓我看到一個很實際的轉變：只追模型用量，和值班時能還原工具做過哪些動作，是兩種不同的需求。Code Agent 是我的另一個實作場景。以下的主角仍是系列裡的 Google ADK SRE Agent。
 
-![grafana-claudestats-app 的 Overview 畫面。成本、Token 與 Session 適合掌握使用情況，還不能單獨回答一次工具操作的責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/screenshots/day-20/claude-code-stats-overview.png)
+![grafana-claudestats-app 的 Overview 畫面。成本、Token 與 Session 適合掌握使用情況，還不能單獨回答一次工具操作的責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/screenshots/day-20/claude-code-stats-overview.png)
 
 Overview 很適合回答「這個團隊用了多少」，Activity 才開始回答「這段時間做了哪些事」。接下來的 SRE Agent 又多了 Resource 和 Policy：只看 Activity 清單，仍不足以重建一次高風險 Tool Call。
 
-![grafana-claudestats-app 的 Activity 畫面。程式碼變更、Commit 與 PR 提供 Code Agent 的操作脈絡，畫面使用可公開的測試資料。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/screenshots/day-20/claude-code-stats-activity.png)
+![grafana-claudestats-app 的 Activity 畫面。程式碼變更、Commit 與 PR 提供 Code Agent 的操作脈絡，畫面使用可公開的測試資料。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/screenshots/day-20/claude-code-stats-activity.png)
 
 ## 一筆 Action 需要三種不同資料
 
 我把 Day 20 的資料分成 Application Record、Operational Telemetry 與 Governance Event。三者以 `action_id` 關聯，Trace 與 Governance Event 另外共用 Trace Context。它們不該被塞進同一種萬用紀錄，因為使用者、保存時間、查詢方式與存取權限都不同。
 
-![同一筆 Agent action 分成 Application Record、Operational Telemetry 與 Governance Event。Application Record 保存產品脈絡，Operational Telemetry 保存執行路徑與健康狀態，Governance Event 保存 verified principal、delegation、Artifact、policy 與 effect。三者用 action ID 關聯，trace ID 只連接 trace 與治理事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/diagrams/day-20/traceability-data-boundary.png)
+![同一筆 Agent action 分成 Application Record、Operational Telemetry 與 Governance Event。Application Record 保存產品脈絡，Operational Telemetry 保存執行路徑與健康狀態，Governance Event 保存 verified principal、delegation、Artifact、policy 與 effect。三者用 action ID 關聯，trace ID 只連接 trace 與治理事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/diagrams/day-20/traceability-data-boundary.png)
 
 **Application Record** 服務產品介面與使用歷程，Session、Generation、Model、Tool 摘要都很合理。它也可能知道畫面上的使用者是 `user/sre-oncaller`。這個值若只來自 Frontend Session 或 Request Body，就只能叫 `actor_hint`。把欄位重新命名為 `principal`，不會讓它突然具備驗證證據。
 
@@ -48,7 +48,7 @@ Runner 產生 Application Record、Operational Trace、Governance Event 與 Tool
 
 Tempo 裡有兩個 Span。上層是 `invoke_agent sre-investigation-agent`，下層才是 `execute_tool delete_demo_database`。這張 Grafana Waterfall 來自 Lab Backend 的實際查詢，不是示意圖。
 
-![Grafana Tempo 實際查到的 Day 20 trace。根 span 是 invoke_agent sre-investigation-agent，child span 是 execute_tool delete_demo_database，兩者共用 trace ID。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/screenshots/day-20/tempo-agent-tool-trace.png)
+![Grafana Tempo 實際查到的 Day 20 trace。根 span 是 invoke_agent sre-investigation-agent，child span 是 execute_tool delete_demo_database，兩者共用 trace ID。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/screenshots/day-20/tempo-agent-tool-trace.png)
 
 ## Trace 還原路徑，Governance Event 還原責任
 
@@ -81,7 +81,7 @@ Human Principal 由 Fixture IdP 提供。Workload 則只有 Runtime Fixture 自�
 
 Loki 保存同一份完整 Event。公開截圖的 LogQL 只移除 Python SDK 自動附加的本機 Source Path，Principal、Delegation、Policy、Result、Trace ID 與 Action ID 都保留。
 
-![Grafana Loki 實際查到的 Day 20 governance event。事件包含 action ID、Agent Artifact digest、trace/span correlation、Human 到 Agent 與 Workload 的 actor chain、policy version 與 principal assurance。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r3/assets/screenshots/day-20/loki-governance-event.png)
+![Grafana Loki 實際查到的 Day 20 governance event。事件包含 action ID、Agent Artifact digest、trace/span correlation、Human 到 Agent 與 Workload 的 actor chain、policy version 與 principal assurance。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r3/assets/screenshots/day-20/loki-governance-event.png)
 
 ## Tool 回成功後，還要看 Effect
 
@@ -108,7 +108,7 @@ Agent 系統很容易把多層結果壓成 `success=true`。Gateway 收到 `200`
 
 這種拒收比事後發現事件只剩一個 `ALLOW` 好處理得多。Policy Owner 可以當場修 Producer，值班的人也不用在事故發生後再追一份當時根本沒記下來的規則。
 
-完整欄位與放置位置收在 [Governed Action Field Set v0.1 放置指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r3/articles/day-20/governed-action-field-guide.md)。想重跑的人可以直接改 Fixture，看看拿掉 Policy Version 之後事件在哪裡被擋下。
+完整欄位與放置位置收在 [Governed Action Field Set v0.1 放置指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r3/articles/day-20/governed-action-field-guide.md)。想重跑的人可以直接改 Fixture，看看拿掉 Policy Version 之後事件在哪裡被擋下。
 
 ## OpenTelemetry 搬運資料，不定義組織責任
 
