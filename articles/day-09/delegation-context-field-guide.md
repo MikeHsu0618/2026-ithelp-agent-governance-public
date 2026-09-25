@@ -26,9 +26,11 @@
 | `human` | state；PRESENT 時另有 principal、source、level | verified access-token `sub`、approval event | 不接受 email 或 display name 推測 |
 | `service` | state；PRESENT 時另有 principal、source、level | authenticated OAuth client／Service principal | public `client_id` 留在 credential context，不填這個 slot |
 | `agents[]` | sequence、principal、version、role、source、level | 受控 artifact／deployment metadata、可信 Agent Card | metadata 是 assertion，不是 cryptographic proof |
-| `workload` | state；PRESENT 時另有 principal、source、level | bound ServiceAccount、SPIFFE ID、cloud workload identity | 合成 ServiceAccount 只標 `ASSERTED` |
+| `workload` | state；PRESENT 時另有 principal、source、level | 經驗證的工作負載憑證或受控執行 metadata | 合成 ServiceAccount 只標 `ASSERTED`，不代表 MCP 已驗證 |
 
-`principal` 可以是 issuer namespace 內的 opaque identifier，例如 Cognito／OIDC 常見的 UUID；不要求它一定帶 `user/` 或 URI prefix。若組織另外建立 canonical principal naming，應保留原 issuer／subject 對照，不能從 display name 自行拼接。
+`workload` 是這份 Lab schema 的欄位，不要求每個 Agent 都部署在 Kubernetes。ServiceAccount 名稱可協助辨認配置，但不等於唯一 Pod，也不會自動成為外部 MCP 的已驗身分；定位 Pod 應另關聯 Pod UID，授權則看當前送出並被下游驗過的憑證。
+
+`principal` 可以是 issuer namespace 內的 opaque identifier，例如 AWS Cognito／OIDC 常見的 UUID；不要求它一定帶 `user/` 或 URI prefix。若組織另外建立 canonical principal naming，應保留原 issuer／subject 對照，不能從 display name 自行拼接。
 
 `agents[]` 的規則：
 

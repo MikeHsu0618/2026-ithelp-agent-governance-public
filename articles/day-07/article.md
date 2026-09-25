@@ -1,76 +1,42 @@
-# Day 7｜Agent 的操作該算在誰身上：從使用者一路追到 Kubernetes Workload
+# Day 7｜Agent 查資料，責任算誰的：人工交辦與排程任務的分界
 
-值班工程師從 MCP console 請 Agent 調查 latency。Agent 選了 `query_metrics`，最後由 Kubernetes 裡的 Pod 拿著 credential 送出 request。這筆查詢如果越權，Audit 應該記登入的工程師、做決定的 Agent，還是實際送出 request 的 Pod？
+把人的登入與機器取 Token 分開後，請求離開登入入口，責任卻不會自動跟著走。假設值班工程師請 Agent 查服務的 latency。隔天，同一支 Agent 又被排程喚起，查的是同一個 MCP Tool。兩次請求可能從相同的 runtime、帶著相同的服務憑證出去，但第一筆有人交辦，第二筆沒有。如果紀錄只剩最後送出的 `client_id`，兩件事就會長得一模一樣。
 
-我一開始也想替整條路徑找一個統一的 `actor`。把 Cognito、Gateway、Agent runtime 與 Kubernetes audit 串起來後，卻同時拿到四種紀錄：Token 裡有使用者 `sub`，MCP console 有 `client_id`，runtime 知道載入哪一版 Agent，Kubernetes 則留下 ServiceAccount。這些紀錄的來源與證據強度不同，也各自在回答不同問題。
+這也是我在整理 AWS Cognito 的 Human 與 M2M 路徑時，發現單一 `actor` 欄位不夠用的原因。登入者、取得下游權限的服務、選擇 Tool 的 Agent，以及實際運行它的程序，各自回答不同問題。Pod 名稱能幫忙定位程序，卻無法告訴我們前面是誰交辦的。
 
-只記使用者，出事時會找不到哪一版 Agent 選了 Tool，也不知道 credential 落在哪個 runtime。只記 ServiceAccount，又會讓整件事看起來像 Pod 自己決定要查資料。這就是 Day 6 把 Human 與 M2M 登入分開後，仍然沒有解完的責任問題。
+## 同一個 Tool Call，可能有兩種來由
 
-## 一筆查詢留下四類責任
+以 `query_metrics` 為例，人工交辦的路徑是「值班工程師登入 → 在 MCP console 發出調查需求 → Agent 選擇 Tool → runtime 呼叫下游」。排程路徑則從 scheduler 開始，沒有那位登入的工程師。兩條路從 Agent runtime 往後可能完全相同，差異卻決定了事後該找誰釐清目的、該檢查哪一種授權。
 
-圖中四張卡片分別對應同一筆 Agent action 的目的、服務驗證、決策邏輯和執行環境。
+| 需要回答的事 | 值班工程師交辦 | 排程任務 |
+| --- | --- | --- |
+| 這次調查誰發起？ | 已登入的工程師，記 issuer 與 `sub` | 沒有互動式使用者，記排程與服務 owner |
+| 哪個服務取得下游權限？ | 看當前 credential hop，不把入口使用者直接當成下游 caller | 驗過的 M2M client |
+| 哪版邏輯選了 `query_metrics`？ | Agent artifact 與版本 | Agent artifact 與版本 |
+| 請求在哪裡執行？ | runtime／部署資訊 | runtime／部署資訊 |
 
-![同一條 Agent action path 需要保存 Human、Service、Agent 與 Workload 四類責任。Human 說明誰提出或核准目的，Service 說明哪個服務在目前 credential hop 完成驗證，Agent 記錄選擇動作的 artifact，Workload 記錄實際持有 credential 的 runtime。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-07/four-identity-slots.png)
+這張表不是要求每個系統都填四格。排程任務本來沒有當次的 Human caller。人工交辦也不能因為下游換了服務憑證，就讓交辦者從紀錄裡消失。系統 owner 和 on-call team 可以負責排程服務，但不該被冒充成每次排程的「登入者」。
 
-Human 說明目的從哪裡來。這筆 latency 調查是值班工程師提出的，能驗證的識別應該來自 issuer 指派的 `sub`。Email、display name 或 `sre-oncaller` 方便人閱讀，卻可能被修改，也不能取代原始 subject。[OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) 對 `sub` 的定義，就是 issuer 對 End-User 指派的識別值。
+![Agent action path 中的 Human、Service、Agent 與 Workload：分別表示任務來由、當前服務身分、選擇動作的程式版本，以及執行位置。排程任務沒有互動式 Human caller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r3/assets/diagrams/day-07/four-identity-slots.png)
 
-Service 說明某一個 credential hop 由哪個服務完成身分驗證。MCP console 的 public `client_id` 可以告訴我們哪個應用程式參與登入，但 client ID 不是秘密，不能單獨證明「這個服務已通過驗證」。若 Agent runtime 另外使用 confidential client 取得下游 Token，那一跳才有經 client authentication 的 Service principal。
+## 登入者與下游 caller 不是同一回事
 
-Agent 指向做決策的程式與設定，例如 `sre-investigator@v1`。同一個模型可能被多個 Agent 使用，只留下 model name 無法重建當時有哪些 instruction、Tool 與 policy。Agent artifact 和版本才比較接近「哪一版邏輯選了這個 action 與 arguments」。
+人工交辦時，入口 Token 的 `sub` 可用來辨認登入者，前提是 Gateway 已驗證 Token。MCP console 的 public `client_id` 告訴我們是哪個應用程式參與登入，卻不是那個應用已完成 client authentication 的證明。等 Agent runtime 另取憑證呼叫下游，對下游而言，眼前通過驗證的 caller 就是這個服務。原本的工程師仍是工作的來源，不應直接複製成每一跳的 caller。
 
-Workload 則是實際持有 credential、送出 request 的執行位置。Agent artifact 可以同時跑在多個 replicas，同一個 Kubernetes ServiceAccount 也可能被多個 Pods 使用。ServiceAccount 能提供 non-human identity，若事件需要定位單次執行，還要再關聯 Pod UID、bound token 或其他 workload evidence。[Kubernetes Service Accounts](https://kubernetes.io/docs/concepts/security/service-accounts/) 也將 ServiceAccount 與使用它的 Pod 分開處理。
+這個區別會影響調查。若某次 `query_metrics` 查了不該查的資源，光看工程師的 `sub`，無法知道是哪版 Agent 做了 Tool 選擇。光看 M2M client，又不知道這次是人交辦還是排程觸發。當下游只認服務憑證時，平台至少要在自己掌握的紀錄裡保留請求來源與 Agent 版本，後面才有辦法把這段路接回來。Day 9 會處理它如何跨元件保存，這篇先把「誰是當前 caller」與「工作從哪裡來」分清楚。
 
-同一個元件可能同時落在兩類。例如 Agent runtime 既是 OAuth confidential client，也跑在使用特定 ServiceAccount 的 Pod 裡。這不代表 Service 和 Workload 可以合併。前者說明服務用什麼身分取得存取權，後者把那次 request 帶回實際執行環境。
+至於 Kubernetes，它主要幫我們定位執行環境。值班工程師通常從 Pod 名稱就能找到部署和 Log。Pod 回答的是請求在哪裡執行，不能反推交辦者。[Kubernetes audit](https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/) 記錄 Kubernetes API 操作，不會因為 Pod 呼叫外部 MCP 服務，就自動產生那筆 `query_metrics` 的 audit event。這段呼叫仍要靠 Agent、Gateway 或 MCP 服務自己的紀錄關聯。
 
-## Human 請求跨過兩個 Credential Hop
+## 查到異常時，先沿著哪條線追
 
-值班工程師登入 MCP console 時，第一跳能留下 Human 與 application context：
+假設觀測服務發現 Agent 查了一個不在任務範圍內的資料來源。若兩次執行都用了同一個 M2M client，光憑下游的 client ID 無法判斷是工程師交辦的調查，還是凌晨的排程。值班時我會先把下游請求對回 Agent 的執行紀錄：這次由哪個入口觸發、是哪版 Agent、選了哪個 Tool、帶了什麼目標參數。若入口是人工交辦，再對回已驗證的登入者。若入口是排程，就查該 job 的設定與 owner，而不是猜一位當時根本沒登入的同事。
 
-```text
-Human principal       issuer + sub
-Application context   public client_id
-```
+這條追查路徑也能把問題送回正確的修補處。Agent 選錯 Tool 或參數，要看 Agent 版本與它讀到的上下文。API 本來不該讓這個服務查該資源，要改下游 policy。若連請求從哪個入口來都對不起來，先補跨元件的關聯紀錄。三種問題最後都可能顯示為一次成功的 `query_metrics`，只盯著 `200 OK`、Pod 名稱或登入者帳號，看不出該修哪一層。
 
-這裡刻意沒有把 public `client_id` 寫成 Service principal。OAuth client identifier 本來就會暴露給使用者，不能靠它單獨完成 client authentication。若 console 是 public client，Audit 應誠實記成「哪個應用程式參與」，而不是把欄位填滿後假裝多驗證了一個服務。
+## 記錄責任，不是增加四套授權
 
-Agent runtime 接手後，第二跳可能換成另一枚 credential：
+我會把這四類資訊當成閱讀一筆 Agent action 的線索。Human 告訴我們誰提出或批准目的，Service 是當前哪個已驗證的服務取得權限，Agent 指向哪版程式與設定選了動作，Workload 則說明它在哪裡運行。它們可能分散在不同地方，也不一定每次都有 Human。單看 Token、Pod 或模型名稱，都無法補出其餘三段。
 
-```text
-Service principal     authenticated runtime client
-Agent artifact        sre-investigator@v1
-Workload              ServiceAccount lab/sre-agent + Pod evidence
-```
+實際設計時，可以拿 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07-r3/articles/day-07/identity-flow-matrix.md) 畫自己的人工交辦與排程兩條路，再問「換憑證的那一跳，是否還能知道這筆工作從哪裡來？」不同的授權點未必需要全部資訊：M2M rate limit 可能只看服務，高風險 Tool 則可能需要交辦者、Agent 和目標資源一起判斷。先把來由記對，比急著發明一個涵蓋所有情況的 `actor` 更有用。
 
-有些架構會把 Human Token 一路帶到下游，有些會由 runtime 另取 Token。兩種作法的風險和權限語意不同，Day 10 再實際比較。Day 7 先抓住一條比較基本的規則：credential 或執行主體只要換了，Audit 就應留下新的 hop，不能把入口的 `sub` 複製到所有元件，假裝每一跳都是使用者本人直接呼叫。
-
-Agent 與 Workload 也不能互相代替。`sre-investigator@v1` 可以解釋為什麼選了 `query_metrics`，卻不能指出是哪個 Pod 持有下游 credential。ServiceAccount 與 Pod evidence 能定位執行環境，也不會告訴我們那個 runtime 當時載入哪一版 Agent。
-
-## 排程任務本來就沒有 Human Caller
-
-背景排程不經過瀏覽器，也沒有人在 Token endpoint 前登入。Runtime 使用 confidential client 取得 access token，再讓 Agent 選擇 Tool：
-
-```text
-authenticated Service
-  → Agent artifact
-  → Runtime Workload
-  → Tool / Resource
-```
-
-[RFC 6749 的 Client Credentials](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.4) 用於 confidential client 代表自己，或依事先安排的授權存取 resource。Cognito 的 M2M flow 也要求帶有 secret 的 app client，並以 resource server custom scopes 限定 API 能力。[Amazon Cognito M2M authorization](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-define-resource-servers.html)
-
-這條路徑沒有互動式 Human。系統 owner、排程建立者和 on-call team 仍然要對服務負責，但他們不是每一次排程執行的 caller。若為了讓欄位看起來完整，固定塞入某位工程師帳號，離職、輪班或 owner 變更後，Audit 反而會留下錯誤的責任鏈。
-
-Human 委派與排程任務放在一起，才能看出四類責任不是一張每格必填的表：
-
-| Flow | Human | Service | Agent | Workload |
-| --- | --- | --- | --- | --- |
-| 值班工程師委派 Agent | 提出目的的 requester，必要時另記 approver | 只在完成服務驗證的 hop 出現 | artifact + version | 實際執行 runtime |
-| Scheduled Agent | 沒有互動式 Human caller | authenticated confidential client | artifact + version | 實際執行 runtime |
-
-## 先把責任角色找齊
-
-拿 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-07/identity-flow-matrix.md) 檢查自己的 Agent 時，可以從兩種任務開始：有人登入後交辦，以及無人值守的排程。沿著 credential hop 找出誰提出目的、哪個服務取得權限、哪版 Agent 選了 Tool、哪個 Workload 送出 request。現有 JWT 剛好帶了哪些 claims，不應反過來決定要記哪些角色。
-
-Policy 不必在每一站讀取全部角色。M2M rate limit 關心目前取得權限的 Service。高風險 Tool 才可能需要 Human、Agent 和目標資源一起做判斷。Day 7 先找出這些角色，不急著規定整份事件該長什麼樣子。
-
-四類責任找齊後，不能只因 JWT 裡出現 `sub` 或 `client_id`，就認定欄位已經可信。下一篇會拿實際 Token 看 Signature、Issuer、Audience、期限與 Scope：Gateway 到底能接受哪一枚，哪一枚雖然能解碼，卻不該交給眼前的 Resource。
+不過，紀錄裡看得到 `sub` 或 `client_id`，不表示它們已經可信。下一篇會回到入口那枚 JWT，從實際 payload 開始看：Gateway 要先確認什麼，才能把這些欄位交給 policy 使用？

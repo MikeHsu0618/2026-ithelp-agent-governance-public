@@ -9,7 +9,7 @@
 - 執行環境：Kubernetes。
 - 流量：LLM、MCP，後續包含 A2A。
 - 交付方式：declarative config、IaC、Git review、GitOps reconciliation。
-- 身分：Human 與 M2M 分流；企業 IdP／Cognito 負責發 Token，Gateway 驗證已簽發 Token 並執行 policy。
+- 身分：Human 與 M2M 分流；企業 IdP／AWS Cognito 負責發 Token，Gateway 驗證已簽發 Token 並執行 policy。
 - 平台責任：routing、policy、telemetry、upgrade、rollback、on-call 與供應鏈審查。
 - LiteLLM 評估基準：作者當時的 `1.80.x` Kubernetes snapshot。
 - agentgateway 評估基準：作者實際採用前後的 `1.3.x` Kubernetes snapshot。
@@ -33,7 +33,7 @@
 | 使用量與 budget | 能否按 consumer／team 追 usage、budget 與 rate limit？ | Virtual key、team、budget 與 spend 是完整主線 | 可在 Gateway policy／telemetry 邊界處理 consumer traffic；當時管理體驗不同 | FinOps 歸屬、價格表、chargeback 與例外流程 | `SNAPSHOT` + `PRIVATE PASS` |
 | Human identity | Key 的 owner 是否等於企業 Human？離職與轉調從哪裡撤權？ | Virtual key 仍需維護 Human → key／team mapping | 可驗企業 IdP JWT 並依 claim 做 policy；不負責人員 lifecycle | IdP、joiner／mover／leaver、claim contract | `AUTHOR JUDGMENT` + `PRIVATE PASS` |
 | MCP／A2A traffic | 是否能辨識 protocol semantic，並在共同入口套 policy／telemetry？ | 當時 snapshot 已可配置 MCP，但不是本次選型最成熟的治理路徑 | LLM、MCP、A2A 是同一 data-plane 邊界的核心方向 | Tool／Agent owner、runtime、approval 與 downstream auth | `SNAPSHOT` + `PRIVATE PASS` |
-| Discovery／registration | MCP client 怎麼找到 authorization metadata，又怎麼註冊？ | 不能因 Gateway 有 auth 就假設完成 | Resource Server Only 同樣不會自動完成 Cognito discovery／registration | Pre-registration、CIMD／legacy DCR、IdP adapter | `AUTHOR JUDGMENT` |
+| Discovery／registration | MCP client 怎麼找到 authorization metadata，又怎麼註冊？ | 不能因 Gateway 有 auth 就假設完成 | Resource Server Only 同樣不會自動完成 AWS Cognito discovery／registration | Pre-registration、CIMD／legacy DCR、IdP adapter | `AUTHOR JUDGMENT` |
 | Declarative delivery | Team、user、route、policy 能否由 Git 宣告、review、diff、reconcile？ | 模型設定可宣告；team／user 管理在當時另以 API + Terraform 膠水補齊 | Kubernetes Gateway API／CRD 與 controller 更貼近既有 GitOps 路徑 | CRD lifecycle、schema upgrade、drift 與 rollback | `SNAPSHOT` + `PRIVATE PASS` |
 | Runtime dependencies | 高可用部署需要哪些 state、cache、migration 與 recovery？ | 當時方案包含 Proxy、PostgreSQL、Redis、migration 與 UI state | controller + data plane；仍須處理 CRD、xDS、rollout 與 data-plane capacity | Backup、SLO、capacity、upgrade、disaster recovery | `SNAPSHOT` + `DOCS ONLY` |
 | Policy enforcement | Policy 能否緊貼已驗證 principal、protocol action 與 target resource？ | 有 auth hook、key/team limit 與多種 guardrail surface | JWT、MCP tool、LLM／A2A traffic policy 更符合本次 enforcement boundary | Policy authoring、exception、review、evidence retention | `PRIVATE PASS` + `DOCS ONLY` |

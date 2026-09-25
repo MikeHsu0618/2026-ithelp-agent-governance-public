@@ -1,10 +1,10 @@
 # Day 27｜Agent Governance 產品地圖：一條請求會經過哪些系統
 
-讀到這裡，Cognito、agentgateway、kagent、Agent Registry 和 LGTM 都登場了。如果現在有團隊要讓一支 Agent 查 Loki，該從哪個產品開始裝？光看功能清單，很容易得到一張每格都打勾、卻說不清請求怎麼走的架構圖。
+讀到這裡，AWS Cognito、agentgateway、kagent、Agent Registry 和 LGTM 都登場了。如果現在有團隊要讓一支 Agent 查 Loki，該從哪個產品開始裝？光看功能清單，很容易得到一張每格都打勾、卻說不清請求怎麼走的架構圖。
 
-我自己也走過這段路。評估 Identity 時，Keycloak 的技術鏈跑得通，最後卻選了 Cognito；看 Gateway 時，LiteLLM 有豐富的 LLM 功能，我們更在意 Kubernetes 上共同流量入口的維運方式；Agent Registry 已經能把 Agent 部署到 kagent，也不代表每個團隊都需要再多一個 Catalog。這些不是產品高下的排名，而是它們站在不同位置，接走不同工作。
+我自己也走過這段路。評估 Identity 時，Keycloak 的技術鏈跑得通，最後卻選了 AWS Cognito；看 Gateway 時，LiteLLM 有豐富的 LLM 功能，我們更在意 Kubernetes 上共同流量入口的維運方式；Agent Registry 已經能把 Agent 部署到 kagent，也不代表每個團隊都需要再多一個 Catalog。這些不是產品高下的排名，而是它們站在不同位置，接走不同工作。
 
-![一筆 Agent 請求經過身分、共同流量入口、Agent Runtime 與資源服務，旁邊另有發布目錄及觀測資料路徑。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-27/capability-ledger-method.png)
+![一筆 Agent 請求經過身分、共同流量入口、Agent Runtime 與資源服務，旁邊另有發布目錄及觀測資料路徑。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r3/assets/diagrams/day-27/capability-ledger-method.png)
 
 ## 一筆查詢，先分清兩條路
 
@@ -16,7 +16,7 @@
 
 ## 身分入口與人員生命週期
 
-在我們的環境裡，Human 與 M2M 都需要穩定取得 Token，因此現在由 Cognito 提供這兩條入口。Keycloak 當初也跑通登入、JWT Role 和 Gateway 的 Tool 權限檢查；問題是要不要為了幾個 AI 服務，另起一套需要自己維護的企業 Identity Center。當時 IT 團隊還沒有足夠共識與人力，把人員的到職、異動、離職，以及下游 SaaS 入口一起接進來。技術能跑，組織卻還沒有要接的整段工作。
+在我們的環境裡，Human 與 M2M 都需要穩定取得 Token，因此現在由 AWS Cognito 提供這兩條入口。Keycloak 當初也跑通登入、JWT Role 和 Gateway 的 Tool 權限檢查；問題是要不要為了幾個 AI 服務，另起一套需要自己維護的企業 Identity Center。當時 IT 團隊還沒有足夠共識與人力，把人員的到職、異動、離職，以及下游 SaaS 入口一起接進來。技術能跑，組織卻還沒有要接的整段工作。
 
 若組織本來就有成熟的 Keycloak 與 Identity 團隊，沿用它很合理；若已經有其他 IdP，也未必需要為 Agent 再建一套。先釐清 Human、Service 和實際執行的 Workload 分別由誰識別。Client Credentials 認得的是 Client，不能直接當成 Pod 身分。後面要追查一筆動作時，這個差別會影響能否找到真正的執行者。
 
@@ -48,6 +48,6 @@ Agent 的設定和映像若透過 IaC／GitOps 交付，Pull Request、Commit �
 
 從一筆真實請求開始畫，通常比從產品清單開始選容易。先找使用者如何登入、請求在哪裡轉送、Agent 由誰維護、Tool 用什麼身分接觸資料，最後確認出事時去哪裡查。若有某段已經由現有系統穩定承擔，就不必為了湊齊這張圖重做一遍。
 
-我把這些接縫整理成可自行填寫的 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-27/capability-ledger.md)，也附上 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-27/capability-ledger.csv)。從 Day 19 的 Registry 畫面、Day 23–25 的 Gateway 與 LGTM 實跑，讀者可以挑自己最不熟的那段往回看。盤點表只幫忙把每一段由誰提供、誰維護、下一個疑問寫清楚，實際選擇還是由自己的環境決定。
+我把這些接縫整理成可自行填寫的 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r3/articles/day-27/capability-ledger.md)，也附上 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r3/articles/day-27/capability-ledger.csv)。從 Day 19 的 Registry 畫面、Day 23–25 的 Gateway 與 LGTM 實跑，讀者可以挑自己最不熟的那段往回看。盤點表只幫忙把每一段由誰提供、誰維護、下一個疑問寫清楚，實際選擇還是由自己的環境決定。
 
 位置看清楚後，還有一個問題：若只做唯讀查詢、若開始共用多個 Agent、若 Tool 要修改正式環境，這些系統應該按什麼順序導入？Day 28 會用這三種情境回答。它不會要求每個團隊都走向同一個終點。

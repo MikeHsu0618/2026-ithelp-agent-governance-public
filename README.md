@@ -67,7 +67,7 @@
 - [直接執行 Day 9 Delegation Context Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 10 Token Passthrough Lab](labs/02-identity-boundary/README.md)
 - [直接執行 Day 11 OAuth Flow Lab](labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果)
-- [直接執行 Day 12 Cognito 雙路徑 Lab](labs/02-identity-boundary/README.md#day-12-cognito-dual-path-執行結果)
+- [直接執行 Day 12 AWS Cognito 雙路徑 Lab](labs/02-identity-boundary/README.md#day-12-aws-cognito-dual-path-執行結果)
 - [直接執行 Day 14 Credential Boundary Lab](labs/03-gateway-runtime/README.md)
 - [直接執行 Day 16 kagent Boundary Lab](labs/03-gateway-runtime/README.md)
 - [直接執行 Day 17 A2A Path Lab](labs/03-gateway-runtime/README.md#day-17a2a-discoveryrouting-與-runtime-execution)
@@ -91,7 +91,7 @@
 ## Labs
 
 - [Day 1–5｜Unsafe Agent](labs/01-unsafe-agent/README.md)：Google ADK Agent、間接 Prompt Injection、Threat Model、Tool authorization、Delegation evidence 與治理四問盤點。
-- [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
+- [Day 8–12｜Identity Boundary](labs/02-identity-boundary/README.md)：JWT validation、Delegation Context、Token passthrough、OAuth flow 與 AWS Cognito Human／M2M contract。Day 8 可先執行離線 JWT case，後續路徑會隨系列逐篇解說。
 - [Day 14–19｜Gateway Runtime](labs/03-gateway-runtime/README.md)：先用同一個 agentgateway 比較 Human virtual key、workload consumer key 與 Human JWT，再以 kagent 與 agentgateway 拆開 Runtime、Control Plane、Traffic Path 和 credential lifecycle 的責任。後續接著實測 A2A、Google ADK BYO Agent 與 HITL，最後用 Agent Registry 驗證 catalog、reconciliation、undeploy 及 Artifact trust 邊界。
 - [Day 20–25｜Agent Traceability Pipeline](labs/04-telemetry-pipeline/README.md)：先用一筆 deterministic no-op action 拆開 Application Record、Operational Telemetry 與 Governance Event，再接通 Gateway、Runtime、MCP 與 LGTM。後續實測身分欄位分流、Cardinality、LLM Fallback 成本邊界，以及 Grafana MCP 的 HTTP／MCP／Tool／Query 四層結果。
 - [Day 26｜Agent Incident Replay](labs/05-incident-replay/README.md)：鎖定 Day 1／3 歷史 Artifact，逐欄保留 `VERIFIED`、`OBSERVED`、`UNKNOWN` 與 `NOT_APPLICABLE`；另跑現行 LGTM action 驗證 Tempo、Loki 與 Prometheus 的證據範圍。

@@ -3,7 +3,7 @@
 These files are deployment-shaped examples, not evidence that a live AWS account was changed.
 All pool IDs, client IDs, domains, callbacks, resources, and scopes are synthetic.
 
-## Cognito Terraform
+## AWS Cognito Terraform
 
 The Terraform split is intentional:
 
@@ -20,17 +20,17 @@ terraform -chdir=labs/02-identity-boundary/configs/cognito-terraform validate
 ```
 
 The example has not been applied to an AWS account. Before applying it, replace the domain,
-callback, resource, naming, retention, tags, and user-pool policies. A generated Cognito client
+callback, resource, naming, retention, tags, and user-pool policies. A generated AWS Cognito client
 secret is sensitive and will exist in Terraform state; use an encrypted remote backend with tightly
 restricted access. The repo deliberately does not output or persist that secret.
 
-PKCE is performed by the public client at runtime. Cognito app-client configuration enables the
+PKCE is performed by the public client at runtime. AWS Cognito app-client configuration enables the
 Authorization Code grant but does not contain the transient `code_verifier` or `code_challenge`.
 
 ## agentgateway resource-server policy
 
 `agentgateway-cognito.yaml` uses one MCP listener and one gateway policy boundary. The common JWT
-layer requires only claims present on both Cognito paths. CEL then applies conditional rules:
+layer requires only claims present on both AWS Cognito paths. CEL then applies conditional rules:
 
 - Human must carry the expected `client_id`, `sub`, `aud`, and scope;
 - M2M must carry the expected `client_id` and scope while resource-bound `aud` stays absent.
@@ -41,7 +41,7 @@ rather than assuming a provider/version-specific `sub` shape.
 
 The committed config points to `cognito-jwks.json`, which contains one synthetic RSA public key and
 no signing material. This lets `--validate-only` load and parse JWKS without pretending a fake user
-pool exists. Production must replace `jwks.file` with the real Cognito issuer's
+pool exists. Production must replace `jwks.file` with the real AWS Cognito issuer's
 `/.well-known/jwks.json` URL and verify key-rotation behavior.
 
 Validate the exact committed file with the pinned image:
@@ -55,6 +55,6 @@ docker run --rm \
 ```
 
 This is Resource Server Only mode. It validates JWTs and publishes protected-resource metadata; it
-does not claim that Cognito is a tested agentgateway provider, proxy Cognito discovery, or provide
+does not claim that AWS Cognito is a tested agentgateway provider, proxy AWS Cognito discovery, or provide
 Dynamic Client Registration. The `npx` target follows the upstream documentation example and is not
 started by `--validate-only`.

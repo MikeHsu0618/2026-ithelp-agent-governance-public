@@ -1,4 +1,4 @@
-# Cognito Human／M2M 雙路徑盤點表
+# AWS Cognito Human／M2M 雙路徑盤點表
 
 ## App client contract
 
@@ -10,7 +10,7 @@
 | PKCE | S256 | 不適用 |
 | Callback | Exact allowlist | 不適用 |
 | Scope | OIDC scope + custom scope，依需求 | Custom resource-server scope only |
-| `resource` | URL，可在 Authorization Code request 使用 | Cognito 不支援 Client Credentials resource binding |
+| `resource` | URL，可在 Authorization Code request 使用 | AWS Cognito 不支援 Client Credentials resource binding |
 | `aud` | 有 resource binding 時必須等於目標 API | 不應要求 Human path 的 resource-bound `aud` |
 | Audit Human | 來自已驗證的 `sub` | `NOT_APPLICABLE` |
 | Audit machine actor | App client／runtime context | 來自已驗證的 `client_id` |
@@ -62,4 +62,4 @@ make lab-02-cognito-config-check
 - [ ] M2M policy 以受信任 `client_id` + custom scope 授權，不虛構 Human。
 - [ ] JWKS cache／rotation、issuer outage 與 stale-key 行為有實際演練。
 - [ ] Audit 能分辨 `user/sre-oncaller` 與 `client/sre-scheduler`，不只留下 `authenticated=true`。
-- [ ] Cognito M2M token request volume、token lifetime 與 cache 策略已納入成本估算。
+- [ ] AWS Cognito M2M token request volume、token lifetime 與 cache 策略已納入成本估算。

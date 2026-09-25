@@ -1,8 +1,8 @@
 # Lab 02 — Identity Boundary
 
-> 狀態：Day 8–12 `lab-green`。2026-09-03 重新驗證 7 組合成 JWT、7 組 Delegation Context、7 組 Token passthrough、9 組 OAuth flow 與 9 組 Cognito dual-path case，完整 Lab 為 73 tests、branch coverage 90.81%。
+> 狀態：Day 8–12 `lab-green`。2026-09-03 重新驗證 7 組合成 JWT、7 組 Delegation Context、7 組 Token passthrough、9 組 OAuth flow 與 9 組 AWS Cognito dual-path case，完整 Lab 為 73 tests、branch coverage 90.81%。
 
-這個 Lab 服務 Day 7–12。它不會連到作者的企業 IdP、Cognito User Pool 或 Kubernetes 環境；公開版只使用合成 principal、client、issuer、resource 與每次執行時產生的 RSA key。
+這個 Lab 服務 Day 7–12。它不會連到作者的企業 IdP、AWS Cognito User Pool 或 Kubernetes 環境；公開版只使用合成 principal、client、issuer、resource 與每次執行時產生的 RSA key。
 
 ## Questions
 
@@ -14,7 +14,7 @@ Token 驗過以後，同一筆 Tool Call 的 Human、Service、Agent、Workload 
 
 互動式 Human、無人 Scheduler 與代表 Human 呼叫下游的 Runtime，應該分別走哪條 OAuth flow？Callback、scope、client registration、target 或 subject-token audience 錯誤時，應在 Token 發出前的哪個 stage 被拒絕？
 
-同一個 Cognito user-pool issuer 下，Human Authorization Code + PKCE 與 M2M Client Credentials 能否共用同一個 app client 與 audience policy？Client Credentials 不支援 resource binding 時，Gateway 要如何保留 Human boundary 又允許 machine actor？
+同一個 AWS Cognito user-pool issuer 下，Human Authorization Code + PKCE 與 M2M Client Credentials 能否共用同一個 app client 與 audience policy？Client Credentials 不支援 resource binding 時，Gateway 要如何保留 Human boundary 又允許 machine actor？
 
 ## Claim
 
@@ -26,21 +26,21 @@ Token 驗過以後，同一筆 Tool Call 的 Human、Service、Agent、Workload 
 - 同一枚 Human Token 跨 resource passthrough 時，嚴格下游應拒絕；為了相容而共用 audience／client profile，會讓下游 attribution 塌縮成 Human subject。
 - 下游 credential 要綁自己的 audience 與最小 scope；Human delegation 另外保存在與 credential fingerprint、subject、client、audience、target 綁定的 Context。
 - Authorization Code + PKCE、Client Credentials 與 Token Exchange 分別代表 Human、Service 自身與 Human delegation；三者不能只因為都會拿到 access token 就共用 principal 語意。
-- Cognito Human 與 M2M 可以共用 issuer／JWKS trust anchor，但必須拆成 public／confidential app client；Human 驗 resource-bound `aud`，M2M 以 `client_id` + custom scope 授權。
+- AWS Cognito Human 與 M2M 可以共用 issuer／JWKS trust anchor，但必須拆成 public／confidential app client；Human 驗 resource-bound `aud`，M2M 以 `client_id` + custom scope 授權。
 
 ## Non-claim
 
-- 本 slice 不是 Amazon Cognito emulator，也不證明作者的 private Cognito 設定。
-- `at+jwt`／`id+jwt` 是 Lab 用來明確區分 token type 的 synthetic profile；Cognito 整合仍須依 AWS 文件驗 `token_use`、`client_id`、issuer、scope 與對應的 token key。
+- 本 slice 不是 AWS Cognito emulator，也不證明作者的 private AWS Cognito 設定。
+- `at+jwt`／`id+jwt` 是 Lab 用來明確區分 token type 的 synthetic profile；AWS Cognito 整合仍須依 AWS 文件驗 `token_use`、`client_id`、issuer、scope 與對應的 token key。
 - 本機 JWKS 是離線文件，不是 production key rotation、cache、TLS 或 outage 測試。
 - claim 存在不代表 claim 值已通過完整 ABAC policy。Day 8 只驗證 policy input 是否齊全。
 - Delegation Context v0.1 是本系列的公開 audit contract，不是 RFC 8693、A2A 或 OpenTelemetry 標準。
 - 合成 ServiceAccount 與 Agent metadata 標為 `ASSERTED`；本 Lab 沒有宣稱已完成 workload attestation 或 context integrity protection。
-- Day 10 的 downstream token 由本機 issuer 直接簽出，不是 RFC 8693 Token Exchange、On-Behalf-Of 或 Cognito endpoint 的 emulator。
+- Day 10 的 downstream token 由本機 issuer 直接簽出，不是 RFC 8693 Token Exchange、On-Behalf-Of 或 AWS Cognito endpoint 的 emulator。
 - Day 11 的 Authorization Server 是 in-memory policy simulator；沒有 HTTP endpoint、browser／consent、`state`／authorization-response `iss`、CIMD fetch、DCR、TLS、refresh token 或 production client authentication。
 - Day 11 實作 RFC 8693 Token Exchange delegation profile，要求 `subject_token`、`actor_token`、authenticated client 與 `may_act` 綁定。Microsoft Entra OBO request profile 另外說明，不宣稱兩者 wire-compatible。
-- Day 12 是 Cognito-shaped offline contract，不是 live Cognito emulator。Terraform 只通過 provider-schema validation；agentgateway 只通過 v1.4.1 config／JWKS／CEL validation，沒有 AWS apply 或真實 Token call。
-- agentgateway 官方 tested-provider 表沒有 Cognito；公開 config 使用 Resource Server Only，不宣稱 discovery、DCR／CIMD 或 provider adaptation 已解決。
+- Day 12 是參照 AWS Cognito 欄位設計的離線示例，不是 live AWS Cognito emulator。Terraform 只通過 provider-schema validation；agentgateway 只通過 v1.4.1 config／JWKS／CEL validation，沒有 AWS apply 或真實 Token call。
+- agentgateway 官方 tested-provider 表沒有 AWS Cognito；公開 config 使用 Resource Server Only，不宣稱 discovery、DCR／CIMD 或 provider adaptation 已解決。
 
 ## Versions
 
@@ -125,7 +125,7 @@ Scheduler confidential client
        └── RFC 8693 Token Exchange ─> sub=user/sre-oncaller, act=sre-investigator-runtime, aud=tool
 ```
 
-Day 12 把兩條 flow 映射到 Cognito provider contract：
+Day 12 把兩條 flow 映射到 AWS Cognito provider contract：
 
 ```text
 Human public client + PKCE
@@ -241,7 +241,7 @@ Human delegated 與純 A2A case 沒有獨立 Service actor，因此 `service` sl
 
 Day 11 slice 完成時，完整共用 Lab 為 62 passed，branch coverage 91.21%。加入後續 Day 12 與 actor-binding regression test 後，目前為 73 passed、branch coverage 90.81%。Authorization code、PKCE verifier、client credential、compact JWT 與 private key 都不寫入 Artifact。
 
-## Day 12 Cognito Dual Path 執行結果
+## Day 12 AWS Cognito Dual Path 執行結果
 
 | Case | Path | Decision | Decision code | Principal／stage |
 | --- | --- | --- | --- | --- |
@@ -255,7 +255,7 @@ Day 11 slice 完成時，完整共用 Lab 為 62 passed，branch coverage 91.21%
 | `m2m_openid_scope` | M2M | DENY | `INVALID_SCOPE` | token |
 | `m2m_resource_binding` | M2M | DENY | `RESOURCE_BINDING_UNSUPPORTED` | token |
 
-Day 12 slice 完成時，完整 Lab 為 72 passed，branch coverage 91.17%。加入 Day 11 的 actor-binding regression test 後，目前為 73 passed、branch coverage 90.81%。M2M fixture 不合成 resource-bound `aud`，audit Human 為 `NOT_APPLICABLE`，machine actor 由 verified `client_id` 取得。Terraform `validate` 與 agentgateway v1.4.1 `--validate-only` 另外通過；兩者都沒有被標成 live AWS／Cognito integration PASS。
+Day 12 slice 完成時，完整 Lab 為 72 passed，branch coverage 91.17%。加入 Day 11 的 actor-binding regression test 後，目前為 73 passed、branch coverage 90.81%。M2M fixture 不合成 resource-bound `aud`，audit Human 為 `NOT_APPLICABLE`，machine actor 由 verified `client_id` 取得。Terraform `validate` 與 agentgateway v1.4.1 `--validate-only` 另外通過；兩者都沒有被標成 live AWS／AWS Cognito integration PASS。
 
 ## Expected terminal output
 
@@ -385,7 +385,7 @@ Registration snapshot 只保存 client type、redirect URI、grant、scope、res
 
 | Day | Slice | 正向證據 | 負向證據 |
 | ---: | --- | --- | --- |
-| 12 | Cognito path | 去識別化 Human／M2M config 與 Gateway validation | client type、scope 或 access-token claim 不符時失敗 |
+| 12 | AWS Cognito path | 去識別化 Human／M2M config 與 Gateway validation | client type、scope 或 access-token claim 不符時失敗 |
 
 ## Synthetic identities shared by later slices
 

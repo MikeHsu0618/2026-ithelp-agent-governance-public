@@ -35,12 +35,12 @@ Lab result：75 tests passed，branch coverage 90.81%，Ruff lint／format clean
 
 | Evidence | 能證明 | 不能證明 |
 | --- | --- | --- |
-| Offline Lab | Cognito-shaped Human／M2M contract、decision 與 audit attribution | 真實 Cognito endpoint 或 client interoperability |
+| Offline Lab | AWS Cognito-shaped Human／M2M contract、decision 與 audit attribution | 真實 AWS Cognito endpoint 或 client interoperability |
 | `terraform validate` | HCL syntax 與 AWS provider schema | AWS 權限、domain 唯一、federation、callback 或 managed login |
-| agentgateway `--validate-only` | Committed JWKS、YAML 與 CEL 可由 v1.4.1 解析 | Live Cognito token、discovery、client registration 或 MCP target call |
+| agentgateway `--validate-only` | Committed JWKS、YAML 與 CEL 可由 v1.4.1 解析 | Live AWS Cognito token、discovery、client registration 或 MCP target call |
 | Private operational record | 特定 Human SSO、M2M、Gateway JWT 與 MCP policy 路徑已跑通 | 所有 MCP client、OAuth flow 或 provider 組合都相容 |
 
-AWS apply 與 live Cognito token call 都沒有在公開 Lab 執行，不標成 integration PASS。
+AWS apply 與 live AWS Cognito token call 都沒有在公開 Lab 執行，不標成 integration PASS。
 
 ## Presentation method
 

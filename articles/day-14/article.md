@@ -44,17 +44,17 @@ LLM provider
 
 Consumer Key 從頭到尾只代表 Runtime。Audit 記錄 `workload/runtime-a`，Human 欄位則明確標成 `NOT_APPLICABLE`。上游若還要知道是哪一位使用者發起請求，就必須另外傳遞可驗證的 Human 與 Delegation Context，不能把 Runtime Key 改名成某位值班工程師。
 
-Static Bearer Key 當然有侷限。它可能被複製，無法辨認特定 Pod Instance，也沒有 Workload Attestation。不過在 Runtime 只接受 API Key 的條件下，它至少能隔離不同 Consumer，避免 Provider Key 散進每個 Agent Deployment。Runtime A 的 Key 外洩時，也不必連 Runtime B 一起撤銷。
+Static Bearer Key 當然有侷限。它可能被複製，所以 Gateway 無法只憑這枚 Key 辨認是哪個 Pod 送來請求。不過在 Runtime 只接受 API Key 的條件下，它至少能隔離不同 Consumer，避免 Provider Key 散進每個 Agent Deployment。Runtime A 的 Key 外洩時，也不必連 Runtime B 一起撤銷。
 
-若風險模型要求辨認 Pod Instance，下一步應該是 Kubernetes ServiceAccount Federation、SPIFFE 或其他同等的 Attestation，而不是把 Metadata 裡的 Workload 名稱當成密碼學證據。
+如果只是事故調查要定位 Pod，可以在事件裡關聯 Pod UID。若要讓 Gateway 驗證發出請求的是哪個工作負載，則需要它實際接受並驗證的工作負載憑證。ServiceAccount 名稱本身不會做到這點，也未必能區分共用同一個 ServiceAccount 的 Pod。[Kubernetes 的 ServiceAccount 文件](https://kubernetes.io/docs/concepts/security/service-accounts/)說明 Token 可綁定特定 Pod。是否採用這類憑證或 SPIFFE，仍要看下游的驗證能力與風險需求。
 
 ## 同一個 Gateway 比較三種 Credential
 
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
+[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r3/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
 
 這裡需要先釐清名稱。LiteLLM Virtual Key 是前一篇實務選型的對象，Lab 使用 agentgateway API Key Policy 與 Metadata 重現相同的 Identity Mapping 問題。`Consumer Key` 是本文為了區分用途採用的名稱，不是 agentgateway 另一種正式 Credential Type。
 
-![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-14/credential-boundary.png)
+![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r3/assets/diagrams/day-14/credential-boundary.png)
 
 API Key Route 使用 Strict Mode，兩把 Key 分別映射成 Human 與 Workload Metadata：
 
@@ -72,7 +72,7 @@ apiKey:
       workload: workload/runtime-a
 ```
 
-完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。讀者重跑時會產生新的測試 Key。下面只看三種入口 Credential 最後讓 Gateway 做出什麼不同決定。
+完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r3/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。讀者重跑時會產生新的測試 Key。下面只看三種入口 Credential 最後讓 Gateway 做出什麼不同決定。
 
 ## Offboarding Gap 會被 HTTP 200 藏起來
 
@@ -118,9 +118,9 @@ Human Key、Workload Key 與 Human JWT 通過後，都由同一個 Backend Authe
 
 Synthetic Provider 會檢查收到的 `Authorization` 是否等於本次產生的 Provider Key，也確認它不等於 Human Key、Workload Key 或 JWT。這個實際 Backend Behavior 才能支持「Provider Key 已被隔離」，不能只從架構圖推論。
 
-![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/screenshots/day-14/01-credential-boundary-results.png)
+![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r3/assets/screenshots/day-14/01-credential-boundary-results.png)
 
-Human Key、Workload Key 與 JWT 的差異，現在可以沿著停權、撤銷與 Provider 收到的 Credential 一路查下去。不必因為三者都能當 Bearer Secret，就交給同一套 Lifecycle。完整結果放在 [Lab 紀錄](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/assets/screenshots/day-14/evidence.md)，要帶進架構討論也有可複製的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-14/credential-decision-table.md)。重跑整組案例只需要：
+Human Key、Workload Key 與 JWT 的差異，現在可以沿著停權、撤銷與 Provider 收到的 Credential 一路查下去。不必因為三者都能當 Bearer Secret，就交給同一套 Lifecycle。完整結果放在 [Lab 紀錄](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r3/assets/screenshots/day-14/evidence.md)，要帶進架構討論也有可複製的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r3/articles/day-14/credential-decision-table.md)。重跑整組案例只需要：
 
 ```bash
 make lab-03-runtime-up

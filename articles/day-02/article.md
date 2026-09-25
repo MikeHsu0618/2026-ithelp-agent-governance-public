@@ -10,7 +10,7 @@ Day 1 的 SRE Investigation Agent 被 Log 裡的惡意指令帶偏，最後讓�
 
 Agent 沒有拋棄這些控制。使用者能不能啟動工作、呼叫者是誰、後端是否允許存取，照樣需要驗證。不同之處在於，Agent 會把 Log、文件或上一個 Tool 的結果放進 context，再由模型動態選擇下一個 Tool 與參數。執行結果還可能回到下一輪，繼續影響後面的決策。
 
-![一般 Web 請求保留身分驗證、授權與程式決定的 Handler；Agent 執行在既有入口控制之外，增加不可信資料、模型提出動作、執行前授權、Tool 與資源之間的邊界，結果還會回到下一輪。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
+![一般 Web 請求保留身分驗證、授權與程式決定的 Handler；Agent 執行在既有入口控制之外，增加不可信資料、模型提出動作、執行前授權、Tool 與資源之間的邊界，結果還會回到下一輪。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02-r3/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
 
 我第一版架構圖把 Agent runtime 當成另一個 Backend，於是模型選了什麼、誰核准這個動作，以及 Tool 使用哪一組 credential，全被藏在同一個方框裡。圖看起來很乾淨，出事時卻回答不了責任到底斷在哪裡。
 
@@ -25,9 +25,9 @@ Agent 沒有拋棄這些控制。使用者能不能啟動工作、呼叫者是�
 | 動作提案 → 執行前授權 | 誰能根據 Tool、參數和目標資源回覆允許或拒絕 | 全部放行的 `open` policy 一律允許 |
 | Tool → 目標資源 | Tool 使用哪個執行身分，權限能碰到哪裡 | Lab 只接安全標記，正式環境權限未知 |
 
-最後一格只能寫「未知」。安全標記證明呼叫流程走到了 Tool function，卻不能回答正式環境裡的執行身分是否真的有刪除資料的權限。Lab 沒有這份證據，就先寫未知。設計審查若把空白默認成安全，真正部署時很容易沿用一組權限過大的 service account。
+最後一格只能寫「未知」。安全標記證明呼叫流程走到了 Tool function，卻不能回答正式環境裡的執行憑證是否真的有刪除資料的權限。Lab 沒有這份資訊，就先寫未知。真正接上資料庫或 API 時，還得檢查那一跳的憑證與資源端授權，不能因為 Tool 名稱看起來無害就跳過。
 
-完整盤點還要處理誰啟動 Agent、資料能不能送往模型供應商，以及事件是否足以還原執行過程。這些欄位整理在 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-02/threat-model-worksheet.md)，正文先沿著這四道邊界追完眼前的危險動作。
+完整盤點還要處理誰啟動 Agent、資料能不能送往模型供應商，以及事件是否足以還原執行過程。這些欄位整理在 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r3/articles/day-02/threat-model-worksheet.md)，正文先沿著這四道邊界追完眼前的危險動作。
 
 ## 同一段惡意指令，權限不同會變成不同事故
 

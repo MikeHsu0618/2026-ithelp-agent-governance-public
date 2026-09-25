@@ -4,7 +4,7 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 
 我以前串接不同 MCP Client 時，經常把問題概括成「OAuth 沒設好」。真正拆開後才發現，失敗點可能是 Client Registration、使用者授權，也可能是 Token 發給了錯誤的 Resource。更麻煩的情況是 API 回了 `200`，Token 卻代表錯的人，直到追查 Audit 才發現整條責任鏈早已斷掉。
 
-這篇用三條常見路徑把問題拆開：互動式 Human 使用 Authorization Code + PKCE，無人排程使用 Client Credentials，Runtime 代表 Human 呼叫下游時則示範 RFC 8693 Token Exchange。實務上最磨人的 Client Registration、Callback 與 Scope 問題，也會跟著各自的路徑出現。公開 Lab 用離線 Token 呈現三種不同身分語意。文章最後再回到 Cognito，確認哪些 Flow 能直接落地。
+這篇用三條常見路徑把問題拆開：互動式 Human 使用 Authorization Code + PKCE，無人排程使用 Client Credentials，Runtime 代表 Human 呼叫下游時則示範 RFC 8693 Token Exchange。實務上最磨人的 Client Registration、Callback 與 Scope 問題，也會跟著各自的路徑出現。公開 Lab 用離線 Token 呈現三種不同身分語意。文章最後再回到 AWS Cognito，確認哪些 Flow 能直接落地。
 
 ## 三種工作對應三種身分語意
 
@@ -16,7 +16,7 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | Human 是 subject，Runtime 是 current actor | RFC 8693 Token Exchange |
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r3/assets/diagrams/day-11/three-oauth-flows.png)
 
 這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。接下來三段都沿著這個判斷往下走。
 
@@ -99,7 +99,7 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 
 ## 三條 Flow 的關鍵結果
 
-[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 一共跑九個案例。三條 Flow 各有一個成功案例，其餘六個負向案例刻意放入 Callback、Scope、Registration、Client Type、Target 與 Audience 錯誤。正文不再逐列抄完整驗收表，只留下最能區分三條路徑的結果：
+[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 一共跑九個案例。三條 Flow 各有一個成功案例，其餘六個負向案例刻意放入 Callback、Scope、Registration、Client Type、Target 與 Audience 錯誤。正文不再逐列抄完整驗收表，只留下最能區分三條路徑的結果：
 
 | 情境 | 結果 | 說明 |
 | --- | --- | --- |
@@ -109,7 +109,7 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 | Runtime 要求未授權 Target | DENY | 代表關係不能自行擴張可存取的 Resource |
 | Human Token 的 Audience 錯誤 | DENY | 入口 Token 不能拿來交換任意下游 Token |
 
-![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r3/assets/screenshots/day-11/01-oauth-flow-results.png)
 
 從 Repo Root 執行以下指令，就能重跑完整案例：
 
@@ -119,12 +119,12 @@ make lab-02-check
 make lab-02-oauth
 ```
 
-完整 Decision Event、合成 Claims 與故障判讀指令放在 [Day 11 Lab 結果](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/assets/screenshots/day-11/evidence.md) 和 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-11/oauth-flow-selection-guide.md)。這份離線 Lab 用來比較 Token 代表誰、錯誤會在哪一站被拒絕。它沒有啟動真正的瀏覽器登入或 Cognito Token Endpoint。
+完整 Decision Event、合成 Claims 與故障判讀指令放在 [Day 11 Lab 結果](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/assets/screenshots/day-11/evidence.md) 和 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/articles/day-11/oauth-flow-selection-guide.md)。這份離線 Lab 用來比較 Token 代表誰、錯誤會在哪一站被拒絕。它沒有啟動真正的瀏覽器登入或 AWS Cognito Token Endpoint。
 
-## Cognito 能接住兩條路，Delegation 仍待補齊
+## AWS Cognito 能接住兩條路，Delegation 仍待補齊
 
-把三條 Flow 放回我們選定的 AWS Cognito 後，差異就很具體。[Cognito Token Endpoint 文件](https://docs.aws.amazon.com/cognito/latest/developerguide/token-endpoint.html) 列出 Authorization Code、Refresh Token 與 Client Credentials，沒有列出 RFC 8693 Token Exchange。依公開合約，Human CLI 與 Scheduler 可以直接落到 Cognito，Runtime Delegation 則不能假設送出相同 Request 就會成立。
+把三條 Flow 放回我們選定的 AWS Cognito 後，差異就很具體。[AWS Cognito Token Endpoint 文件](https://docs.aws.amazon.com/cognito/latest/developerguide/token-endpoint.html) 列出 Authorization Code、Refresh Token 與 Client Credentials，沒有列出 RFC 8693 Token Exchange。依公開合約，Human CLI 與 Scheduler 可以直接落到 AWS Cognito，Runtime Delegation 則不能假設送出相同 Request 就會成立。
 
 平台仍可評估支援 RFC 8693 或 OBO 的 Token Broker／STS，也可以讓 Runtime 使用 App-only Downstream Credential，再把 Human Delegation 放入另一份具完整性保護的 Context。選擇後者時必須把兩件事寫清楚：Credential 代表 Runtime，Human Attribution 來自另一份可驗證資料。它們可以一起送到下游，卻不能混寫成同一個身分。
 
-下一篇會先落地 Cognito 能直接支援的部分。Public Human Client 與 Confidential M2M Client 雖然共用同一個 Issuer，Callback、Scope、Audience Rule、Secret Lifecycle 與 Gateway Policy 都必須拆開。這是 IdP 選定後，第一個真正需要在設定裡做出的分界。
+下一篇會先落地 AWS Cognito 能直接支援的部分。Public Human Client 與 Confidential M2M Client 雖然共用同一個 Issuer，Callback、Scope、Audience Rule、Secret Lifecycle 與 Gateway Policy 都必須拆開。這是 IdP 選定後，第一個真正需要在設定裡做出的分界。

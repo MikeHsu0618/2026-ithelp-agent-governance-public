@@ -11,9 +11,9 @@
 | request／trace | `trace_id` | 已產生並保存 | ordered events／summary | 否 | 應成為 decision 與 audit 的 join key |
 | human principal | `synthetic-user-sre-oncaller` | 有值但未驗證 | ADK session setup | 否 | Session label 不能冒充 IdP principal |
 | delegating agent | `sre_investigation_agent` | 設定 metadata | Agent definition | 否 | 名稱與版本要可回查，名稱本身不是 credential |
-| executing workload | `UNKNOWN` | 沒有證據 | 無 workload identity event | 否 | 不可用 Agent 名稱代替實際執行者 |
-| credential subject | `UNKNOWN` | 沒有證據 | Lab 沒有 workload token | 否 | 要能和 executing workload 對得上 |
-| credential audience | `UNKNOWN` | 沒有證據 | Lab 沒有 access token | 否 | 不能讓入口 token 任意轉交下游 |
+| execution locator | `NOT_APPLICABLE` | 這次合成 Tool 沒有下游呼叫 | 本 Lab 的 in-process function | 否 | 若日後跨程序呼叫，再記 Pod UID／服務 instance 作事故定位，不當作授權 principal |
+| downstream credential subject | `NOT_APPLICABLE` | 這次合成 Tool 沒有下游憑證 | 本 Lab 未送外部請求 | 否 | 真正接下游時，以該資源驗過的 caller 為準 |
+| downstream credential audience | `NOT_APPLICABLE` | 這次合成 Tool 沒有 access token | 本 Lab 未送外部請求 | 否 | 真正跨資源呼叫時，不轉送錯 audience 的入口 token |
 | action | `delete_demo_database` | ADK Tool Call | model／policy event | **是** | 目前唯一 policy input |
 | requested target | `payments-demo` | Tool argument，未驗證 | policy event | 否 | 同一 Tool 對不同 environment 不能共用答案 |
 | delegated scope | `UNKNOWN` | 沒有證據 | 無 delegation context | 否 | 要比 workload 自身 authority 更窄 |
@@ -29,7 +29,7 @@
 | request／trace |  |  |  |  |  |  |
 | human principal |  |  |  |  |  |  |
 | delegating agent |  |  |  |  |  |  |
-| executing workload |  |  |  |  |  |  |
+| execution locator（必要時） |  |  |  |  |  |  |
 | credential subject |  |  |  |  |  |  |
 | credential audience |  |  |  |  |  |  |
 | action |  |  |  |  |  |  |
@@ -42,7 +42,7 @@
 
 1. Human 不在線時，`human principal` 是沿用先前授權、改成 service principal，還是明確為空？
 2. Agent 名稱來自 deployment metadata，還是由可信 Registry／artifact digest 綁定？
-3. 真正送出 request 的 pod、process 或 external service，能否用 workload identity 驗證？
+3. 若呼叫外部服務，是否記得是哪個 Pod／process 發出請求？資源服務另外驗過的 caller 是誰？兩者不要混為一談。
 4. Credential 是轉送原 token、交換成 audience-bound token，還是 workload 自己的 static key？
 5. `action + target resource + environment` 是否一起進入 policy，而不只看 Tool name？
 6. Delegated scope 是否小於等於 Human 可授權範圍，也小於等於 workload 可執行範圍？

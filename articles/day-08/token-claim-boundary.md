@@ -10,7 +10,7 @@
 | `iss` | 哪個 authorization／identity authority 發出 assertions | 這枚 Token 是否給目前 resource | 與預先設定的 trusted issuer 完全匹配 |
 | `aud` | 目前 resource 是否是預期接收者之一 | 呼叫者可執行哪個 Tool | 與 `mcp://lab/observability/query` 匹配 |
 | `exp`／`iat` | Token 的有效時間窗 | Token 是否已被提前撤銷 | 過期拒絕，production 另決定 clock skew／revocation |
-| `typ`／`token_use` | 這是哪一類 Token，預定用在哪個 protocol context | 使用者對 resource 的權限 | Lab 用 `at+jwt`，Cognito 整合另驗 `token_use=access` |
+| `typ`／`token_use` | 這是哪一類 Token，預定用在哪個 protocol context | 使用者對 resource 的權限 | Lab 用 `at+jwt`，AWS Cognito 整合另驗 `token_use=access` |
 | `sub` | issuer namespace 裡的 subject identifier | Agent 版本、執行 Pod，或完整 delegation chain | 保存 verified subject，不複製成四種 actor |
 | `client_id` | 哪個 OAuth app client 參與並取得 access token | public client 是否持有 secret，或哪個 workload 實際送出 request | 必須匹配預期 client |
 | `scope` | authorization server 授予哪些 OAuth permission strings | business policy 是否有足夠屬性，或某個 Tool 一定能執行 | 必須包含 `observability.query` |
@@ -25,11 +25,11 @@
 5. Policy 還需要哪些 claim？這些 claim 是否真的存在於送到 resource 的 Token，而不只存在另一枚 Token？
 6. Log 只記 stable decision code，還是把整枚 Token／所有 claims 都寫進去了？
 
-## Cognito 對照提醒
+## AWS Cognito 對照提醒
 
 - ID token 的 `aud` 對應 app client，access token 使用 `client_id` 表示 app client。
 - 現行 AWS 文件說 access-token `aud` 只有在 request 使用 resource binding 時才出現，值是預定授權的 API URL。沒有 resource binding 時，不要為了讓 generic validator 過關而關掉所有 audience／resource boundary。
 - Access token 與 ID token 使用不同 signing keys。同一 session 的 `kid` 不會相同，兩者要分開驗。
-- Access token 若需要額外 policy claims，先核對 Cognito Pre Token Generation event version、feature plan 與 Human／M2M flow。不要假設 ID token 的 custom attributes 會原封不動複製過去。
+- Access token 若需要額外 policy claims，先核對 AWS Cognito Pre Token Generation event version、feature plan 與 Human／M2M flow。不要假設 ID token 的 custom attributes 會原封不動複製過去。
 
-官方依據：[Cognito access token](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-access-token.html)、[Cognito JWT verification](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html)、[Pre Token Generation trigger](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-pre-token-generation.html)、[RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html)。
+官方依據：[AWS Cognito access token](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-access-token.html)、[AWS Cognito JWT verification](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html)、[Pre Token Generation trigger](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-pre-token-generation.html)、[RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html)。

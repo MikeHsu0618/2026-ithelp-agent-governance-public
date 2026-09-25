@@ -1,6 +1,6 @@
 # Day 4｜Agent 拿誰的權限做事：Tool Allowlist 沒回答的身分問題
 
-Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
+Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r4/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
 
 ```python
 decision = policy.authorize(tool.name)
@@ -55,7 +55,7 @@ store.record(
 
 這段程式很容易讓人誤會成「授權資料都有記錄」。但事件裡有 `tool_arguments`，不等於 policy 做決定時看過它。Session 裡的 `synthetic-user-sre-oncaller` 和 Agent 名稱 `sre_investigation_agent` 也是同樣情況。它們有值，卻沒有進入 `authorize()`。
 
-更麻煩的是，session label 沒有 issuer 或 credential 可以證明它是哪位使用者，Agent 名稱也只是受控 metadata，不能代表真正拿 credential 送出 request 的 workload。資料存在、來源可信、policy 看得到，這三件事不能混在一起。
+更麻煩的是，session label 沒有 issuer 或 credential 可以證明它是哪位使用者，Agent 名稱也只是受控 metadata。這個合成 Tool 沒有送出下游請求，所以目前還談不上用哪枚下游憑證。資料存在、來源可信、policy 看得到，這三件事不能混在一起。
 
 ## 這種權限錯置早在 Agent 出現前就存在
 
@@ -67,7 +67,7 @@ store.record(
 
 Prompt Injection 是造成這種偏離的一種方式，但不是 Confused Deputy 的定義。即使系統裡沒有 LLM，只要低信任輸入能控制目標，而受信任程式又拿自己的權限照做，同樣的問題就會出現。
 
-![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-04/confused-deputy-sequence.png)
+![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r4/assets/diagrams/day-04/confused-deputy-sequence.png)
 
 ## 授權至少要回答三件事
 
@@ -94,16 +94,16 @@ authorize(
 | --- | --- | --- | --- |
 | Human | `synthetic-user-sre-oncaller` session label | 不能，沒有 IdP 驗證 | 否 |
 | Agent | `sre_investigation_agent` metadata | 只能識別定義，不能代表執行者 | 否 |
-| Workload | 沒有 workload identity event | 沒有證據 | 否 |
+| 執行位置 | 這個合成 Tool 沒有下游呼叫 | 此次授權不需要用它證明 caller | 否 |
 | Action | Tool name | 可以作為 action | 是 |
 | Resource | Tool arguments 裡的 requested target | 還要由資源端解析與驗證 | 否 |
 
-完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
+完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r4/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
 
-Policy 做決定時只需要當下可驗證的欄位，Audit 則要保存較完整的責任鏈，讓事後能查出誰提出目的、哪個 Agent 做了選擇，以及哪個 workload 真正送出 request。兩者使用的資料有交集，但用途不同。
+Policy 做決定時要看當下可驗證的呼叫者、動作與目標。Audit 則可以保存較完整的責任鏈，讓事後查出誰提出目的、哪個 Agent 做了選擇。如果真的呼叫了下游服務，再記錄那一跳用的憑證與請求結果。兩者使用的資料有交集，但用途不同。
 
 ## 下一步，把缺口放回完整治理地圖
 
 Day 4 先把「合法 Tool 為什麼仍可能用錯權限」說清楚。現在已經知道 policy 缺少 verified caller、target resource 與 delegation scope，但這還只是整條 Agent action path 的一部分。
 
-下一篇會把同一筆動作從 Human、Agent、Workload 一路追到 Tool。除了眼前缺少的身分與資源授權，執行版本、拒絕位置和事後紀錄也會影響事故能否查清楚。先把問題擺在同一張圖上，後面談產品時才不會誤以為買到某項功能，就等於整條路徑都有人負責。
+下一篇會把同一筆動作從 Human、Agent 一路追到 Tool。等它真的連上外部服務，再檢查下游 caller。除了眼前缺少的身分與資源授權，執行版本、拒絕位置和事後紀錄也會影響事故能否查清楚。先把問題擺在同一張圖上，後面談產品時才不會誤以為買到某項功能，就等於整條路徑都有人負責。
