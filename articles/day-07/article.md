@@ -8,11 +8,11 @@
 
 以 `query_metrics` 為例，人工交辦的路徑是「值班工程師登入 → 在 MCP console 發出調查需求 → Agent 選擇 Tool → runtime 呼叫下游」。排程路徑則從 scheduler 開始，沒有那位登入的工程師。兩條路從 Agent runtime 往後可能完全相同，差異卻決定了事後該找誰釐清目的、該檢查哪一種授權。
 
-![說明情境中的兩筆 query_metrics：人工交辦先有已驗證的值班工程師，排程從 Scheduler job 開始。兩者可能由同一版 Agent 和相同的下游 M2M client 呼叫 MCP。下游 caller 相同，入口紀錄仍要保留不同的工作來源。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r4/assets/diagrams/day-07/same-client-two-origins.png)
+![說明情境中的兩筆 query_metrics：人工交辦先有已驗證的值班工程師，排程從 Scheduler job 開始。兩者可能由同一版 Agent 和相同的下游 M2M client 呼叫 MCP。下游 caller 相同，入口紀錄仍要保留不同的工作來源。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r5/assets/diagrams/day-07/same-client-two-origins.png)
 
 排程任務本來沒有當次的 Human caller，應留下 job 與服務 owner。人工交辦則要留下已驗證的 issuer、`sub` 和入口。兩條路還都需要知道哪版 Agent 選了 Tool、請求在哪個 runtime 執行。這些資訊不必擠進每一枚 Token，但要能沿著同一筆 Action 找回來。
 
-![Agent action path 中的 Human、Service、Agent 與 Workload：分別表示任務來由、當前服務身分、選擇動作的程式版本，以及執行位置。排程任務沒有互動式 Human caller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r4/assets/diagrams/day-07/four-identity-slots.png)
+![Agent action path 中的 Human、Service、Agent 與 Workload：分別表示任務來由、當前服務身分、選擇動作的程式版本，以及執行位置。排程任務沒有互動式 Human caller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-07-r5/assets/diagrams/day-07/four-identity-slots.png)
 
 ## 登入者與下游 caller 不是同一回事
 
@@ -32,6 +32,6 @@
 
 我會把這四類資訊當成閱讀一筆 Agent action 的線索。Human 告訴我們誰提出或批准目的，Service 是當前哪個已驗證的服務取得權限，Agent 指向哪版程式與設定選了動作，Workload 則說明它在哪裡運行。它們可能分散在不同地方，也不一定每次都有 Human。單看 Token、Pod 或模型名稱，都無法補出其餘三段。
 
-實際設計時，可以拿 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07-r4/articles/day-07/identity-flow-matrix.md) 畫自己的人工交辦與排程兩條路，再問「換憑證的那一跳，是否還能知道這筆工作從哪裡來？」不同的授權點未必需要全部資訊：M2M rate limit 可能只看服務，高風險 Tool 則可能需要交辦者、Agent 和目標資源一起判斷。先把來由記對，比急著發明一個涵蓋所有情況的 `actor` 更有用。
+實際設計時，可以拿 [Identity Flow Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-07-r5/articles/day-07/identity-flow-matrix.md) 畫自己的人工交辦與排程兩條路，再問「換憑證的那一跳，是否還能知道這筆工作從哪裡來？」不同的授權點未必需要全部資訊：M2M rate limit 可能只看服務，高風險 Tool 則可能需要交辦者、Agent 和目標資源一起判斷。先把來由記對，比急著發明一個涵蓋所有情況的 `actor` 更有用。
 
 不過，紀錄裡看得到 `sub` 或 `client_id`，不表示它們已經可信。下一篇會回到入口那枚 JWT，從實際 payload 開始看：Gateway 要先確認什麼，才能把這些欄位交給 policy 使用？
