@@ -1,6 +1,6 @@
 # Day 4｜Agent 拿誰的權限做事：Tool Allowlist 沒回答的身分問題
 
-Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r4/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
+Day 3 的 [Google ADK Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r5/labs/01-unsafe-agent/README.md) 成功擋下了 `delete_demo_database`。當時看到 `POLICY_DENIED`，我以為執行前授權已經有了不錯的起點。回頭看 callback，我才發現授權判斷只收到 Tool name：
 
 ```python
 decision = policy.authorize(tool.name)
@@ -57,6 +57,10 @@ store.record(
 
 更麻煩的是，session label 沒有 issuer 或 credential 可以證明它是哪位使用者，Agent 名稱也只是受控 metadata。這個合成 Tool 沒有送出下游請求，所以目前還談不上用哪枚下游憑證。資料存在、來源可信、policy 看得到，這三件事不能混在一起。
 
+把現有 callback 畫成資料流，缺口更容易看見：左邊雖然記下了參數和 session label，真正送進 `authorize()` 的只有 Tool name。下方的 Caller 驗證與目標解析是下一步需要補上的路徑，不是這份 Lab 已經做到的功能。
+
+![現有 callback 記錄 session label、Tool arguments 與 Tool name，卻只把 query_metrics 交給 authorize，因此兩個目標都得到 ALLOW。若要依人與目標授權，還需先驗證 Caller、解析目標資源，再把 principal、action、resource 與受託範圍交給 policy。下半部是設計需求，並非 Lab 實測。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r5/assets/diagrams/day-04/policy-input-gap.png)
+
 ## 這種權限錯置早在 Agent 出現前就存在
 
 1988 年，Norm Hardy 在〈[The Confused Deputy](https://dl.acm.org/doi/10.1145/54289.871709)〉描述了一個 Compiler。Compiler 必須用自己的權限寫入計費檔案，同時也允許使用者指定編譯輸出的檔名。當使用者把輸出位置指向計費檔案時，真正覆寫檔案的不是使用者，而是握有合法權限的 Compiler。
@@ -67,7 +71,7 @@ store.record(
 
 Prompt Injection 是造成這種偏離的一種方式，但不是 Confused Deputy 的定義。即使系統裡沒有 LLM，只要低信任輸入能控制目標，而受信任程式又拿自己的權限照做，同樣的問題就會出現。
 
-![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r4/assets/diagrams/day-04/confused-deputy-sequence.png)
+![同一位值班工程師透過相同 Agent 呼叫 query_metrics。原始調查查詢 payments-api，外部 Log 則把另一筆請求帶往另一個團隊的服務。現有 policy 兩次都只收到 query_metrics，因此都回覆 ALLOW，但第二筆預期應為 DENY。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-04-r5/assets/diagrams/day-04/confused-deputy-sequence.png)
 
 ## 授權至少要回答三件事
 
@@ -98,7 +102,7 @@ authorize(
 | Action | Tool name | 可以作為 action | 是 |
 | Resource | Tool arguments 裡的 requested target | 還要由資源端解析與驗證 | 否 |
 
-完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r4/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
+完整版本放在 [Agent Delegation Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-04-r5/articles/day-04/delegation-decision-table.md)。這份表把「欄位有值」「由誰證明」和「policy 是否真的使用」分開，適合拿去檢查其他 Agent action。它不是要逼每一個 checkpoint 吞下所有欄位，而是防止架構圖上明明畫了 Identity，實際決策卻只收到一個 Tool 名稱。
 
 Policy 做決定時要看當下可驗證的呼叫者、動作與目標。Audit 則可以保存較完整的責任鏈，讓事後查出誰提出目的、哪個 Agent 做了選擇。如果真的呼叫了下游服務，再記錄那一跳用的憑證與請求結果。兩者使用的資料有交集，但用途不同。
 

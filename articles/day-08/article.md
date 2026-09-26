@@ -37,7 +37,7 @@ JWT 在傳輸時是一段以句點分隔的 `header.payload.signature`。Header 
 
 我會按接收端的問題來看，而不是把 claims 當成一張名詞表。先確認使用的是預期的演算法與受信任 JWKS 中的 key，再驗簽、檢查 issuer 與期限。接著確認 Token 是給眼前的 API 使用，以及它的用途、client 和 scope 是否符合這條 route，最後才讓 `team` 這類應用屬性進入 policy。
 
-![JWT 從 Header 與 Key、Signature 與標準 Claims、OAuth Context，到 Application Policy Inputs 的驗證順序。任一階段失敗都不把 claims 交給後面的 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08-r2/assets/diagrams/day-08/token-validation-gates.png)
+![JWT 從 Header 與 Key、Signature 與標準 Claims、OAuth Context，到 Application Policy Inputs 的驗證順序。任一階段失敗都不把 claims 交給後面的 policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08-r3/assets/diagrams/day-08/token-validation-gates.png)
 
 Audience、scope 和 `team` 回答的不是同一題。Audience 指向 Token 預定的接收者，scope 表示授權伺服器給了 client 哪類 API 能力，`team` 則可能是我們自己的政策輸入。即使 Token 的簽章正確、scope 也包含查詢權限，仍不表示任意團隊都能查任意資源。反過來說，缺少 `team` 也不是要把 audience 或簽章檢查關掉。RFC 的 [JWT Audience 定義](https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1.3) 與 [JWT 安全建議](https://www.rfc-editor.org/rfc/rfc8725.html) 分別說明了接收者限制，以及不同用途 Token 應使用清楚分開的驗證規則。
 
@@ -47,26 +47,14 @@ Audience、scope 和 `team` 回答的不是同一題。Audience 指向 Token 預
 
 我們遇到的 `team` 落差，不能靠 Gateway 猜出來。若 API 真要依它做 policy，就得選擇讓 access token 帶所需 claim，或從可信的外部資料來源補足。AWS Cognito 的 [Pre Token Generation trigger](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-pre-token-generation.html) 能客製 claims，但 Human access token 與 M2M token 所需的 event version 不同，也受 User Pool 功能方案影響。這是設定時要查的產品條件，不是把 ID token 改名成 access token 就能繞過的問題。
 
-每條 API route 因此需要自己的接受條件。例如觀測查詢 API 要接受 AWS Cognito 發出的 access token、限定 app client、要求查詢 scope，並決定這條 Human flow 是否使用 resource-bound audience。`team` 若是必要的 policy input，還要明確約定它從哪裡來。對 M2M 不能直接照抄 Human 的 `sub` 與 audience 要求，Day 12 會再拆開這兩條路。常用 claim 能提供什麼、不能提供什麼，可用 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r2/articles/day-08/token-claim-boundary.md) 對照。
+每條 API route 因此需要自己的接受條件。例如觀測查詢 API 要接受 AWS Cognito 發出的 access token、限定 app client、要求查詢 scope，並決定這條 Human flow 是否使用 resource-bound audience。`team` 若是必要的 policy input，還要明確約定它從哪裡來。對 M2M 不能直接照抄 Human 的 `sub` 與 audience 要求，Day 12 會再拆開這兩條路。常用 claim 能提供什麼、不能提供什麼，可用 [Token Claim Boundary](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r3/articles/day-08/token-claim-boundary.md) 對照。
 
-## 用 Lab 看錯誤會停在哪裡
+## 簽章正確之後，還有哪一關
 
-理解上述差異後，再跑 [Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r2/labs/02-identity-boundary/README.md) 比較有意思。它用本機暫時建立的 issuer 簽出**合成 Token**，不是 AWS Cognito 模擬器，也不會連到我們的私有設定。Lab 特意讓幾枚 Token 都能驗簽，觀察「簽章正確」之後還會在哪一關停下：
+Access Token 和 ID Token 都可能是同一個 issuer 簽出的合法 JWT。觀測 API 卻只能接受符合自己合約的憑證：`id_token_has_team` 雖然有 `team`，仍不能替代 Access Token。`access_missing_team` 是正確的 Token 種類，卻缺少這條 Policy 必要的資料。把 `wrong_audience` 一起放進來看，就能分出「憑證真實」「發給眼前 API」「足以做這次授權」三件事。
 
-| 合成案例 | 結果 | 對應的實務問題 |
-| --- | --- | --- |
-| `valid_access` | `ALLOW` | 接收者、用途、scope 與 policy input 都符合 |
-| `wrong_audience` | `DENY` | Token 不是給眼前的 resource |
-| `access_missing_team` | `DENY` | Token 合法，卻缺少應用政策需要的資料 |
-| `id_token_has_team` | `DENY` | `team` 有值，但 ID token 不是這條 API 接受的憑證 |
+![Day 8 的合成 JWT 對照：正確的 Access Token 放行。ID Token 即使帶 team、Access Token 缺少政策屬性，或 Audience 錯誤，都會停在不同檢查點。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08-r3/assets/screenshots/day-08/01-jwt-boundary-results.png)
 
-![Lab 02 的 CLI 結果：同一組 JWT 驗證案例中，只有符合 API contract 的 access token 被放行，其餘案例在不同階段被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-08-r2/assets/screenshots/day-08/01-jwt-boundary-results.png)
+[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r3/labs/02-identity-boundary/README.md) 用本機 issuer 簽出合成 Token，完整指令與機器可讀結果見 [Day 8 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r3/assets/screenshots/day-08/evidence.md)。其中以 `at+jwt`／`id+jwt` 區分 Token 種類。接 AWS Cognito 時要改用它實際發出的 `token_use` 等欄位，不能照搬合成 Token 的 Header。
 
-截圖另列出 issuer 錯誤、過期和 scope 不足等案例。這份 Lab 使用 `at+jwt`／`id+jwt` 明確區分合成 Token。接 AWS Cognito 時，應改依它實際發出的 `token_use` 等欄位設定規則，不能把 Lab 的 header 原樣抄到正式環境。要自己重現，從 repo root 執行：
-
-```bash
-make lab-02-up
-make lab-02-demo
-```
-
-詳細結果與機器可讀紀錄放在 [Day 8 Lab 結果](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-08-r2/assets/screenshots/day-08/evidence.md)，不需要從圖片抄指令。這篇想帶走的是判斷順序：先決定 API 接受哪種 Token，再檢查它是不是由可信 issuer 簽給眼前的資源、是否具備必要 scope，最後才讀取政策屬性。Gateway 做完這些，知道的仍只是**眼前這枚憑證**。當請求繼續交給 Agent 和下游服務，原本的交辦者要怎麼跟著留下來，就是 Day 9 要處理的事。
+這篇留下的判斷順序是：先決定 API 接受哪種 Token，再確認它由可信 issuer 簽給眼前的資源、具備必要 scope，最後才讀取政策屬性。Gateway 做完這些，知道的仍只是**眼前這枚憑證**。請求繼續交給 Agent 和下游服務時，原本的交辦者要怎麼跟著留下來，就是 Day 9 的問題。

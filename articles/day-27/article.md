@@ -4,7 +4,7 @@
 
 我自己也走過這段路。評估 Identity 時，Keycloak 的技術鏈跑得通，最後卻選了 AWS Cognito；看 Gateway 時，LiteLLM 有豐富的 LLM 功能，我們更在意 Kubernetes 上共同流量入口的維運方式；Agent Registry 已經能把 Agent 部署到 kagent，也不代表每個團隊都需要再多一個 Catalog。這些不是產品高下的排名，而是它們站在不同位置，接走不同工作。
 
-![一筆 Agent 請求經過身分、共同流量入口、Agent Runtime 與資源服務，旁邊另有發布目錄及觀測資料路徑。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r3/assets/diagrams/day-27/capability-ledger-method.png)
+![一筆 Agent 請求經過身分、共同流量入口、Agent Runtime 與資源服務，旁邊另有發布目錄及觀測資料路徑。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r4/assets/diagrams/day-27/capability-ledger-method.png)
 
 ## 一筆查詢，先分清兩條路
 
@@ -44,10 +44,14 @@ Agent 的設定和映像若透過 IaC／GitOps 交付，Pull Request、Commit �
 
 `user_id` 若只是應用自己塞進 Header，和 Gateway 從已驗證 JWT 取出的 Claim，查詢畫面可能長得一樣，可信程度卻不同。架構圖至少要標出欄位在哪一站產生；至於紀錄是否另有長期保存或防刪改要求，等組織真的提出這類要求，再檢查現有 Git 與 Log 是否足夠。
 
+Git 的變更紀錄和一次 Agent 呼叫的執行紀錄，可以沿著映像版本接起來，但前提是事件真的記下**這次實際執行的** Artifact Digest。只知道某個版本曾經發布，仍無法證明值班工程師那筆 Loki 查詢跑的就是它。下圖的虛線是盤點時要核對的關聯，不代表本系列已把完整映像的發布、部署與每筆執行事件全部驗過。
+
+![上方是 Git PR、映像與 Deployment 的交付紀錄，下方是已驗 Caller、Agent Action 和 Tool 結果的執行紀錄。只有 Action Event 記錄實際執行的 Artifact Digest，才能核對某次請求與已發布版本；虛線表示待核對的關聯。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r4/assets/diagrams/day-27/two-histories.png)
+
 ## 這張地圖怎麼帶回自己的環境
 
 從一筆真實請求開始畫，通常比從產品清單開始選容易。先找使用者如何登入、請求在哪裡轉送、Agent 由誰維護、Tool 用什麼身分接觸資料，最後確認出事時去哪裡查。若有某段已經由現有系統穩定承擔，就不必為了湊齊這張圖重做一遍。
 
-我把這些接縫整理成可自行填寫的 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r3/articles/day-27/capability-ledger.md)，也附上 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r3/articles/day-27/capability-ledger.csv)。從 Day 19 的 Registry 畫面、Day 23–25 的 Gateway 與 LGTM 實跑，讀者可以挑自己最不熟的那段往回看。盤點表只幫忙把每一段由誰提供、誰維護、下一個疑問寫清楚，實際選擇還是由自己的環境決定。
+我把這些接縫整理成可自行填寫的 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r4/articles/day-27/capability-ledger.md)，也附上 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r4/articles/day-27/capability-ledger.csv)。從 Day 19 的 Registry 畫面、Day 23–25 的 Gateway 與 LGTM 實跑，讀者可以挑自己最不熟的那段往回看。盤點表只幫忙把每一段由誰提供、誰維護、下一個疑問寫清楚，實際選擇還是由自己的環境決定。
 
 位置看清楚後，還有一個問題：若只做唯讀查詢、若開始共用多個 Agent、若 Tool 要修改正式環境，這些系統應該按什麼順序導入？Day 28 會用這三種情境回答。它不會要求每個團隊都走向同一個終點。

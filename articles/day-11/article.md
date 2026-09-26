@@ -16,9 +16,11 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | Human 是 subject，Runtime 是 current actor | RFC 8693 Token Exchange |
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r3/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r4/assets/diagrams/day-11/three-oauth-flows.png)
 
 這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。接下來三段都沿著這個判斷往下走。
+
+若要看授權碼在瀏覽器、App 與 AWS Cognito 之間怎麼往返，[AWS 的 PKCE 流程圖](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/choose-an-amazon-cognito-authentication-flow-for-enterprise-applications.html#architecture)畫出了取 Token 的路徑。上圖處理的是 Token 到下游後代表誰。CLI 使用的 Callback 與註冊方式仍要依實際 Client 核對。
 
 ## 互動式 CLI 使用 Authorization Code + PKCE
 
@@ -97,29 +99,15 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 
 不同 IdP 對 Delegation 的支援方式並不相同。Microsoft Entra 的 On-Behalf-Of Flow 處理相近問題，Request Profile 卻使用 JWT Bearer Grant、`assertion` 與 `requested_token_use=on_behalf_of`，不能把 RFC 8693 的 Request Body 原封不動套上去。架構設計應以 IdP 公開支援的合約為準，沒有支援時也不能默默退回 Token Passthrough。
 
-## 三條 Flow 的關鍵結果
+## Flow 選錯時，錯在哪一站
 
-[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 一共跑九個案例。三條 Flow 各有一個成功案例，其餘六個負向案例刻意放入 Callback、Scope、Registration、Client Type、Target 與 Audience 錯誤。正文不再逐列抄完整驗收表，只留下最能區分三條路徑的結果：
+三條路徑的差異，在錯誤請求上更容易看見。Public CLI 若改用 Client Credentials，問題出在 Client 本身無法保管長期 Secret。Scheduler 即使拿到合法 App-only Token，也不會因此多出一位登入者。Runtime 要代表 Human 查另一個 MCP，則需要 Authorization Server 同時檢查原本的委派與新的目標。只讓它拿自己的 Token，或把 Human Token 直接轉送，都會失去其中一段責任。
 
-| 情境 | 結果 | 說明 |
-| --- | --- | --- |
-| Human 完成 PKCE | ISSUE | Token 的 `sub` 是值班工程師，並保留入口 `client_id` |
-| Public CLI 嘗試 Client Credentials | DENY | Public Client 不能靠內嵌 Secret 變成 Confidential Client |
-| Runtime 完成 Delegation | ISSUE | Downstream Token 同時保留 `sub` 與 `act` |
-| Runtime 要求未授權 Target | DENY | 代表關係不能自行擴張可存取的 Resource |
-| Human Token 的 Audience 錯誤 | DENY | 入口 Token 不能拿來交換任意下游 Token |
+[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r4/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 將三條路徑各跑一筆成功請求，並讓 Public CLI 嘗試 Client Credentials、讓 Runtime 要求未授權的下游資源。前者在 Client Authentication 停下，後者在簽發下游 Token 前停下。成功的 Delegation Token 則同時留下 Human `sub` 和 Runtime `act`。這些結果支持前面的身分判斷，完整案例與指令留在 Lab README，故障判讀另見 [OAuth Flow 選擇表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r4/articles/day-11/oauth-flow-selection-guide.md)。
 
-![Day 11 OAuth Flow Lab 的九組實際結果。Authorization Code 加 PKCE、Client Credentials 與 RFC 8693 Token Exchange 各有一組成功案例，六組錯誤在發出 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r3/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 離線 OAuth Flow 結果：Human PKCE、Scheduler Client Credentials 與 Runtime Delegation 各有成功案例。錯誤的 Client、目標與 Audience 在簽發 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r4/assets/screenshots/day-11/01-oauth-flow-results.png)
 
-從 Repo Root 執行以下指令，就能重跑完整案例：
-
-```bash
-make lab-02-up
-make lab-02-check
-make lab-02-oauth
-```
-
-完整 Decision Event、合成 Claims 與故障判讀指令放在 [Day 11 Lab 結果](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/assets/screenshots/day-11/evidence.md) 和 [OAuth Flow 選擇與故障判讀表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r3/articles/day-11/oauth-flow-selection-guide.md)。這份離線 Lab 用來比較 Token 代表誰、錯誤會在哪一站被拒絕。它沒有啟動真正的瀏覽器登入或 AWS Cognito Token Endpoint。
+這個對照使用合成 Claims 與本機 Authorization Server，沒有啟動 AWS Cognito 或真正的瀏覽器登入。AWS Cognito 能否接受第三條 Request，還要回到它公開的 Token Endpoint 合約。
 
 ## AWS Cognito 能接住兩條路，Delegation 仍待補齊
 

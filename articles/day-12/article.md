@@ -6,11 +6,9 @@
 
 這次要拆開的是 App Client、Token 條件、Secret 輪替與 Gateway Policy。Issuer 和 JWKS 可以共用。值班工程師與 Scheduler 在下游留下的身分，卻不能共用同一套規則。
 
-下面會分開兩種材料：實務整合後的選擇，以及讀者能重跑的合成 Token 和 Gateway 設定。後者適合檢查 Human／M2M 分流規則。真正連上 AWS User Pool 的登入與金鑰輪替，不在這份公開 Lab 的驗證範圍。
-
 ## 同一個 User Pool，兩個 App Client
 
-![AWS Cognito 官方 AWS Architecture Icon。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r4/assets/third-party/aws/amazon-cognito-architecture-icon.png)
+![AWS Cognito 官方 AWS Architecture Icon。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r5/assets/third-party/aws/amazon-cognito-architecture-icon.png)
 
 選定 AWS Cognito 之後，我們把 Human CLI 與 Scheduler 分別註冊成兩個 App Client。只用「Agent Client」當名稱，過幾個月後通常已看不出它代表登入者、Scheduler，還是某個 Runtime。兩條路的 Grant 和 Secret Lifecycle 也會跟著混在一起。
 
@@ -92,7 +90,7 @@ Human：client_id + sub + aud + scope
 M2M：  client_id + scope，Human 不適用
 ```
 
-![同一個 AWS Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r4/assets/diagrams/day-12/cognito-dual-path.png)
+![同一個 AWS Cognito issuer 下的 Human 與 M2M 雙路徑。Human 使用 public app client、PKCE 與 resource-bound audience，M2M 使用 confidential app client、custom scope 與 verified client_id，兩者在單一 agentgateway 以 conditional policy 分流。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r5/assets/diagrams/day-12/cognito-dual-path.png)
 
 在 agentgateway 設定裡，`aud` 不能放進兩條路徑共同必填的 Claims。兩條 CEL Rule 先確認 `token_use == "access"`，再各自處理 Human 與 M2M：
 
@@ -116,38 +114,23 @@ Scope 在 AWS Cognito Access Token 裡是以空白分隔的字串，Policy 要�
 
 這份範例明確拒絕帶有意外 `aud` 的 M2M Token，因為本篇沒有使用 Pre-token Trigger 改寫它。若平台未來決定替 M2M 加入 Audience，Token Contract、Gateway Policy 與 Regression Test 都要一起更新，不能只改 IdP 後就期待 Gateway 自行理解新語意。
 
-完整 Gateway 設定放在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r4/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。公開 Lab 使用合成 Token 重跑分流。真正的 Managed Login 與 JWKS 輪替仍需連到可拋棄的 AWS 環境。
+完整 Gateway 設定放在 [agentgateway-cognito.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r5/labs/02-identity-boundary/configs/agentgateway-cognito.yaml)。公開 Lab 使用合成 Token 重跑分流。真正的 Managed Login 與 JWKS 輪替仍需連到可拋棄的 AWS 環境。
 
 ## Terraform 只負責固定兩份 Registration
 
-Terraform 範例將 Human 與 M2M 建成兩個獨立 `aws_cognito_user_pool_client`。Human 設定 `generate_secret=false` 與 Authorization Code，M2M 則設定 `generate_secret=true` 與 Client Credentials。完整 HCL 放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-12-r4/labs/02-identity-boundary/configs/cognito-terraform/)，正文不再逐段複製。
+Terraform 範例將 Human 與 M2M 建成兩個獨立 `aws_cognito_user_pool_client`。Human 設定 `generate_secret=false` 與 Authorization Code，M2M 則設定 `generate_secret=true` 與 Client Credentials。完整 HCL 放在 [cognito-terraform](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/tree/day-12-r5/labs/02-identity-boundary/configs/cognito-terraform/)，正文不再逐段複製。
 
 本輪只執行 `terraform validate`，沒有對 AWS Apply。正式套用前還要處理 AWS 權限、Domain 與 Federation 設定。`generate_secret=true` 也會讓 M2M Secret 進入 Terraform State，因此 Remote State 的加密與存取權限不能省略。
 
 ## Human 與 M2M 不會互相誤收
 
-[Day 12 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r4/labs/02-identity-boundary/README.md) 以九個案例覆蓋兩條成功路徑，以及 Callback、Scope、Client Type、Secret、Resource Binding 與 Policy Input 錯誤。正文只保留幾個真正會改變設計判斷的結果：
+最容易出錯的不是兩條成功路徑，而是把 Human 規則套到 Scheduler。Human 的 `sub`、`aud` 與 Scope 可以把登入者和目標 API 對起來。M2M 應由已驗證的 `client_id` 表示。若把 `aud` 放進兩者共用的必填欄位，合法排程會被拒絕。若為了排程移除所有 Audience 條件，Human Token 的目標邊界也會跟著鬆開。
 
-| 情境 | 結果 | Gateway 因此怎麼判斷 |
-| --- | --- | --- |
-| Human PKCE + Resource Binding | ALLOW | Human Token 能以 `sub`、`aud` 與 Scope 綁定登入者和目標 API |
-| M2M Client Credentials | ALLOW | Scheduler 由 `client_id` 表示，不要求 Human Claim |
-| Public Client 嘗試 M2M | DENY | 兩種 App Client 不能只靠不同 Grant Name 區分 |
-| M2M 要求 Resource Binding | DENY | Human 的 Audience Contract 不能直接套到 M2M |
-| 任一路徑缺少必要 Policy Input | DENY | Signature 通過仍不代表 Authorization 資料足夠 |
+[Day 12 的合成 Token 對照](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r5/labs/02-identity-boundary/README.md) 跑過這兩條路，也刻意讓 Public Client 嘗試 M2M、讓 M2M 要求不支援的 Resource Binding。結果把前面設定差異變成看得到的拒絕位置。完整指令、九組案例與原始紀錄留在 Lab README 和[結果檔](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r5/assets/screenshots/day-12/evidence.md)，日後盤點新 App Client 可直接使用 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r5/articles/day-12/cognito-dual-path-checklist.md)。
 
-![Day 12 AWS Cognito 雙路徑 Lab 的實際 CLI 結果。Human 與 M2M 各有一條成功 path，callback、scope、policy claim、public client、client secret 與 M2M resource binding 錯誤都被分階段拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r4/assets/screenshots/day-12/01-cognito-dual-path-results.png)
+![Day 12 合成 Token 的離線分流結果：Human、M2M 各有成功路徑。錯誤的 Client Type、Resource Binding 或 Policy Input 會被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r5/assets/screenshots/day-12/01-cognito-dual-path-results.png)
 
-從 Repo Root 可以重跑 Fixture、Gateway 設定與 Terraform 驗證：
-
-```bash
-make lab-02-up
-make lab-02-check
-make lab-02-cognito
-make lab-02-cognito-config-check
-```
-
-完整九組結果和排錯步驟放在 [Day 12 Lab 結果](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r4/assets/screenshots/day-12/evidence.md)，另有可複製的 [Human／M2M 雙路徑盤點表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r4/articles/day-12/cognito-dual-path-checklist.md)。本篇的公開結果來自離線分流與設定檢查。前面提到的 AWS Live Flow 不在這組輸出裡。
+這組公開結果只涵蓋離線分流與設定檢查。真正的 AWS User Pool 登入、JWKS 輪替和 Terraform Apply 仍須在可拋棄的 AWS 環境另行驗證。
 
 ## Token 驗過之後，還有平台責任要接
 

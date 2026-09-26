@@ -4,9 +4,9 @@ Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可�
 
 當時存在的控制都照規則運作，規則本身卻沒有回答「不可信 Log 能不能要求這個動作」。這才是責任缺口。維護控制的人、決定規則的人，以及有權接受執行後影響的人，不能全部塞進同一個 Platform Owner。
 
-假設下一版 `delete_demo_database` 真的能連到資料庫：值班工單只允許處理測試環境，Agent 卻提出指向正式環境的參數。誰該在執行前發現不對？如果請求先通過 Gateway，誰又有權說「這次仍然可以做」？這是上線前的設計審查情境，不是公司事故。我用它走讀 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-29/production-responsibility-contract.md)，把控制維護者、規則決定者和每站要交接的資料分開。
+假設下一版 `delete_demo_database` 真的能連到資料庫：值班工單只允許處理測試環境，Agent 卻提出指向正式環境的參數。誰該在執行前發現不對？如果請求先通過 Gateway，誰又有權說「這次仍然可以做」？這是上線前的設計審查情境，不是公司事故。我用它走讀 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r3/articles/day-29/production-responsibility-contract.md)，把控制維護者、規則決定者和每站要交接的資料分開。
 
-![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-29/responsibility-handoff.png)
+![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r3/assets/diagrams/day-29/responsibility-handoff.png)
 
 ## 三種通過代表不同判斷
 
@@ -36,11 +36,7 @@ Business Owner 在這裡不是抽象的高階主管，而是有權替目標 Reso
 
 完整 Contract 會固定 Request Origin、Business Intent、Tool、Resource、Arguments Digest、Artifact、Policy 與有效期，再填 Owner、Handoff Evidence、Escalation 和 Residual Risk。RACI 留在附錄，因為單看 `R`、`A`、`C`、`I`，看不出 Token、Policy Decision、Approval 和 Receipt 是否屬於同一筆 Action。
 
-## 控制正常運作，不代表決策已有人負責
-
-Platform／SRE 可以把 Gateway 的 Token 驗證、Route、共同 Policy 與 Telemetry 維護好，卻無法替某個資料庫 Owner 定義工單准許的影響範圍。反過來，業務 Owner 可以決定哪些修改可接受，也不能只說「交給平台」就假設授權檢查會自己出現在 Tool 裡。規則由誰決定、由誰落成可執行控制，兩邊都要寫清楚。
-
-Control Owner 和 Decision Owner 有時落在同一團隊，Contract 仍應分欄。升級時找操作控制的人，修改規則時找有權改變接受範圍的人，不再用一句「平台已處理」跳過中間責任。
+資料庫 Owner 決定工單可以修改哪個環境，Agent Application／Resource Server 將規則落成檢查。即使兩項工作由同一團隊承擔，Contract 仍分開記錄：值班者要知道控制故障時找誰，規則需要改變時又由誰批准。
 
 ## HITL Approval 必須綁定原始 Action
 
@@ -53,7 +49,11 @@ Day 18 的 BYO Agent 已跑過 Pause／Resume：Approve 與 Reject 沿用相同 
 - Agent Artifact 與 Policy Version。
 - Action Digest、Expiry 與一次性 Resume ID。
 
-批准後只要其中一項改變，原 Decision 就不應繼續沿用。Platform 可以提供 Pause／Resume、UI 與 Receipt Transport，Application 要保證 Action Context 沒被替換，Business Owner 才負責決定「這一次可以做」。Approve 按鈕只證明有人能點，不能證明誰點、憑什麼能點，以及執行的仍是剛才看過的 Action。
+如果批准時看的是測試環境的 Resource，Resume 前卻換成正式環境，兩筆 Action 的摘要就不同。原 Decision 應失效，交回授權檢查或重新批准；同樣的規則也適用於參數與執行版本變更。
+
+![Day 29 的設計契約：具名批准者核對 Tool、測試資源、參數和版本形成的 digest A；Resume 時 digest 仍為 A 才執行並留下結果。若目標或參數改變成 digest B，需重新批准或拒絕。公開 Lab 已跑過 Pause／Resume，尚未驗證完整批准者身分與 digest 綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r3/assets/diagrams/day-29/approval-binds-action.png)
+
+Platform 可以提供 Pause／Resume、UI 與 Receipt Transport，Application 要保證 Action Context 沒被替換，Business Owner 才負責決定「這一次可以做」。Day 18 已跑過暫停與繼續；圖中具名批准者與 Action Digest 的綁定，仍是正式上線前要驗證的設計。
 
 ## Operational Telemetry 與 Audit Responsibility
 
@@ -67,7 +67,7 @@ Security／Risk 要決定哪些 Events 必須保存、保存多久、誰能讀�
 
 責任審查若只列「模型幻覺、資安、法規、擴充性」，很難決定是否上線。這筆假設中的資料庫修改至少要把三件事擺上桌：不可信 Log 可能誘導 Tool、公開 Lab 尚未驗證正式的批准者身分、執行映像與事件保存也還沒有形成完整來源鏈。前文各自有測試或缺口紀錄，不需要在這篇重新把每個產品列一遍。
 
-[Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/articles/day-29/residual-risk-register.md) 留下完整來源、Owner、重驗條件與接受者。這裡的判斷是：若 Resource Authorization 還不能比對工單與目標環境，高風險 Tool 就不應對正式資料庫開放。補上檢查後，剩下哪些風險能接受，仍要由有權承擔業務影響的人決定，不能讓維護 Gateway 的團隊代簽。
+[Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r3/articles/day-29/residual-risk-register.md) 留下完整來源、Owner、重驗條件與接受者。這裡的判斷是：若 Resource Authorization 還不能比對工單與目標環境，高風險 Tool 就不應對正式資料庫開放。補上檢查後，剩下哪些風險能接受，仍要由有權承擔業務影響的人決定，不能讓維護 Gateway 的團隊代簽。
 
 [NIST AI RMF 1.0](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/) 的 Govern Function 同樣把角色、責任與溝通路徑放在組織層級。本文把範圍收在一筆 Action：誰定規則、誰執行檢查、誰接受結果。組織風險決策仍要有自己的負責人。
 

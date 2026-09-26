@@ -32,7 +32,7 @@ Keycloak 很適合由一個團隊長期經營，讓多個內部服務共用 fede
 
 換成 AWS Cognito User Pool 後，員工仍在既有企業 IdP 登入。它透過 federation 接收身分，再向 MCP console 發出供 Agent Gateway 驗證的 Token。下面這張圖只畫有人值班、從瀏覽器發起調查的路徑。下游看到的是 AWS Cognito 核發的 access token，不是企業 IdP 原封不動傳來的 Token。
 
-![值班工程師透過 MCP console 啟動登入。AWS Cognito 將瀏覽器轉往企業 IdP。員工完成登入後，AWS Cognito 把授權碼帶回 console，console 以 PKCE 換取 access token，再攜帶 Token 呼叫 Agent Gateway，由 Gateway 驗證並套用 MCP Tool policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r4/assets/diagrams/day-06/cognito-oauth-login.png)
+![值班工程師透過 MCP console 啟動登入。AWS Cognito 將瀏覽器轉往企業 IdP。員工完成登入後，AWS Cognito 把授權碼帶回 console，console 以 PKCE 換取 access token，再攜帶 Token 呼叫 Agent Gateway，由 Gateway 驗證並套用 MCP Tool policy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r5/assets/diagrams/day-06/cognito-oauth-login.png)
 
 互動式登入使用 public client 的 Authorization Code + PKCE。MCP console 導向 AWS Cognito 的授權入口，之後由它把使用者帶到企業 IdP。登入完成後，console 用授權碼和 PKCE verifier 換回 Token。AWS Cognito 的 [federation](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-identity-federation.html)、[授權入口](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html)和 [Token endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/token-endpoint.html)文件分別說明了這幾段。Gateway 接到 access token 後，還是要按 issuer、Token 內容與 Tool policy 做自己的判斷。
 
@@ -42,12 +42,12 @@ Keycloak 很適合由一個團隊長期經營，讓多個內部服務共用 fede
 
 |  | Keycloak | AWS Cognito User Pool |
 | --- | --- | --- |
-| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r4/assets/third-party/keycloak/keycloak-icon-color.png) | ![AWS Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r4/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
+| 產品識別 | ![Keycloak 官方專案圖示](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r5/assets/third-party/keycloak/keycloak-icon-color.png) | ![AWS Cognito 官方 AWS Architecture Icon](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-06-r5/assets/third-party/aws/amazon-cognito-architecture-icon.png) |
 | 平台自己維運的部分 | Keycloak runtime、資料庫、備份、升級，以及 Identity 設定 | Identity 設定與下游整合。OIDC runtime 由 AWS 維運 |
 | 這次最在意的取捨 | 有較多控制空間，也要接下完整服務的 on-call | 少維運一套 runtime，接受 AWS coupling、quota 與產品限制 |
 
 我們最後選 AWS Cognito，是因為它讓少數 AI 服務先有共同的 OIDC 入口，不必同時成立一個全公司的身分平台。平台團隊仍要維護上游 IdP mapping、app client、scope、Gateway policy、IaC、監控與復原方案。AWS Cognito 的費用、配額和可客製範圍也會持續影響這個選擇。
 
-如果以後 IT、Security 和平台團隊一起承接統一的 Identity Center，或更多非 AI 系統需要共用登入與角色模型，Keycloak 就值得重新評估。[這次的選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r4/articles/day-06/identity-center-decision-matrix.md) 留著當時的責任分工與代價，讀者也可以拿它檢查自己的組織條件。
+如果以後 IT、Security 和平台團隊一起承接統一的 Identity Center，或更多非 AI 系統需要共用登入與角色模型，Keycloak 就值得重新評估。[這次的選型 Decision Record](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-06-r5/articles/day-06/identity-center-decision-matrix.md) 留著當時的責任分工與代價，讀者也可以拿它檢查自己的組織條件。
 
 身分入口選定後，還有一個問題沒有跟著解決：Token 能辨認登入的使用者或取得憑證的服務，卻不能單憑一個 `user_id` 說清楚哪一版 Agent 做了決定、哪個 Kubernetes Workload 真正送出請求。Day 7 會沿著同一筆調查，把這些角色拆開。

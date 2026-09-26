@@ -8,7 +8,7 @@
 
 入口驗過值班工程師的 Token，就知道誰發起調查。Copilot 知道自己把工作交給 Investigator，後者知道自己選了 `query_logs` 和查詢目標。然而，MCP 收到的是最後一跳的請求，不會自動知道前面兩支 Agent 做過什麼。光靠 `trace_id` 可以把幾筆事件串在一起，卻不能補回根本沒記下的交辦者與 Agent 版本。
 
-![值班工程師交辦 Copilot，Copilot 交辦 Investigator，後者呼叫 MCP。下方分開呈現請求來源、Agent 交接、目前憑證與操作目標。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r3/assets/diagrams/day-09/delegation-sequence.png)
+![值班工程師交辦 Copilot，Copilot 交辦 Investigator，後者呼叫 MCP。下方分開呈現請求來源、Agent 交接、目前憑證與操作目標。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r4/assets/diagrams/day-09/delegation-sequence.png)
 
 我把這份交接紀錄稱為 Delegation Context。它不是另一枚 Token，也不是讓下游無條件相信上游的通行證。它要回答的是「這次動作從哪裡來、由哪版 Agent 接手、最後打算做什麼」。如果值班的人發現查錯資料，可以先看工程師原本指定的範圍，再看 Copilot 的交辦內容、Investigator 的版本與 Tool 參數，而不是只拿著一個 `actor` 猜責任落在哪裡。
 
@@ -18,7 +18,7 @@
 
 ## 一筆紀錄先回答三個問題
 
-公開 Lab 的 [Human delegated 範例](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r3/assets/screenshots/day-09/evidence/demo-context-human-delegated.json) 是一份合成的 JSON。完整格式收在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r3/articles/day-09/delegation-context-field-guide.md)，正文只取出調查時最先要看的部分：誰發起、Agent 怎麼交辦、最後要呼叫什麼。
+公開 Lab 的 [Human delegated 範例](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r4/assets/screenshots/day-09/evidence/demo-context-human-delegated.json) 是一份合成的 JSON。完整格式收在 [Delegation Context Field Guide](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r4/articles/day-09/delegation-context-field-guide.md)，正文只取出調查時最先要看的部分：誰發起、Agent 怎麼交辦、最後要呼叫什麼。
 
 在 repo root 執行：
 
@@ -44,17 +44,12 @@ user/sre-oncaller  agent/sre-copilot@v1 -> agent/sre-investigator@v1  query_logs
 
 資料格式可以幫忙區分這兩種狀況，卻不替 Tool 做授權。尤其 `VERIFIED` 這類標記不能由任意 client 自己填完，就當作 Gateway 真的驗過。入口要記自己驗到的登入者。Agent runtime 要記交辦與執行版本。下游仍須依眼前的憑證、動作和目標做決定。這三段紀錄能關聯，才有機會重建一次請求。
 
-## 用 Lab 看交接紀錄長什麼樣
+## 人工交辦與排程留下不同的空白
 
-[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r3/labs/02-identity-boundary/README.md) 提供人工交辦、排程以及欄位遺失的合成案例。想看資料格式如何區分它們，可以在 repo root 執行：
+人工交辦的合成範例保留標示為已驗證的 Human 來源和 Copilot → Investigator 順序。排程範例則明確標示沒有當次登入者。若原本有 Human 交辦，紀錄卻在 Agent 交接時丟掉了來源，不能把這個缺口改寫成「這是排程」。這三種結果在畫面上並排時，比單看 Schema 欄位更容易辨認。
 
-```bash
-make lab-02-up
-make lab-02-delegation
-```
+![Day 9 合成交接紀錄：人工交辦保留 Human 和 Agent 順序，排程沒有當次登入者，來源遺失則不能冒充排程。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r4/assets/screenshots/day-09/01-delegation-context-results.png)
 
-![Delegation Context Lab 的 CLI 結果，顯示人工交辦、排程與欄位缺失等案例。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-09-r3/assets/screenshots/day-09/01-delegation-context-results.png)
-
-結果中的 `ACCEPT` 只表示紀錄符合這份資料契約，並不是 Tool 已獲准執行。這個 Lab 沒有真的讓請求走過 Gateway、兩支 Agent 和 MCP。它讓我們先試清楚「交辦資訊要留哪些」，網路上每一跳該用什麼憑證則是另一個問題。
+[Lab 02](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-09-r4/labs/02-identity-boundary/README.md) 留有這些合成紀錄和重跑指令。結果中的 `ACCEPT` 只表示資料符合交接紀錄的合約，沒有讓請求真的走過 Gateway、兩支 Agent 和 MCP，也不代表 Tool 已獲授權。它幫我們釐清紀錄要留什麼。下一個問題是網路上每一跳究竟該帶哪枚憑證。
 
 下一篇就從這裡接著看。即使紀錄已能還原值班工程師交辦 Investigator 的過程，如果 Agent 仍把工程師原來的 Access Token 原封不動送給 MCP，下游看到的 caller 和可用權限又會如何變化？

@@ -4,7 +4,7 @@ Day 21 把 Gateway、Agent Runtime 與 MCP Adapter 的 Trace 接起來後，同�
 
 我在做 Claude Code Stats 類型的使用分析時，也需要按 Team、Member、Model 與 Activity 切資料。篩選本身很實用，麻煩在於底下四種資料面不是同一種資料庫。Email 放進 Trace、成為 Loki Index Label，或進入 Prometheus Label，帶來的信任、暴露面與成本完全不同。
 
-Day 22 沿用昨天的 Alloy／LGTM Pipeline，故意把 Email、Token、Principal 與 Session 塞進 OTLP，再直接查 Tempo、Loki 與 Prometheus。目的不是做另一張 agentgateway Dashboard，而是確認身分通過驗證後，哪些欄位能進 Metrics，哪些只能留在 Trace、Log Metadata 或 Audit。
+Day 22 的 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r4/labs/04-telemetry-pipeline/README.md) 沿用昨天的 Alloy／LGTM Pipeline，故意把 Email、Token、Principal 與 Session 塞進 OTLP，再直接查 Tempo、Loki 與 Prometheus。這次要確認身分通過驗證後，哪些欄位能進 Metrics，哪些只能留在 Trace、Log Metadata 或 Audit。
 
 ## Raw Claims、Verified Context 與 Projection
 
@@ -12,7 +12,7 @@ JWT 裡有 `sub` 或 `team`，不表示後面的服務可以直接相信這兩�
 
 通過驗證後，也不該把整包 Claims 繼續往下傳。Runtime 要的是能執行 Policy 的 Principal Context，Telemetry Producer 要的是符合查詢目的的 Attributes，Audit 則需要 Issuer、Audience、Policy 與 Effect Evidence。三個階段使用不同型別與 Allowlist，資料才不會因為「後面也許用得到」一路擴散。
 
-![Raw claims 經驗證後轉為 principal context，再分別投影到 Metrics、Traces、Logs 與 Audit。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/diagrams/day-22/identity-data-placements.png)
+![Raw claims 經驗證後轉為 principal context，再分別投影到 Metrics、Traces、Logs 與 Audit。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r4/assets/diagrams/day-22/identity-data-placements.png)
 
 Lab 將驗證後的 Subject 轉成 HMAC-SHA256 `principal.ref`。這個 Reference 方便跨 Trace、Log 與 Audit 關聯，仍然是可以重新連結的 Pseudonym，不是匿名化。Repo 中的固定 Key 只為了讓讀者重現相同結果，正式環境必須改由 Secret 管理並規劃 Rotation。
 
@@ -31,7 +31,7 @@ Lab 將驗證後的 Subject 轉成 HMAC-SHA256 `principal.ref`。這個 Referenc
 | Logs | `principal.ref`、Team、`action_id`，存為 Structured Metadata | Raw Token、Email、本機 Code Path | 事件搜尋與除錯 |
 | Audit | Actor Ref、Roles、Tenant、Issuer、Audience、Assurance、`action_id` | Raw Token | 責任鏈、Policy Decision 與 Effect Evidence |
 
-完整版本放在 [Identity field placement matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-12-r3/labs/04-telemetry-pipeline/identity-field-placement.md)，另外列出 Role、Tenant、Session 與 Conversation ID。這張表不是法規範本，落地前仍要加入資料分類、存取角色、Retention、刪除流程與資料所在區域。
+完整版本放在 [Identity field placement matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-22-r4/labs/04-telemetry-pipeline/identity-field-placement.md)，另外列出 Role、Tenant、Session 與 Conversation ID。這張表不是法規範本，落地前仍要加入資料分類、存取角色、Retention、刪除流程與資料所在區域。
 
 ## Metrics 只保留有限集合的維度
 
@@ -47,7 +47,7 @@ Metrics 最容易被「順手多放一個 Label」拖垮。`team=platform-sre`�
 sum by (team, route, outcome) (ithelp_agent_actions_total)
 ```
 
-![Prometheus 實拍。Day 22 的 Agent action metric 只以 team、route 與 outcome 聚合。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/screenshots/day-22/prometheus-bounded-labels.png)
+![Prometheus 實拍。Day 22 的 Agent action metric 只以 team、route 與 outcome 聚合。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r4/assets/screenshots/day-22/prometheus-bounded-labels.png)
 
 這次失敗很值得保留，因為它說明高基數不是架構圖上的抽象風險。Producer 多送一個 Attribute，Collector 少刪一個 Key，Backend 就真的建立新 Series。Day 23 會將這件事放大成 3、30、90 個 Identity 的壓力實驗。
 
@@ -55,7 +55,7 @@ sum by (team, route, outcome) (ithelp_agent_actions_total)
 
 Trace 用來重建一筆 Action 經過哪些 Service、Policy 與 Tool，因此 `principal.ref` 和 `action_id` 在這裡有價值。Tempo 實拍還保留 Assurance、Team、Role 與 Tenant，事故調查能判斷這筆 Action 使用哪種身分來源，不必先拿 Email 當搜尋鍵。
 
-![Tempo 實拍。identity projection span 保留 action ID、principal reference、assurance、team 與 role，沒有 raw email 或 token。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/screenshots/day-22/tempo-identity-projection.png)
+![Tempo 實拍。identity projection span 保留 action ID、principal reference、assurance、team 與 role，沒有 raw email 或 token。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r4/assets/screenshots/day-22/tempo-identity-projection.png)
 
 [OpenTelemetry User Attributes](https://opentelemetry.io/docs/specs/semconv/registry/attributes/user/) 定義了 `user.id`、`user.email`、`user.name`、`user.roles` 與 `user.hash`，目前仍標示為 Development。Semantic Convention 對齊的是欄位名稱，不會替組織決定哪些直接識別資料可以進 Backend。本文使用 `principal.ref`，就是要把「可關聯的治理主體」與產品介面顯示的 Email 分開。
 
@@ -70,7 +70,7 @@ Loki 查詢先用低基數 `service_name` 選 Stream，再以 Pipe 後面的 `pr
   | principal_ref = "prn_66103c4906ed52ad53b3"
 ```
 
-![Loki 實拍。查詢先以 service_name 選 stream，再用 principal_ref structured metadata 過濾單筆事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-12-r3/assets/screenshots/day-22/loki-identity-structured-metadata.png)
+![Loki 實拍。查詢先以 service_name 選 stream，再用 principal_ref structured metadata 過濾單筆事件。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-22-r4/assets/screenshots/day-22/loki-identity-structured-metadata.png)
 
 [Loki 原生 OTLP Ingestion](https://grafana.com/docs/loki/latest/send-data/otel/) 會把沒有映射成 Index Label 的 Attributes 存成 Structured Metadata，點號也會正規化成底線。因此 OTLP 的 `principal.ref` 在 LogQL 變成 `principal_ref`。這保留單筆 Principal 的查詢能力，不會為每個人建立一條新 Stream。
 
@@ -92,19 +92,7 @@ Lab 在 Memory Limiter 與 Batch Processor 中間加入 Alloy Transform，分別
 
 明確刪 Key 的 Transform 只能處理已知欄位，無法保證抓到未來新增的 `customer_email` 或自由文字裡的 PII。Producer 仍是第一道防線。Raw Claims 不進 Telemetry API，每個 Destination 使用自己的 Allowlist，Alloy 再清一次已知禁止欄位。Collector 可以降低誤送的傷害，不能替 Gateway 驗 Token，也不能取代 Backend RBAC 與資料盤點。
 
-## Lab 直接查三個 Backend 的落地結果
-
-從 Repo Root 啟動既有 Compose，再執行 Identity Projection：
-
-```bash
-make lab-04-up
-make lab-04-check
-make lab-04-identity
-```
-
-Producer 送出 Synthetic Span、Log 與 Counter。三者進 Alloy 前刻意含有 `user.email` 和 `auth.token`，Metric 另外帶 `principal.ref` 與 `session.id`。Tempo 與 Loki 必須保留安全的 Principal Reference 和 Action ID，Prometheus 則不得收到高基數 Identity Label。Verifier 查詢三個 Backend API，而不是比對 Producer 自己寫出的預期 JSON。
-
-最終結果確認 Forbidden Fields 全部消失、`principal_ref` 沒有成為 Loki Index Label、Tempo／Loki 保留安全 Projection，Prometheus Label 則只剩受控維度。完整 Result、Alloy Config 與 Test Evidence 都在 Lab Repo，正文不再列出 Test Count、Coverage 與 Validator Metadata。
+三個 Backend 的查詢結果也支持前面的分工：Tempo／Loki 保留可關聯的 Principal Reference，Prometheus 只留下受控維度，`user.email` 和 `auth.token` 都沒有落地。Verifier 查的是 Backend API，完整設定、指令與結果留在 Lab 04 README。
 
 ## Kubernetes 還要補權限與 Retention
 
