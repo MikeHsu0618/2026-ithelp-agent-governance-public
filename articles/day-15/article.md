@@ -42,11 +42,11 @@ Retry 更需要分清楚產品預設與架構風險。若兩層都設定「失�
 | Retry | AI Route 不設定 Application Retry | 只有具 Idempotency Contract 的 Operation 才考慮開啟 |
 | Telemetry | TLS、Connection、Host、Request ID | Identity、Policy、Model／Tool Decision、Backend Outcome |
 
-這張表的用途是逼每個行為留下唯一 Owner，不是要求所有環境都部署相同拓撲。完整版本放在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r2/articles/day-15/proxy-responsibility-matrix.md)，另外包含 Timeout、SSE、Error Propagation 與 Fail-closed，可直接帶進 Route Review。
+這張表的用途是逼每個行為留下唯一 Owner，不是要求所有環境都部署相同拓撲。完整版本放在 [Edge／Ingress 與 Agent Gateway 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r3/articles/day-15/proxy-responsibility-matrix.md)，另外包含 Timeout、SSE、Error Propagation 與 Fail-closed，可直接帶進 Route Review。
 
 下面的架構圖來自去識別化的實務 Topology，只保留 Request 經過的邊界與每一層可以改動的資料。
 
-![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15-r2/assets/diagrams/day-15/ingress-boundary.png)
+![Client 經既有 Ingress 進入 agentgateway，再呼叫只開放內部路徑的 LLM、MCP 或 Agent backend。既有入口負責 TLS、public host、基本 routing 與 access log，原樣轉送 caller authorization、trace context 與 SSE。Agentgateway 負責 caller authentication、AI-aware policy、backend credential 與 AI telemetry。兩層資料以同一 correlation context 進入 LGTM，agentgateway 不可用時回 502 或 503，不能繞過 Gateway 直連 backend。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15-r3/assets/diagrams/day-15/ingress-boundary.png)
 
 Backend 在 Network 與 Routing 上都不接受 Edge 直接呼叫。agentgateway 掛掉時，Request 必須明確失敗。如果 Edge 還藏著一條 Fallback Route 可以直連 MCP Server 或 LLM Provider，最需要治理的時候反而會繞過治理點。
 
@@ -64,11 +64,11 @@ Timeout 則要當成完整 Budget。Edge 的 Connection／Idle Timeout 必須容
 
 上游回 `429` 與 `Retry-After` 時，也要確認兩層入口沒有擅自重送或改寫，否則呼叫端和 Provider 會看到不同次數的 Request。Route Review 因此要把 SSE、錯誤傳遞與 Retry 一起交給明確的 Owner。
 
-公開 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r2/labs/03-gateway-runtime/README.md) 用一個 agentgateway 和合成 Provider 隔離這些變因。SSE 的第一段 Event 在上游完成前抵達。`429` 與 `Retry-After: 7` 原樣回傳且沒有多送一次請求。缺少 Caller Credential 則在 Provider 前得到 `401`。Provider 收到的是 Gateway Credential，而不是入口 Caller Key。
+公開 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r3/labs/03-gateway-runtime/README.md) 用一個 agentgateway 和合成 Provider 隔離這些變因。SSE 的第一段 Event 在上游完成前抵達。`429` 與 `Retry-After: 7` 原樣回傳且沒有多送一次請求。缺少 Caller Credential 則在 Provider 前得到 `401`。Provider 收到的是 Gateway Credential，而不是入口 Caller Key。
 
-![Day 15 單層 Gateway 的流量對照：SSE 第一段 Event 即時抵達、429 保留 Retry-After、缺少 Caller Credential 在 Backend 前被拒絕，Provider 沒收到 Caller Key。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15-r2/assets/screenshots/day-15/01-traffic-boundary-results.png)
+![Day 15 單層 Gateway 的流量對照：SSE 第一段 Event 即時抵達、429 保留 Retry-After、缺少 Caller Credential 在 Backend 前被拒絕，Provider 沒收到 Caller Key。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-15-r3/assets/screenshots/day-15/01-traffic-boundary-results.png)
 
-這組結果只檢查單層 agentgateway 的 Traffic Contract。既有 Ingress 與 agentgateway 的雙層 Timeout、Certificate 和 Route 如何共存，仍須以本文的責任矩陣回到部署環境核對。完整設定與原始輸出留在 [Day 15 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r2/assets/screenshots/day-15/evidence.md)。
+這組結果只檢查單層 agentgateway 的 Traffic Contract。既有 Ingress 與 agentgateway 的雙層 Timeout、Certificate 和 Route 如何共存，仍須以本文的責任矩陣回到部署環境核對。完整設定與原始輸出留在 [Day 15 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-15-r3/assets/screenshots/day-15/evidence.md)。
 
 ## Route Review 應該留下可執行的 Contract
 

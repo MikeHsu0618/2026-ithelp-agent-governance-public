@@ -16,7 +16,7 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | Human 是 subject，Runtime 是 current actor | RFC 8693 Token Exchange |
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r4/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r5/assets/diagrams/day-11/three-oauth-flows.png)
 
 這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。接下來三段都沿著這個判斷往下走。
 
@@ -103,9 +103,9 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 
 三條路徑的差異，在錯誤請求上更容易看見。Public CLI 若改用 Client Credentials，問題出在 Client 本身無法保管長期 Secret。Scheduler 即使拿到合法 App-only Token，也不會因此多出一位登入者。Runtime 要代表 Human 查另一個 MCP，則需要 Authorization Server 同時檢查原本的委派與新的目標。只讓它拿自己的 Token，或把 Human Token 直接轉送，都會失去其中一段責任。
 
-[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r4/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 將三條路徑各跑一筆成功請求，並讓 Public CLI 嘗試 Client Credentials、讓 Runtime 要求未授權的下游資源。前者在 Client Authentication 停下，後者在簽發下游 Token 前停下。成功的 Delegation Token 則同時留下 Human `sub` 和 Runtime `act`。這些結果支持前面的身分判斷，完整案例與指令留在 Lab README，故障判讀另見 [OAuth Flow 選擇表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r4/articles/day-11/oauth-flow-selection-guide.md)。
+[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r5/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 將三條路徑各跑一筆成功請求，並讓 Public CLI 嘗試 Client Credentials、讓 Runtime 要求未授權的下游資源。前者在 Client Authentication 停下，後者在簽發下游 Token 前停下。成功的 Delegation Token 則同時留下 Human `sub` 和 Runtime `act`。這些結果支持前面的身分判斷，完整案例與指令留在 Lab README，故障判讀另見 [OAuth Flow 選擇表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r5/articles/day-11/oauth-flow-selection-guide.md)。
 
-![Day 11 離線 OAuth Flow 結果：Human PKCE、Scheduler Client Credentials 與 Runtime Delegation 各有成功案例。錯誤的 Client、目標與 Audience 在簽發 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r4/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 離線 OAuth Flow 結果：Human PKCE、Scheduler Client Credentials 與 Runtime Delegation 各有成功案例。錯誤的 Client、目標與 Audience 在簽發 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r5/assets/screenshots/day-11/01-oauth-flow-results.png)
 
 這個對照使用合成 Claims 與本機 Authorization Server，沒有啟動 AWS Cognito 或真正的瀏覽器登入。AWS Cognito 能否接受第三條 Request，還要回到它公開的 Token Endpoint 合約。
 
