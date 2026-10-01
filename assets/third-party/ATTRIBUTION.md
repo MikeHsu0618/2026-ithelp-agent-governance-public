@@ -63,3 +63,40 @@
 - Use：Day 19 首次介紹 Agent Registry
 - Modification：未修改顏色、圖形或比例
 - SHA-256：`e171a6faeec7cedc40f4367999099571616e1b872326c1625ea0da862897cf40`
+
+## 2026-10-01 官方架構與概念圖
+
+以下三張圖用於說明產品或協定架構，從官方 repo 的固定 commit 原樣取得。原圖未改色、裁切或重畫；License 隨檔案交付。
+
+### kagent/kagent-0x-architecture.png
+
+- Source：[固定版原圖](https://raw.githubusercontent.com/kagent-dev/website/c053e7cb66ec14b6c8767f38042451b33612accc/docs-site/static/images/arch.png)
+- Owner：kagent project
+- Terms：[Apache-2.0](https://github.com/kagent-dev/website/blob/c053e7cb66ec14b6c8767f38042451b33612accc/LICENSE)；本地副本：[kagent/LICENSE-architecture.txt](kagent/LICENSE-architecture.txt)
+- Use：Day 16，官方概念／架構介紹
+- Retrieved：2026-10-01
+- Modification：未修改
+- SHA-256：`a401cc6cc080e94d67e1ea03e627675b1d4801b138d9222e286bcf5007b022cd`
+- License SHA-256：`b07ae3da5c432331d0584e674cd77552cb001134c247786f2668e7917316aa7c`
+
+### google-adk/event-loop.png
+
+- Source：[固定版原圖](https://raw.githubusercontent.com/google/adk-docs/645472efe18d9178fd04488dc0f8e46c65934db8/docs/assets/event-loop.png)
+- Owner：Google ADK project
+- Terms：[Apache-2.0](https://github.com/google/adk-docs/blob/645472efe18d9178fd04488dc0f8e46c65934db8/LICENSE)；本地副本：[google-adk/LICENSE.txt](google-adk/LICENSE.txt)
+- Use：Day 18，官方概念／架構介紹
+- Retrieved：2026-10-01
+- Modification：未修改
+- SHA-256：`d5872f03473d439a3601e1728da3b312d8530eeef6f7ed80ff370a024cc31aff`
+- License SHA-256：`cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
+
+### a2a/a2a-actors.png
+
+- Source：[固定版原圖](https://raw.githubusercontent.com/a2aproject/A2A/1ae57a673f729f743b35f2677f3adc302438695a/docs/assets/a2a-actors.png)
+- Owner：A2A project / Linux Foundation
+- Terms：[Apache-2.0](https://github.com/a2aproject/A2A/blob/1ae57a673f729f743b35f2677f3adc302438695a/LICENSE)；本地副本：[a2a/LICENSE.txt](a2a/LICENSE.txt)
+- Use：Day 17，官方概念／架構介紹
+- Retrieved：2026-10-01
+- Modification：未修改
+- SHA-256：`11f69fe5d45dc2c89ba375f103ad5700999629922ea3038372e00305f13deb0d`
+- License SHA-256：`cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
