@@ -1,57 +1,81 @@
-# Day 27｜Agent Governance 產品地圖：一條請求會經過哪些系統
+# Day 27｜Agent Governance 產品地圖：從一次查詢看請求、交付與觀測
 
-讀到這裡，AWS Cognito、agentgateway、kagent、Agent Registry 和 LGTM 都登場了。如果現在有團隊要讓一支 Agent 查 Loki，該從哪個產品開始裝？光看功能清單，很容易得到一張每格都打勾、卻說不清請求怎麼走的架構圖。
+要讓一支 SRE Agent 查 Loki，會用到身分驗證、Agent Runtime、工具介面、資料來源和觀測平台。這些系統都可能出現在架構圖裡，但光把產品名稱連成一排，還看不出誰決定查詢、誰持有資料權限，以及 Agent 的版本從哪裡來。
 
-我自己也走過這段路。評估 Identity 時，Keycloak 的技術鏈跑得通，最後卻選了 AWS Cognito；看 Gateway 時，LiteLLM 有豐富的 LLM 功能，我們更在意 Kubernetes 上共同流量入口的維運方式；Agent Registry 已經能把 Agent 部署到 kagent，也不代表每個團隊都需要再多一個 Catalog。這些不是產品高下的排名，而是它們站在不同位置，接走不同工作。
+可以先想一筆具體請求：值班者登入後，請 Agent 找某個服務最近的錯誤。Agent 呼叫 Grafana MCP，取得 Log 和 Trace ID，再整理調查線索。與此同時，另一位工程師可能正在發布 Agent 新版本。這兩件事都和 Agent 有關，經過的路徑卻不同。
 
-![一筆 Agent 請求經過身分、共同流量入口、Agent Runtime 與資源服務，旁邊另有發布目錄及觀測資料路徑。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r5/assets/diagrams/day-27/capability-ledger-method.png)
+本篇把這些工作分回請求、交付與觀測三條路。讀者可以先找到自己已經有的系統，再看哪個接縫缺少負責人。產品選擇會隨環境改變，請求和資料各由誰處理，則應該始終說得清楚。
 
-## 一筆查詢，先分清兩條路
+## 同一支 Agent 的三條路
 
-假設值班同仁請 SRE Agent 查詢一段 Loki Log。使用者的登入資訊先由身分系統發給應用，請求到共同入口後，Gateway 驗證憑證、選路由、套用共用政策。Agent Runtime 決定要不要呼叫 Grafana MCP，MCP Server 再以自己被授予的範圍查 Loki。回應沿原路返回，過程中的 Log 與 Trace 進入既有觀測平台。
+請求路徑發生在使用者要 Agent 做事時。身分系統先發憑證，入口驗證後送到 Runtime。Runtime 決定工具與參數，MCP Server 再以被授予的資料權限查詢後端，結果沿原路返回。
 
-另一條是交付路徑。有人修改 Agent 的程式或設定，經 Git 與映像流程發布，必要時再上架 Agent Registry、交給 kagent 部署。Registry 管「可找到哪份 Agent、要部署哪份」，不在每一筆 Loki 查詢的資料路徑上。這兩條路若畫成一條，常會誤以為 Catalog 的 `approved` 標籤可以替每次 Tool Call 授權。
+交付路徑發生在程式或設定變更時。工程師修改 Repository，經 Review、建置和映像發布，再由部署系統啟動選定版本。若有跨團隊上架需求，Registry 可以提供目錄與部署宣告，kagent 則可以承接部分 Kubernetes 部署和發現工作。
 
-這個例子裡有兩個權限檢查也不能混在一起：Gateway 可以判斷這個請求能不能進到 Agent 或 MCP，Loki 查詢帳號能看哪些資料，仍由 Grafana／Loki 那端的權限決定。若 Agent 從「查 Log」改成「刪除資料」，Tool 所連的資源服務還得判斷目標資源與參數。Gateway 不知道工單的業務規則，光有一張 Token 也不會知道。
+觀測路徑由執行元件送出資料。Gateway 記流量與入口判斷，Runtime 記工作步驟，工具端記結果，再交給既有收集器和後端。這些訊號讓值班者能查同一筆操作，而不必靠各團隊口頭拼接。
 
-## 身分入口與人員生命週期
+下圖先看中央的一筆請求，再看旁邊的交付和觀測支線。Registry 管理的部署資訊不在每次 Loki 查詢的資料路徑裡，也不會替這次工具呼叫作授權決定。
 
-在我們的環境裡，Human 與 M2M 都需要穩定取得 Token，因此現在由 AWS Cognito 提供這兩條入口。Keycloak 當初也跑通登入、JWT Role 和 Gateway 的 Tool 權限檢查；問題是要不要為了幾個 AI 服務，另起一套需要自己維護的企業 Identity Center。當時 IT 團隊還沒有足夠共識與人力，把人員的到職、異動、離職，以及下游 SaaS 入口一起接進來。技術能跑，組織卻還沒有要接的整段工作。
+![Agent 查詢的請求路徑，另有目錄、部署與觀測資料支線。各系統位於不同工作位置。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r6/assets/diagrams/day-27/capability-ledger-method.png)
 
-若組織本來就有成熟的 Keycloak 與 Identity 團隊，沿用它很合理；若已經有其他 IdP，也未必需要為 Agent 再建一套。先釐清 Human、Service 和實際執行的 Workload 分別由誰識別。Client Credentials 認得的是 Client，不能直接當成 Pod 身分。後面要追查一筆動作時，這個差別會影響能否找到真正的執行者。
+## 身分系統與人員生命週期
 
-## 共同流量入口：agentgateway 接走重複的規則
+使用者能登入，是這條路的起點。真正維護身分還包含加入團隊、角色異動、停權與憑證更新。例如人員離開後，哪些 Client 或下游入口還能使用？角色改變時，Gateway 接受的 Claim 是否同步？這些工作會決定身分系統長期需要哪些維護者。
 
-我們把 agentgateway 放在 LLM、MCP、A2A 流量的共同入口。多個 Agent 各自保管 Provider Credential、寫 JWT 檢查、做 Timeout 和 Retry，又各自送一套觀測欄位時，事故很難從同一個地方看全。共同入口的價值，是把這些跨應用規則收在一處，而不是把 Agent 的工作流程搬進 Gateway。
+我們目前由 AWS Cognito 提供 Human 和 M2M 兩種入口。Human 透過互動登入取得憑證，M2M 則讓服務以 Client 身分取得 Token。兩者的使用者、生命週期和停權方式不同，不能只因為都回 JWT 就用同一份管理流程。
 
-所以既有 Ingress 不必被替換。它可以繼續處理對外 TLS、Host Routing 等既有工作，AI 流量再由 agentgateway 接手。單一、小型的唯讀 Agent 也未必需要新增 Gateway；等多個 Runtime 的規則開始分岔，共同入口的收益才會明顯。
+Keycloak 當初也跑通了登入、JWT Role 和 Gateway 的工具權限檢查。最後沒有把它擴成企業 Identity Center，是因為 IT 團隊尚未形成承接到職、異動、離職與下游 SaaS 整合的共識和人力。PoC 可以確認技術可行，接下來的組織工作仍要有人持續做。
 
-LiteLLM 曾是我們的候選方案。當時考慮的不只它支援多少 Provider，也包括 Kubernetes 交付、身分對應、升級和額外元件誰來維護。後來的供應鏈事件讓我更在意這類中介層的升級來源，但不能倒過來說那是當年選型的起因。產品比較若只列 Feature，這些長期成本很容易從表格裡消失。
+若環境已有成熟的 Keycloak 或其他 IdP，先沿用既有身分和人員管理通常比較容易接上。還要區分 Caller 與執行工作負載：Client Credentials 識別服務 Client，不會只靠同一枚 Token 告訴你是哪個 Pod 送出請求。是否需要進一步的工作負載驗證，取決於下游授權和調查需求。
 
-## Agent 自己做事，與平台幫它上架
+## 共同入口如何接走重複工作
 
-Agent Runtime 仍是應用團隊寫決策邏輯的地方。Google ADK 的 Tool、Callback、狀態與工作流程，要由熟悉應用的人設計和測試。kagent 可以協助在 Kubernetes 部署 Agent，提供發現、A2A 與部分平台操作，但它目前露出的 Runtime 設定，不足以替代我們自建 Agent 所需的進階參數和流程。BYO Agent 接上 kagent，讓其他 Agent 比較容易找到它，並不會自動改進它的內部邏輯。
+當多個 Runtime 都要呼叫 LLM、MCP 或其他 Agent，可能各自保存 Provider Key、實作入口 JWT 檢查、設定等待與重試，再產生不同觀測欄位。起初每個應用都能工作，規則變更時卻要逐一找人，事故也難從共同位置確認請求如何被處理。
 
-Agent Registry 又是另一層。Day 19 的新版實跑顯示，它可以保存 Agent 資訊、接收部署宣告，並讓 Controller 把 Agent 交給 kagent。對需要跨團隊搜尋、上架和管理版本的人，這很有用。只是 Catalog 裡一個名為 `approved` 的 Tag 仍可能改指向別的 Image；「容易找到」和「這份程式經誰批准、實際跑的是哪個 Digest」是兩件事。若組織仍以 Git 和映像流程交付，導入 Registry 前得先說好哪裡可以改部署宣告。
+agentgateway 的位置是跨 Runtime 的共同流量入口。它可以接手已定義的認證、路由、政策和流量觀測，讓平台團隊維護這些共用規則。Runtime 仍保留自己的工作流程，工具服務仍決定資料範圍和目標資源授權。
 
-我會先看團隊是否真有跨團隊上架的痛點，而不是因為已有 kagent，就順手把 Registry 一起裝上。反過來說，若已經有大量 Agent、MCP Server 和 Skill 需要集中查找，單靠散落的 README 也會越來越難維護。
+既有 Ingress 也可以留在外層，處理 TLS 和 Host Routing。這兩層要說清楚誰處理哪些功能，避免兩邊各自改 Header、重試或設定串流等待。單一唯讀 Agent 若沒有共同入口需求，也可以先由應用使用現有機制完成這些工作。
 
-## GitOps 變更紀錄與 Agent 執行紀錄
+LiteLLM 曾是我們的候選。當時考慮的除了 Provider 支援，也包括 Kubernetes 交付、身分對應、GitOps 變更，以及額外元件由誰維護。這些條件影響日後每次升級和故障處理，比功能表多一個勾更能說明我們的選擇。後來的供應鏈事件又增加升級來源的考量，時間上與最初選型分開。
 
-Alloy 與 LGTM 是我們原有的 Production 核心。Agent 接進來後，Gateway 可以帶出驗證後的 Caller 資訊，Runtime 記錄 Agent 與 Tool，MCP 或後端留下操作結果；Trace、Log 與 Metrics 才能拼出「哪個請求走到哪裡」。這是 Day 20–26 一路延伸的觀測能力，不必為了 Agent 另造一套 Dashboard 平台。
+## Runtime 與部署平台的分工
 
-Agent 的設定和映像若透過 IaC／GitOps 交付，Pull Request、Commit 與部署版本已經留下變更歷史。值班同仁請 Agent 查 Loki 的那一刻，則不是一次 Git 變更；這筆呼叫由誰發起、用了哪個 Tool、查詢結果如何，要回到 Gateway、Runtime、MCP 與 LGTM 的執行紀錄。兩條路合起來，通常比再加一套「Agent 專用稽核儲存」更能回答日常維運問題。
+Runtime 決定 Agent 怎麼完成工作，例如保存狀態、安排工具、處理失敗和暫停等待批准。這些能力對應應用的語意：調查 Agent 要保留哪些線索，修改 Agent 要驗證哪些參數，都需要應用團隊設計。
 
-`user_id` 若只是應用自己塞進 Header，和 Gateway 從已驗證 JWT 取出的 Claim，查詢畫面可能長得一樣，可信程度卻不同。架構圖至少要標出欄位在哪一站產生；至於紀錄是否另有長期保存或防刪改要求，等組織真的提出這類要求，再檢查現有 Git 與 Log 是否足夠。
+Google ADK 是本系列的 Runtime 框架。[kagent](https://github.com/kagent-dev/website/blob/c053e7cb66ec14b6c8767f38042451b33612accc/docs-site/content/kagent/0.x/concepts/architecture.md) 則提供 Kubernetes 上的 Agent 部署與操作入口，宣告式 Agent 路徑會使用其封裝的 Runtime。兩者可以搭配，也可以把自建 ADK Agent 以 BYO 方式接進 kagent，再驗證可使用的平台能力。
 
-Git 的變更紀錄和一次 Agent 呼叫的執行紀錄，可以沿著映像版本接起來，但前提是事件真的記下**這次實際執行的** Artifact Digest。只知道某個版本曾經發布，仍無法證明值班工程師那筆 Loki 查詢跑的就是它。下圖的虛線是盤點時要核對的關聯，不代表本系列已把完整映像的發布、部署與每筆執行事件全部驗過。
+我評估 kagent 0.9.9 時，需求包含進階模型參數與自訂流程，當時宣告式介面不足以完整表達，所以保留自建 Runtime。後續 0.10.0／0.10.1 的 Lab 又確認部署、發現、Agent-as-Tool，以及相容 BYO 路徑的部分 Pause／Resume 能工作。這些結果讓平台位置更清楚，仍沒有替 BYO 作者維護所有 Callback、記憶體、工具政策與框架升級。
 
-![上方是 Git PR、映像與 Deployment 的交付紀錄，下方是已驗 Caller、Agent Action 和 Tool 結果的執行紀錄。只有 Action Event 記錄實際執行的 Artifact Digest，才能核對某次請求與已發布版本；虛線表示待核對的關聯。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r5/assets/diagrams/day-27/two-histories.png)
+因此要分別問兩個問題：誰維護這支 Agent 的邏輯，誰讓它部署、被找到與被呼叫？若兩件事目前都由單一應用團隊穩定處理，未必需要立刻新增平台。若多個團隊都在重複部署、註冊 Agent Card 和提供操作入口，才有共用控制面的工作可以交接。
 
-## 這張地圖怎麼帶回自己的環境
+## Registry 的目錄與部署宣告
 
-從一筆真實請求開始畫，通常比從產品清單開始選容易。先找使用者如何登入、請求在哪裡轉送、Agent 由誰維護、Tool 用什麼身分接觸資料，最後確認出事時去哪裡查。若有某段已經由現有系統穩定承擔，就不必為了湊齊這張圖重做一遍。
+當 Agent 數量與團隊增加，「去哪裡找可用的 Agent」會成為另一個問題。[Agent Registry](https://aregistry.ai/docs/about/architecture/) 可以集中保存目錄資訊與部署宣告，讓使用者找到候選版本，再交由控制器處理期望狀態。本系列 Day 19 用 0.4.0 實測這條 reconciliation 路徑，也就是持續讓部署結果符合宣告。
 
-我把這些接縫整理成可自行填寫的 [Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r5/articles/day-27/capability-ledger.md)，也附上 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r5/articles/day-27/capability-ledger.csv)。從 Day 19 的 Registry 畫面、Day 23–25 的 Gateway 與 LGTM 實跑，讀者可以挑自己最不熟的那段往回看。盤點表只幫忙把每一段由誰提供、誰維護、下一個疑問寫清楚，實際選擇還是由自己的環境決定。
+這類目錄帶來便利，同時新增可修改的狀態來源。若 Git 和 Registry 都能改部署宣告，就要決定誰具有最終修改權，以及兩邊不同時怎麼處理。若 Catalog 的 `approved` Tag 可以改指向別的映像，也還需要批准紀錄與內容 Digest，才能知道這次部署的是哪一份產物。
 
-位置看清楚後，還有一個問題：若只做唯讀查詢、若開始共用多個 Agent、若 Tool 要修改正式環境，這些系統應該按什麼順序導入？Day 28 會用這三種情境回答。它不會要求每個團隊都走向同一個終點。
+目錄資訊是發現與交付的一部分。某支 Agent 被上架，不代表它對所有工具參數都有權執行。例如被核准的查詢 Agent 臨時提出刪除資料，工具端仍需按當次目標和參數授權。交付批准與執行批准不能只靠一個 Catalog 標籤合併。
+
+我們評估後沒有把 Registry 留作正式平台，是因為它還要配合既有 Git 交付與權限責任。若你的環境已有跨團隊目錄需求，就值得重新驗證這些接縫。若仍是少數應用，由 README 和既有交付流程就能管理，也可以先停在那裡。
+
+## 交付歷史與執行歷史如何相接
+
+程式的 PR、Commit 和映像建置紀錄，說明某個版本如何被發布。使用者在某個時間請 Agent 查 Loki，則是執行歷史，需要 Gateway、Runtime 和工具端的紀錄。Git 不會自動記下這次請求使用了哪個工具，Trace 也不會自動知道映像由誰批准。
+
+兩邊可以透過實際執行的 Artifact Digest 核對。Digest 是內容摘要，和可被移動的 Tag 不同。若執行事件記下這次映像的 Digest，就能回到交付紀錄找相同產物，再檢查它的程式與設定。
+
+這個關聯需要由執行端確實記錄。只知道 Deployment 曾宣告某個版本，仍可能遇到 [滾動更新中的新舊 Pod](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)，不能直接推論每筆請求都用最新版本。下圖的虛線就是需要核對的關聯，並非本系列已驗證完整交付與每筆執行的綁定。
+
+![Git PR、映像和 Deployment 留下交付歷史，Caller、Agent 操作與工具結果留下執行歷史。兩邊需要實際 Artifact Digest 才能核對。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-27-r6/assets/diagrams/day-27/two-histories.png)
+
+Alloy 和 LGTM 是我們既有的觀測核心，分別收集和查詢 Logs、Metrics、Traces。延伸到 Agent 後，先讓入口判斷、工作步驟和工具結果能沿同一筆操作查回。若另外有保存期限或防刪改要求，再按要求檢查現有機制是否足夠。
+
+## 把產品位置換成自己的系統
+
+帶回自己的環境時，可以先畫一筆查詢。標出登入來源、請求入口、Runtime、工具端與資料來源，再另畫程式如何交付、事件送到哪裡。每個位置填現有系統和維護者，缺口就會比功能清單明確。
+
+例如查詢失敗，需要知道是入口拒絕、工具端權限不足，還是資料來源沒有符合事件。部署版本對不上，則回到交付和執行產物的關聯。這些問題各有接手人，不能全部寫成「平台負責」。
+
+[Agent Governance Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r6/articles/day-27/capability-ledger.md) 和 [CSV 版本](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-27-r6/articles/day-27/capability-ledger.csv) 提供可填寫的盤點表。它們幫讀者把位置、維護者和待確認接縫寫下來，沒有要求把圖上的產品全部裝齊。
+
+產品地圖回答了工作放在哪裡，下一步才是安排導入順序。只讀資料、共用多個 Runtime，以及開始修改正式資源，會有不同的優先事項，下一篇按這三種情境來選擇。

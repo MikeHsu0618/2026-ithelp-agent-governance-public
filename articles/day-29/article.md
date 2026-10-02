@@ -1,78 +1,91 @@
-# Day 29｜Agent 做錯事，責任算誰的：平台控制、業務決策與 HITL 核准
+# Day 29｜Agent 高風險操作的責任交接：誰定規則、誰維護、誰核准
 
-Day 1 那筆 `delete_demo_database` 沒有遇到系統錯誤。Gemini 從不可信 Log 讀到操作指令，Open Policy 按設定回 `ALLOW`，Google ADK 也把參數交給 Tool。公開 Lab 的 Tool 只寫下一筆 `CANARY_TRIGGERED`，不會碰資料庫。換成真實 Resource Server，同樣的判斷就可能改到 Production 資料。
+假設一張值班工單只允許處理測試環境，Agent 提出的工具參數卻指向正式資料庫。使用者已登入，Gateway 也允許呼叫這個工具，請求一路正常送到後端。這時仍需要有人或某個控制看出：呼叫者有身分，工具有入口，這次目標卻超出工單範圍。
 
-當時存在的控制都照規則運作，規則本身卻沒有回答「不可信 Log 能不能要求這個動作」。這才是責任缺口。維護控制的人、決定規則的人，以及有權接受執行後影響的人，不能全部塞進同一個 Platform Owner。
+這是上線前的設計審查情境，不是已發生的公司事故。我想用它釐清一個容易藏在架構圖裡的問題：平台維護認證和路由，誰定義資料庫可修改的條件？需要人工批准時，誰有權批准？真正改動後，又由誰判斷影響？
 
-假設下一版 `delete_demo_database` 真的能連到資料庫：值班工單只允許處理測試環境，Agent 卻提出指向正式環境的參數。誰該在執行前發現不對？如果請求先通過 Gateway，誰又有權說「這次仍然可以做」？這是上線前的設計審查情境，不是公司事故。我用它走讀 [Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r4/articles/day-29/production-responsibility-contract.md)，把控制維護者、規則決定者和每站要交接的資料分開。
+系列最初的安全 Lab 提供了這個問題的起點。模型從不可信 Log 提出 `delete_demo_database`，Open Policy 按設定回 `ALLOW`，Tool 也照實作留下 no-op Canary。控制沒有當掉，但規則沒有比較原始調查任務與危險動作。本篇接著把規則、維護和單次決定分回具體角色。
 
-![一筆有副作用的 Agent action 依序經過 Identity admission、Gateway shared guardrail、Application Tool authorization、Business approval，以及 effect 與 evidence handling。每一站分開標示 control owner、decision owner 和 handoff evidence。現有技術控制通過，仍不等於業務意圖已獲證明。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r4/assets/diagrams/day-29/responsibility-handoff.png)
+## 身分、技術權限與業務條件
 
-## 三種通過代表不同判斷
+先看已登入的值班工程師。Token 驗證能確認憑證由可信來源簽發、用在預期服務、仍在有效時間內。這提供了請求者身分的依據，還沒有回答他是否能修改這個資料庫。
 
-Action 進入 Tool 前，至少有三種不同的綠燈：
+Gateway 可以再檢查共同規則，例如這個角色能不能走工具 Route，呼叫是否符合平台政策。這些規則讓入口的接受範圍可維護，但「工單只允許測試環境」需要取得工單和目標的可信資料，通常由理解資源語意的應用或後端實作。
 
-1. **Credential Evidence**：Issuer、Audience、Expiry 與 Signature 是否正確。
-2. **Technical Enforcement**：Route、Shared Policy、Resource Allowlist 與 Argument Constraint 是否允許。
-3. **Business Intent**：工單、時段、目標 Resource 與影響範圍是否符合當下需求。
+資料或服務 Owner 則定義哪些修改可接受，例如允許環境、變更時段、資源範圍與必要的批准。這些條件有些能寫成程式檢查，有些需要具名的人根據影響作決定。業務意圖不應只存在模型對工單的摘要裡，能確定的條件應轉成可驗證的授權輸入。
 
-前兩種可以由程式穩定執行，第三種要先由目標服務 Owner 定義規則。高風險 Action 還需要具名的人在完整 Context 下核准。若把三者壓成 `authorized=true`，事故發生時只會看到所有檢查都通過，卻不知道哪個角色原本應該拒絕。
+如果把這三種判斷都壓成 `authorized=true`，事件裡就看不出哪一層通過什麼。比較容易調查的做法，是分開保存身分確認、入口決策和資源授權，再用同一個操作 ID 關聯。
 
-Day 1 的 Policy Engine 沒有故障，它忠實執行缺少 Resource 與 Argument Constraints 的 Open Policy。Platform Team 可以維護 Gateway 和 Policy Engine，不能自動取得 `delete_demo_database` 業務規則的決定權。
+## 控制維護者與決策負責人
 
-## 讓這筆請求走過五個決策點
+Control Owner 維護檢查如何執行。控制服務故障、版本升級或拒絕結果不如預期時，由他處理。Decision Owner 則定義規則或批准單次操作，知道哪種影響可以接受。兩個角色可以由同一團隊擔任，責任仍需要分開記錄。
 
-Business Owner 在這裡不是抽象的高階主管，而是有權替目標 Resource 或流程批准變更、判讀影響並接受剩餘風險的人。修改服務時可能是 Service Owner，資料操作可能是 Data Owner，Deployment 則交給指定的 Change Owner。
+例如資料庫 Owner 決定正式環境修改需要哪些條件，應用團隊把工單環境和工具目標的比較寫進授權檢查。檢查漏判是實作問題，規則需要例外則是決策問題。值班的人要知道兩種情況各找誰，不能只看到一個模糊的 Platform Owner。
 
-| 這一站要回答 | 維護控制的人 | 決定規則或單次批准的人 | 交給下一站的資料 |
-| --- | --- | --- | --- |
-| 請求者是誰？ | IT／Identity 維護登入與 Client | IT／Identity 定義身分生命週期 | 已驗證的 Caller、Token 用途與有效期 |
-| 可以走這條入口嗎？ | Platform／SRE 維護 Gateway | Security／Risk 定義共同底線 | Route、Policy 版本、放行或拒絕原因 |
-| 工單允許改哪個資料庫？ | Agent Application 實作檢查 | 資料或服務 Owner 定義目標、時段與參數範圍 | 目標 Resource、正規化參數、應用授權結果 |
-| 這次真的需要人工批准嗎？ | Platform 傳遞暫停／繼續，Application 固定 Action | 有權的業務 Owner 批准這一次 | 批准者、Action 摘要、有效期與 Decision |
-| 實際改了什麼？ | Resource Server 產生 Receipt，Platform 串起紀錄 | 業務 Owner 判讀影響，Security／Risk 定保存規則 | 修改結果、Resource Revision、Trace ID 與事件 |
+這裡的 Business Owner 是能替目標資源或流程決定變更、判讀影響和接受剩餘風險的人。服務變更可能是 Service Owner，資料操作可能是 Data Owner，部署則可能有指定的 Change Owner。角色名稱要回到實際權限，不能只填最高階主管。
 
-在這個情境，Identity 可以正確辨認值班工程師，Gateway 也可能正確放行這條 Tool Route。真正該擋下 `production` 參數的，是知道工單只批准測試環境的 Application／Resource Server。若這一站缺席，不能事後說「Gateway 已經驗過 Token」來補理由。
+下圖沿同一筆動作走過五站。每站分開列維護者、決策者和交出的證據，閱讀時特別看工單與正式環境的差異在哪裡被檢查。
 
-完整 Contract 會固定 Request Origin、Business Intent、Tool、Resource、Arguments Digest、Artifact、Policy 與有效期，再填 Owner、Handoff Evidence、Escalation 和 Residual Risk。RACI 留在附錄，因為單看 `R`、`A`、`C`、`I`，看不出 Token、Policy Decision、Approval 和 Receipt 是否屬於同一筆 Action。
+![一次有副作用的操作經身分、共同入口、資源授權、必要的業務批准，再留下結果和事件。各站的維護與決策角色分開。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r5/assets/diagrams/day-29/responsibility-handoff.png)
 
-資料庫 Owner 決定工單可以修改哪個環境，Agent Application／Resource Server 將規則落成檢查。即使兩項工作由同一團隊承擔，Contract 仍分開記錄：值班者要知道控制故障時找誰，規則需要改變時又由誰批准。
+## 一筆請求如何交接五個決策點
 
-## HITL Approval 必須綁定原始 Action
+第一站由身分系統確認 Caller，入口取得可信的主體、Token 用途與有效期。第二站由 Gateway 套用共同政策，記錄 Route、規則版本與接受或拒絕原因。這兩站在本例都可能正常通過，因為使用者身分和工具入口本來就有效。
 
-Day 18 的 BYO Agent 已跑過 Pause／Resume：Approve 與 Reject 沿用相同 Task ID 和 Context ID，Reject 不執行 Tool。當時還沒處理誰有資格按下 Approve；正式讓人核准高風險動作，必須把批准者與原始 Action 綁在一起。
+第三站需要對照工單與目標資源。Application 或 Resource Server 確認工單只允許測試環境，而參數指向正式環境，就應在執行前拒絕。若只驗工具名稱或字串格式，仍可能接受一份格式正確、範圍錯誤的參數。
 
-一份可用的 Approval Evidence 至少要綁住：
+第四站只在流程需要人工決定時出現。有權批准的人需要看到已固定的目標、參數、版本和影響範圍，再留下具體決定。第五站由資源服務確認執行結果，應用整理技術狀態，資源或業務 Owner 判讀影響並決定後續處置。
 
-- Approver Principal 及其批准權限。
-- Tool、Resource 與 Normalized Arguments。
-- Agent Artifact 與 Policy Version。
-- Action Digest、Expiry 與一次性 Resume ID。
+| 這站交出的資料 | 維護控制的人 | 決定規則或批准的人 |
+| --- | --- | --- |
+| 可信 Caller、Token 用途與有效期 | IT／Identity | 身分生命週期負責人 |
+| Route、Policy Version、入口決策 | Platform／SRE | 共同政策負責人，例如 Security／Risk |
+| 目標、正規化參數、資源授權結果 | Agent Application／Resource Server | 資料或服務 Owner |
+| 批准者、固定動作摘要、有效期與決定 | Application 綁定動作，平台提供傳遞 | 對這個資源有權的批准者 |
+| 資源結果、Revision、相關事件 | Resource Server／Application，平台串起紀錄 | 資源或業務 Owner 判讀影響 |
 
-如果批准時看的是測試環境的 Resource，Resume 前卻換成正式環境，兩筆 Action 的摘要就不同。原 Decision 應失效，交回授權檢查或重新批准；同樣的規則也適用於參數與執行版本變更。
+這份表應按組織實際分工填寫。關鍵是下一站收到的資料，真的對應同一筆操作。Application 不能拿別張工單授權，Runtime 也不能在批准後換掉目標，最後的結果則不能借用另一個工具的成功狀態。
 
-![Day 29 的設計契約：具名批准者核對 Tool、測試資源、參數和版本形成的 digest A；Resume 時 digest 仍為 A 才執行並留下結果。若目標或參數改變成 digest B，需重新批准或拒絕。公開 Lab 已跑過 Pause／Resume，尚未驗證完整批准者身分與 digest 綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r4/assets/diagrams/day-29/approval-binds-action.png)
+[Production Responsibility Contract](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r5/articles/day-29/production-responsibility-contract.md) 提供完整欄位與空白模板。它固定來源、目的、工具、資源、參數摘要、執行版本與規則，再填負責人、交接資料和升級路徑。附檔的已填範例只使用 Day 1／26 的安全歷史證據，缺失值仍是 `UNKNOWN`，與本文假設的正式資料庫操作分開。
 
-Platform 可以提供 Pause／Resume、UI 與 Receipt Transport，Application 要保證 Action Context 沒被替換，Business Owner 才負責決定「這一次可以做」。Day 18 已跑過暫停與繼續；圖中具名批准者與 Action Digest 的綁定，仍是正式上線前要驗證的設計。
+## 人工批准如何綁住待執行內容
 
-## Operational Telemetry 與 Audit Responsibility
+HITL，也就是 Human-in-the-loop，可以讓工作暫停等待人的決定。對高風險工具來說，批准畫面要讓人知道即將改哪個資源、使用哪些參數，以及可能造成什麼影響。只有 Approve 按鈕，仍不足以確認決定涵蓋哪筆動作。
 
-既有 LGTM 可以沿同一個 Action 查 Gateway、Runtime 與 MCP 的 Trace、Log 和 Metrics，適合 On-call、效能問題與事故回放。Responsibility Contract 因此把 Operational Telemetry 交給 Platform／SRE 維護，Application 與 Resource Server 則產生正確的 Tool Result 和 Effect Receipt。
+可用的批准證據會記下批准者身分與權限，並綁定工具、目標、正規化參數、Agent 產物、Policy Version 和有效期。這些內容可以形成 Action Digest，作為固定動作的摘要。摘要需要明確的欄位和正規化方法，不能只對模型寫的一段自然語言說明計算 Hash。
 
-Security／Risk 要決定哪些 Events 必須保存、保存多久、誰能讀或刪，以及是否需要 Event-time Signature、Append-only／WORM、Legal Hold 或 Privileged Deletion Detection。把 Loki Retention 拉長，不會自動把 Operational Log 升格成不可否認的 Audit Record。
+例如批准時是測試資料庫和 Digest A，Resume 前變成正式資料庫和 Digest B，原批准就不應繼續使用。應用回到授權流程，重新決定是否接受這個新動作。批准過期或 Resume ID 被重複使用時，也需要有明確處理。
 
-兩條路徑可以共用 Action ID、Trace ID 與 Governance Event Schema，保存目的和證據等級仍然分開。SRE 不必替法遵目的作決定，Security／Risk 也不需要把每一筆高基數 Telemetry 永久保存。
+下圖表示這份設計要求。沿上方看批准和執行內容一致的分支，再看目標或參數改變後如何回到拒絕或重新批准。
 
-## 風險清單只留下會影響上線決定的缺口
+![批准綁定 Digest A，Resume 時仍是同一內容才繼續。若目標或參數變成 Digest B，原批准失效。這是待驗證的設計。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-29-r5/assets/diagrams/day-29/approval-binds-action.png)
 
-責任審查若只列「模型幻覺、資安、法規、擴充性」，很難決定是否上線。這筆假設中的資料庫修改至少要把三件事擺上桌：不可信 Log 可能誘導 Tool、公開 Lab 尚未驗證正式的批准者身分、執行映像與事件保存也還沒有形成完整來源鏈。前文各自有測試或缺口紀錄，不需要在這篇重新把每個產品列一遍。
+Day 18 已跑過相容 BYO 路徑的 Pause／Resume，Approve 和 Reject 保持相同 Task ID、Context ID，Reject 不執行工具。它還沒有驗證正式批准者認證、批准權限和完整 Digest 綁定，因此不能把本文設計當成已完成的產品整合。
 
-[Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r4/articles/day-29/residual-risk-register.md) 留下完整來源、Owner、重驗條件與接受者。這裡的判斷是：若 Resource Authorization 還不能比對工單與目標環境，高風險 Tool 就不應對正式資料庫開放。補上檢查後，剩下哪些風險能接受，仍要由有權承擔業務影響的人決定，不能讓維護 Gateway 的團隊代簽。
+平台可以提供暫停、通知、UI 和收據傳遞。Application 要確認恢復時內容沒被替換，批准者則決定這次影響是否接受。這個分工讓人的決定有實際執行邊界，不會只留在畫面上。
 
-[NIST AI RMF 1.0](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/) 的 Govern Function 同樣把角色、責任與溝通路徑放在組織層級。本文把範圍收在一筆 Action：誰定規則、誰執行檢查、誰接受結果。組織風險決策仍要有自己的負責人。
+## 執行結果與事故處理
 
-## 帶進設計審查的方式
+工具收到允許後，仍可能執行失敗、只完成一部分，或產生超出預期的結果。資源服務需要留下它能確認的效果，例如修改數量、Resource Revision 或後端收據。Application 再將這份結果和原本的操作關聯，讓使用者知道工作完成到哪裡。
 
-這份 Contract 不是另一套 Control Plane。設計審查時，先拿一筆會改動資料的請求，故意把工單目標與 Tool 參數設成不同環境，看 Resource Server 是否真的拒絕。接著檢查批准後換參數是否失效，以及執行結果能否對回同一筆請求。測試結果、控制維護者和決策者，都要跟著 Action 留下來。
+若放行後遲遲沒有收據，調查應先查工具端和管線，而不是直接重送有副作用的動作。是否能重試，取決於資源操作的冪等性與已知狀態。結果超出批准範圍時，則要有明確接手人處理停止、回復或補償。
 
-最後一天會把這場審查放回整體架構，看三十天前那筆危險 Tool Call，若今天重新設計，它會在哪一站停下，事後又能查到什麼。
+這些處置不需要全部放進單一 Gateway。平台維護關聯與運行觀測，Application 和 Resource Server 提供正確結果，業務 Owner 判讀影響。既有 LGTM 可以支援這條調查路徑，保存要求則由目的另行決定。
+
+## 保存要求與剩餘風險
+
+Operational Telemetry 支援值班和效能排查，Audit 保存則可能需要不同的事件範圍、存取權限與保存期限。若有防刪改、Legal Hold 或其他正式要求，要由對應角色確認，不能只拉長 Loki Retention 就宣稱完成。
+
+兩種用途可以共用 Action ID、Trace ID 和事件欄位，但不必共用全部讀取角色。能看服務錯誤率的人，不一定需要查看單一人的高風險操作。Security／Risk 定義保存目的，平台協助實作，資源 Owner 提供影響判讀。
+
+剩餘風險也要具體到會改變決策的缺口。本例若還無法比對工單和正式目標，就沒有足夠控制開放正式資料庫。若這一點已補齊，但批准者身分或執行版本仍未驗證，就由有權接受影響的人決定能否在特定範圍試行，並留下重驗條件。
+
+[Residual Risk Register](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-29-r5/articles/day-29/residual-risk-register.md) 收錄本系列已有來源的缺口、負責人與關閉條件。[NIST AI RMF 1.0 的 Govern](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/) 也將角色、責任和溝通路徑放在組織層級。本文契約是作者以單一動作整理的設計工具，並非 NIST 的官方表格。
+
+## 用具體操作進行設計審查
+
+審查時可以先拿一筆會改資料的請求，讓工單目標和工具參數故意不同，檢查哪個控制拒絕。再看批准後換參數、批准過期和重複 Resume 如何處理，最後確認結果能否對回原操作。這些是上線前的驗證建議，不是本篇新增的 Lab 結果。
+
+每個結果都連同控制維護者與決策負責人保存，下一次規則或工具變更，才知道誰要重驗。責任交接的價值，是讓系統運作、規則改變和事故處理各有清楚入口。
+
+最後一天會把這些接縫放回整體架構，回看系列開頭的危險工具提議：它在碰到資源以前應遇到什麼控制，事後又能沿哪些資料查證。

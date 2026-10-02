@@ -1,16 +1,16 @@
 # Day 2｜Agent Threat Model 實作：拆開一筆 Tool Call 的信任邊界
 
-Day 1 的 SRE Investigation Agent 被 Log 裡的惡意指令帶偏，最後讓危險 Tool 進入執行階段。模型會看錯資料其實不意外，讓我在意的是：從模型提出動作到 Tool 開始執行，整條路上沒有任何一道檢查把它攔下來。
+一支協助調查服務延遲的 SRE Investigation Agent，本來應該查 Log、看 Metrics。Day 1 的安全實驗卻讓它讀到 Log 裡的惡意指令，轉而呼叫刪除工具。工具實際只寫入一筆安全標記，但已經走到執行階段。讓我在意的是：從模型提出動作到工具開始執行，整條路上沒有任何一道檢查把它攔下來。
 
 這篇的 Threat Model 不從風險清單開始。我先拿最不希望發生的動作往回追，找出攻擊內容從哪裡進來、模型提出了什麼、誰決定可以執行，以及 Tool 最後用什麼身分碰到哪個資源。路徑畫清楚了，才知道控制應該放在哪裡。
 
-## Agent 不是另一個 Backend
+## Agent 的工具選擇與資料回饋
 
 我長期從 API Gateway 的角度看流量，很自然會把一筆請求畫成：呼叫者通過身分驗證與授權，程式再依照既定 route 和 handler 存取後端資源。參數可以變，但可用的操作和檢查位置大多已經寫在程式裡。
 
 Agent 沒有拋棄這些控制。使用者能不能啟動工作、呼叫者是誰、後端是否允許存取，照樣需要驗證。不同之處在於，Agent 會把 Log、文件或上一個 Tool 的結果放進 context，再由模型動態選擇下一個 Tool 與參數。執行結果還可能回到下一輪，繼續影響後面的決策。
 
-![一般 Web 請求保留身分驗證、授權與程式決定的 Handler；Agent 執行在既有入口控制之外，增加不可信資料、模型提出動作、執行前授權、Tool 與資源之間的邊界，結果還會回到下一輪。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02-r5/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
+![一般 Web 請求保留身分驗證、授權與程式決定的 Handler；Agent 執行在既有入口控制之外，增加不可信資料、模型提出動作、執行前授權、Tool 與資源之間的邊界，結果還會回到下一輪。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-02-r6/assets/diagrams/day-02/web-vs-agent-attack-surface.png)
 
 我第一版架構圖把 Agent runtime 當成另一個 Backend，於是模型選了什麼、誰核准這個動作，以及 Tool 使用哪一組 credential，全被藏在同一個方框裡。圖看起來很乾淨，出事時卻回答不了責任到底斷在哪裡。
 
@@ -27,7 +27,7 @@ Agent 沒有拋棄這些控制。使用者能不能啟動工作、呼叫者是�
 
 最後一格只能寫「未知」。安全標記證明呼叫流程走到了 Tool function，卻不能回答正式環境裡的執行憑證是否真的有刪除資料的權限。Lab 沒有這份資訊，就先寫未知。真正接上資料庫或 API 時，還得檢查那一跳的憑證與資源端授權，不能因為 Tool 名稱看起來無害就跳過。
 
-完整盤點還要處理誰啟動 Agent、資料能不能送往模型供應商，以及事件是否足以還原執行過程。這些欄位整理在 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r5/articles/day-02/threat-model-worksheet.md)，正文先沿著這四道邊界追完眼前的危險動作。
+完整盤點還要處理誰啟動 Agent、資料能不能送往模型供應商，以及事件是否足以還原執行過程。這些欄位整理在 [Agent Threat Model Worksheet](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-02-r6/articles/day-02/threat-model-worksheet.md)，可用來檢查自己的 Agent 還有哪些入口。
 
 ## 同一段惡意指令，權限不同會變成不同事故
 

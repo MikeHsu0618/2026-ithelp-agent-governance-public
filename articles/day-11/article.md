@@ -1,10 +1,12 @@
 # Day 11｜Agent OAuth Flow 實測：PKCE、Client Credentials 與 Token Exchange
 
-Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，卻不能把同一枚 Token 繼續往後送。值班工程師從 CLI 發起查詢時，人還在線上。凌晨固定產生報表時，只有 Scheduler 在工作。Agent Runtime 代表值班工程師查詢 Observability MCP 時，則同時存在「要求這件事的人」與「目前執行這件事的程式」。三種工作都需要 Token，Token 代表的對象卻完全不同。
+同一支會查 Log 的 Agent，可能在值班工程師從 CLI 交辦時執行，也可能由凌晨的 Scheduler 喚起。它還可能接下人的要求，再代表那個人去呼叫下游服務。三種工作看起來都在「取得 Token、查資料」，但下游需要知道的事情不同：這是使用者的操作、服務自己的排程，還是程式正在替某個人做事？
+
+當 Agent 入口和下游 MCP 是不同的接收者，入口 Token 也未必能繼續使用。取得下游憑證的方式，必須連同工作來源一起選。
 
 我以前串接不同 MCP Client 時，經常把問題概括成「OAuth 沒設好」。真正拆開後才發現，失敗點可能是 Client Registration、使用者授權，也可能是 Token 發給了錯誤的 Resource。更麻煩的情況是 API 回了 `200`，Token 卻代表錯的人，直到追查 Audit 才發現整條責任鏈早已斷掉。
 
-這篇用三條常見路徑把問題拆開：互動式 Human 使用 Authorization Code + PKCE，無人排程使用 Client Credentials，Runtime 代表 Human 呼叫下游時則示範 RFC 8693 Token Exchange。實務上最磨人的 Client Registration、Callback 與 Scope 問題，也會跟著各自的路徑出現。公開 Lab 用離線 Token 呈現三種不同身分語意。文章最後再回到 AWS Cognito，確認哪些 Flow 能直接落地。
+這篇用三條常見路徑把問題拆開：互動式 Human 使用 Authorization Code + PKCE，無人排程使用 Client Credentials，Runtime 代表 Human 呼叫下游時則示範 RFC 8693 Token Exchange。實務上最磨人的 Client Registration、Callback 與 Scope 問題，也會跟著各自的路徑出現。[公開 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r6/labs/02-identity-boundary/README.md) 用離線 Token 呈現三種不同身分語意。文章最後再回到 AWS Cognito，確認哪些 Flow 能直接落地。
 
 ## 三種工作對應三種身分語意
 
@@ -16,9 +18,9 @@ Day 10 已經讓 Gateway 驗過入口 JWT，Agent 接著呼叫下游 MCP 時，�
 | Scheduler 定時查詢 | `client/sre-scheduler` | Client Credentials |
 | Runtime 代表值班工程師呼叫下游 | Human 是 subject，Runtime 是 current actor | RFC 8693 Token Exchange |
 
-![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r5/assets/diagrams/day-11/three-oauth-flows.png)
+![三種 Agent 工作對應三種 OAuth Token 語意。互動式 Human 使用 Authorization Code 加 PKCE，Scheduler 使用 Client Credentials，Human delegation 則同時驗證 subject token、actor token 與兩者的授權綁定。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r6/assets/diagrams/day-11/three-oauth-flows.png)
 
-這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。接下來三段都沿著這個判斷往下走。
+這張圖刻意省略協定往返，只保留最後進入下游服務的身分。Human 路徑必須留下操作者，Scheduler 不該虛構一個使用者，而 Delegation 路徑不能讓 Runtime 冒充 Human。
 
 若要看授權碼在瀏覽器、App 與 AWS Cognito 之間怎麼往返，[AWS 的 PKCE 流程圖](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/choose-an-amazon-cognito-authentication-flow-for-enterprise-applications.html#architecture)畫出了取 Token 的路徑。上圖處理的是 Token 到下游後代表誰。CLI 使用的 Callback 與註冊方式仍要依實際 Client 核對。
 
@@ -62,7 +64,7 @@ Scope 也不是 Discovery 顯示了就能取得。Protected Resource 可以告�
 }
 ```
 
-這枚 Token 不需要捏造值班工程師。Audit 看到 `client/sre-scheduler`，就知道動作來自排程服務，後續輪替、停用與權限收斂也都能指向同一個 Workload。
+這枚 Token 不需要捏造值班工程師。Audit 看到 `client/sre-scheduler`，就知道動作來自排程服務，後續輪替、停用與權限收斂也能指向這個服務 client。若多個執行實例共用該 client，仍要另靠執行紀錄定位是哪個實例送出。
 
 [RFC 6749 section 4.4](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.4) 將 Client Credentials 限定給 Confidential Client。Lab 讓 Public CLI 嘗試相同 Flow，Authorization Server 在 Client Authentication 階段便拒絕，不會因為程式裡剛好塞了一段 Secret，就把 Public Client 當成 Confidential Client。
 
@@ -103,11 +105,11 @@ RFC 8693 的通用 Request Grammar 沒有要求每次 Exchange 都必須帶 `act
 
 三條路徑的差異，在錯誤請求上更容易看見。Public CLI 若改用 Client Credentials，問題出在 Client 本身無法保管長期 Secret。Scheduler 即使拿到合法 App-only Token，也不會因此多出一位登入者。Runtime 要代表 Human 查另一個 MCP，則需要 Authorization Server 同時檢查原本的委派與新的目標。只讓它拿自己的 Token，或把 Human Token 直接轉送，都會失去其中一段責任。
 
-[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r5/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 將三條路徑各跑一筆成功請求，並讓 Public CLI 嘗試 Client Credentials、讓 Runtime 要求未授權的下游資源。前者在 Client Authentication 停下，後者在簽發下游 Token 前停下。成功的 Delegation Token 則同時留下 Human `sub` 和 Runtime `act`。這些結果支持前面的身分判斷，完整案例與指令留在 Lab README，故障判讀另見 [OAuth Flow 選擇表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r5/articles/day-11/oauth-flow-selection-guide.md)。
+[Day 11 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r6/labs/02-identity-boundary/README.md#day-11-oauth-flow-執行結果) 將三條路徑各跑一筆成功請求，並讓 Public CLI 嘗試 Client Credentials、讓 Runtime 要求未授權的下游資源。前者在 Client Authentication 停下，後者在簽發下游 Token 前停下。成功的 Delegation Token 則同時留下 Human `sub` 和 Runtime `act`。這些結果支持前面的身分判斷，完整案例與指令留在 Lab README，故障判讀另見 [OAuth Flow 選擇表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-11-r6/articles/day-11/oauth-flow-selection-guide.md)。
 
-![Day 11 離線 OAuth Flow 結果：Human PKCE、Scheduler Client Credentials 與 Runtime Delegation 各有成功案例。錯誤的 Client、目標與 Audience 在簽發 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r5/assets/screenshots/day-11/01-oauth-flow-results.png)
+![Day 11 離線 OAuth Flow 結果：Human PKCE、Scheduler Client Credentials 與 Runtime Delegation 各有成功案例。錯誤的 Client、目標與 Audience 在簽發 Token 前被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-11-r6/assets/screenshots/day-11/01-oauth-flow-results.png)
 
-這個對照使用合成 Claims 與本機 Authorization Server，沒有啟動 AWS Cognito 或真正的瀏覽器登入。AWS Cognito 能否接受第三條 Request，還要回到它公開的 Token Endpoint 合約。
+這個對照使用合成 Claims 與本機離線實作的授權伺服器邏輯，沒有啟動 HTTP Authorization Server、AWS Cognito 或真正的瀏覽器登入。AWS Cognito 能否接受第三條 Request，還要回到它公開的 Token Endpoint 合約。
 
 ## AWS Cognito 能接住兩條路，Delegation 仍待補齊
 

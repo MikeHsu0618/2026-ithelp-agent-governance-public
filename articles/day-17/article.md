@@ -10,7 +10,7 @@ A2A（Agent2Agent）把這段跨服務協作整理成共同合約。Client 先�
 
 官方角色圖把使用者、Client Agent 與 Remote Agent 分開。圖中的遠端 Agent 可以由不同團隊獨立維護。我們需要協調的是服務之間的互動，無須把每個 Agent 的內部狀態合併成同一套。
 
-![A2A 官方角色圖：使用者透過 Client 與 Client Agent，和多個 Remote Agent 協作。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r4/assets/third-party/a2a/a2a-actors.png)
+![A2A 官方角色圖：使用者透過 Client 與 Client Agent，和多個 Remote Agent 協作。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r5/assets/third-party/a2a/a2a-actors.png)
 
 > 來源：[A2A 官方 Core Concepts](https://a2a-protocol.org/latest/topics/key-concepts/)，[原圖固定版本](https://github.com/a2aproject/A2A/blob/1ae57a673f729f743b35f2677f3adc302438695a/docs/assets/a2a-actors.png)，Apache-2.0，未修改。2026-10-01 核對。
 
@@ -34,7 +34,7 @@ Task 的 `taskId` 識別一筆工作，`contextId` 則把相關互動放在同�
 
 下面把長任務的互動畫成一條簡化路徑。要求補資料與交回成果發生在不同階段，Client 因此能決定何時顯示等待、何時請使用者回應，以及何時才收下報告。
 
-![Client 先讀 Agent Card，再送分析 Message。遠端 Agent 建立 Task 並回報 Working。若需要補資料，回 Input Required，由 Client 補送 Message 後繼續。Artifact 是成果更新，Task Completed 才是工作終態。Completed 後的追加分析建立新 Task，可沿用 Context。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r4/assets/diagrams/day-17/a2a-task-interaction.png)
+![Client 先讀 Agent Card，再送分析 Message。遠端 Agent 建立 Task 並回報 Working。若需要補資料，回 Input Required，由 Client 補送 Message 後繼續。Artifact 是成果更新，Task Completed 才是工作終態。Completed 後的追加分析建立新 Task，可沿用 Context。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r5/assets/diagrams/day-17/a2a-task-interaction.png)
 
 這張圖只畫出本文需要的成功與補資料路徑。完整協定還包含失敗、取消、拒絕與等待授權等狀態。依 [Life of a Task](https://a2a-protocol.org/latest/topics/life-of-a-task/)，已進入終態的 Task 不會重開。例如使用者要求報告再增加另一個資料庫的比較，應建立新 Task，並可沿用原本的 Context。SSE 斷線後如何查詢、持久化和恢復，也仍取決於服務實作。
 
@@ -55,13 +55,13 @@ POST /api/a2a/api/a2a/day16-lab/day16-agent                     -> 404
 
 第二行不是手動拼錯，而是 Client 照著 `supportedInterfaces[].url` 呼叫。Discovery 成功了，Discovery 提供的下一站卻是錯的。
 
-![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r4/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
+![A2A client 依序通過 Discovery、Routing 與 Runtime Execution。錯誤範例在 Agent Card 公告 URL 時重複加入 api/a2a，導致 invocation 停在 Gateway 404。修正後則由 agentgateway 的 A2A route 對外公告 agents/day16，再轉到 kagent controller。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r5/assets/diagrams/day-17/a2a-discovery-routing-runtime.png)
 
 ## 重複 Prefix 來自 Base URL 的語意誤判
 
 kagent Controller 的 A2A Mux 位於 `/api/a2a/{namespace}/{name}`。`controller.a2aBaseUrl` 用來告訴 Controller 對外公告哪個 Scheme 與 Host，kagent 產生 Agent Card 時還會在後面接上自己的 A2A Path。
 
-當年的設定把 Path 也寫進 Base URL：
+當時的設定把 Path 也寫進 Base URL：
 
 ```yaml
 controller:
@@ -85,7 +85,7 @@ kagent `0.10.0` 的 [Controller Source](https://github.com/kagent-dev/kagent/blo
 
 ## A2A 1.0 對齊 Card、Header 與 Task
 
-本篇直接驗 A2A `1.0`。Probe 從 Card 的 `supportedInterfaces` 選出 `protocolVersion: "1.0"` 與 `protocolBinding: "JSONRPC"`，再帶著 `A2A-Version: 1.0` 發出 `SendMessage`。
+[Day 17 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r5/labs/03-gateway-runtime/README.md) 鎖定 kagent `0.10.0`，以 A2A `1.0` 比較錯誤與修正入口。Probe 是這次的測試 Client，它從 Card 的 `supportedInterfaces` 選出 `protocolVersion: "1.0"` 與 `protocolBinding: "JSONRPC"`，再帶著 `A2A-Version: 1.0` 發出 `SendMessage`。
 
 成功與否不能只看 JSON-RPC 外層沒有 Error。Response 裡的 Task 還要同時符合三個條件：
 
@@ -129,11 +129,11 @@ A2A `1.0` 的 Task State 包含 `TASK_STATE_INPUT_REQUIRED` 與 `TASK_STATE_AUTH
 
 ## 修正 URL 後，Client 才能走完整條路
 
-[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r4/labs/03-gateway-runtime/README.md) 用同一支 Probe 比較修正前後。錯誤 Base URL 下，Card 回 `200`，Client 照公告 URL 送出的 SendMessage 與 SSE 都停在 `404`。改成 A2A Route 後，Card 公告 `/agents/day16`，一般 Task 與 Streaming Task 才走到 Completed。下圖保留兩次實跑的終端結果，重跑指令和完整 Probe 留在 Lab。
+[Lab 03 的 Day 17 區段](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r5/labs/03-gateway-runtime/README.md) 用同一支 Probe 比較修正前後。錯誤 Base URL 下，Card 回 `200`，Client 照公告 URL 送出的 SendMessage 與 SSE 都停在 `404`。改成 A2A Route 後，Card 公告 `/agents/day16`，一般 Task 與 Streaming Task 才走到 Completed。下圖保留兩次實跑的終端結果，重跑指令和完整 Probe 留在 Lab。
 
-![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r4/assets/screenshots/day-17/01-a2a-path-results.png)
+![Day 17 Lab terminal card。左側保留 Agent Card 成功但兩種 invocation 都因重複 prefix 得到 404 的預期失敗。右側則顯示 Agentgateway A2A route 修正 Card URL 後，SendMessage 與 SSE streaming 都通過，stream 走完 submitted、working、artifact 與 completed。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-17-r5/assets/screenshots/day-17/01-a2a-path-results.png)
 
-完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r4/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字結果都在 Repo。我另整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r4/articles/day-17/a2a-checklist.md)。遇到「Card 正常、Invocation 失敗」時，可以沿 URL、Version、Route 與 Task State 逐站排查。
+完整 [Gateway Route](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r5/labs/03-gateway-runtime/configs/day-17/a2a-route.yaml)、Probe Source 與文字結果都在 Repo。我另整理了 [A2A 路徑驗收清單](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-17-r5/articles/day-17/a2a-checklist.md)。遇到「Card 正常、Invocation 失敗」時，可以沿 URL、Version、Route 與 Task State 逐站排查。
 
 ## Protocol 接通後，Runtime 能力仍然原封不動
 

@@ -1,6 +1,6 @@
 # Day 14｜認識 AI Gateway Virtual Key：企業身分與 Agent Workload 的使用邊界
 
-評估 LiteLLM 時，我們沒有採用的其中一個顧慮，是 Virtual Key 帶來的 Human Identity 管理。幾個月後接 kagent 的 LLM Path，我卻又在 agentgateway 前替每個 Runtime 放了一把 Static Consumer Key。兩邊都是 Bearer Secret，表面上看起來像是前後矛盾。
+評估 LiteLLM 時，我們沒有採用的其中一個顧慮，是 Virtual Key 帶來的 Human Identity 管理。幾個月後接 kagent 的 LLM Path，我卻又在 agentgateway 前替每個 Runtime 放了一把 Static Consumer Key。兩邊都是 Bearer Secret，也就是持有這段秘密的人就能拿它發出請求，表面上看起來像是前後矛盾。
 
 差別不在 Key 的形式，而在它代表的對象。把一把 Key 標成值班工程師，平台便要接手登入、MFA、Team 異動、停權、離職、遺失與重發。若它只代表 `workload/runtime-a`，責任會縮到 Secret Delivery、Rotation、爆炸半徑與 Provider Credential Isolation。前者牽涉 Human Identity Lifecycle，後者處理 Machine Consumer Boundary。
 
@@ -8,7 +8,7 @@
 
 ## Human Virtual Key 會多出一套 Lifecycle
 
-Virtual Key 對 LLM Gateway 很實用。它可以替不同 Consumer 分開 Budget、Rate Limit、Usage 與 Provider Access，也能把真正的 Provider Credential 留在 Gateway 後面。這些功能正是 LiteLLM 當時進入候選名單的原因。
+Virtual Key 是 Gateway 發給呼叫端的替代 Key，呼叫端不用持有模型供應商的原始 Key。Gateway 可以替不同呼叫端分開預算、流量限制、用量與可用模型，也能把真正的 Provider Credential 留在後面。這些功能正是 LiteLLM 當時進入候選名單的原因。
 
 問題出現在我們把它映射成 Human：
 
@@ -50,11 +50,11 @@ Static Bearer Key 當然有侷限。它可能被複製，所以 Gateway 無法�
 
 ## 同一個 Gateway 比較三種 Credential
 
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r4/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
+[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r5/labs/03-gateway-runtime/README.md) 使用一個 agentgateway 與一個 Synthetic OpenAI-compatible Backend，比較 Human Key、Workload Key 與 Human JWT。三種 Credential 都呼叫 `/v1/chat/completions`，通過入口驗證後，再由 Backend Authentication 換成 Provider Key。
 
 這裡需要先釐清名稱。LiteLLM Virtual Key 是前一篇實務選型的對象，Lab 使用 agentgateway API Key Policy 與 Metadata 重現相同的 Identity Mapping 問題。`Consumer Key` 是本文為了區分用途採用的名稱，不是 agentgateway 另一種正式 Credential Type。
 
-![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r4/assets/diagrams/day-14/credential-boundary.png)
+![Human key、Workload key 與 Human JWT 各自經過 agentgateway 的驗證與 backend authentication。Human key 未收到 IdP 停權資訊，因此仍回 200。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都在 Gateway 被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r5/assets/diagrams/day-14/credential-boundary.png)
 
 API Key Route 使用 Strict Mode，兩把 Key 分別映射成 Human 與 Workload Metadata：
 
@@ -72,9 +72,9 @@ apiKey:
       workload: workload/runtime-a
 ```
 
-完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r4/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。讀者重跑時會產生新的測試 Key。下面只看三種入口 Credential 最後讓 Gateway 做出什麼不同決定。
+完整設定放在 [agentgateway.example.yaml](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r5/labs/03-gateway-runtime/configs/agentgateway.example.yaml)。讀者重跑時會產生新的測試 Key。下面只看三種入口 Credential 最後讓 Gateway 做出什麼不同決定。
 
-## Offboarding Gap 會被 HTTP 200 藏起來
+## 合成停權事件與 Gateway 靜態 Mapping
 
 Human Key 的第一個案例把 Directory State 設為 `ACTIVE`，Gateway 找到 `user/sre-oncaller` 後回傳 `200`。第二個案例使用完全相同的 Key 與 Gateway Mapping，只把外部 Directory State 改成 `DISABLED`，結果仍然是 `200`。
 
@@ -83,7 +83,7 @@ human-key-active             ALLOW  KEY_MAPPING_ACTIVE
 human-key-after-offboarding  ALLOW  STALE_MAPPING_ALLOWED
 ```
 
-Gateway 沒有收到這次停權事件。它只知道 Key 還在 Allowlist、Metadata 存在，而且 Route 可以繼續走。回應仍是 `200`，對值班工程師來說卻已經是錯誤授權：人被停用了，用他的名字建立的 Static Key 仍然有效。這比「Key 可以正常發 Request」更直接地說明，Human Identity 不能只靠 Gateway 裡的一份靜態 Mapping 管理。
+這份外部 Directory 是合成的停權狀態，沒有與 Gateway 做同步。Gateway 因而沒有收到這次停權事件。它只知道 Key 還在 Allowlist、Metadata 存在，而且 Route 可以繼續走。回應仍是 `200`，對值班工程師來說卻已經是錯誤授權：人被停用了，用他的名字建立的 Static Key 仍然有效。這比「Key 可以正常發 Request」更直接地說明，Human Identity 不能只靠 Gateway 裡的一份靜態 Mapping 管理。
 
 Workload Key 的結果比較單純。Current Key 得到 `200`，移出 Allowlist 的 Retired Key 得到 `401`。這正是我們要它負責的範圍：隔離並撤銷 Machine Consumer。輪替期間如何不中斷服務，還要另設交付流程。
 
@@ -118,11 +118,11 @@ Human Key、Workload Key 與 Human JWT 通過後，都由同一個 Backend Authe
 
 Synthetic Provider 會檢查收到的 `Authorization` 是否等於本次產生的 Provider Key，也確認它不等於 Human Key、Workload Key 或 JWT。這個實際 Backend Behavior 才能支持「Provider Key 已被隔離」，不能只從架構圖推論。
 
-![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r4/assets/screenshots/day-14/01-credential-boundary-results.png)
+![Day 14 實際 Lab terminal card。Human key 在外部目錄停權後仍 ALLOW，標成 RISK_EXPOSED。Workload retired key，以及 issuer 或 audience 錯誤或缺漏的 JWT，都被拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-14-r5/assets/screenshots/day-14/01-credential-boundary-results.png)
 
-Human Key、Workload Key 與 JWT 的差異，現在可以沿著停權、撤銷與 Provider 收到的 Credential 一路查下去。不必因為三者都能當 Bearer Secret，就交給同一套 Lifecycle。完整結果與重跑方式放在 [Lab 紀錄](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r4/assets/screenshots/day-14/evidence.md)及前面的 Lab README。要帶進架構討論，也有可複製的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r4/articles/day-14/credential-decision-table.md)。
+Human Key、Workload Key 與 JWT 的差異，現在可以沿著停權、撤銷與 Provider 收到的 Credential 一路查下去。不必因為三者都能當 Bearer Secret，就交給同一套 Lifecycle。完整結果與重跑方式放在 [Lab 紀錄](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r5/assets/screenshots/day-14/evidence.md)及前面的 Lab README。要帶進架構討論，也有可複製的 [Credential Decision Table](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-14-r5/articles/day-14/credential-decision-table.md)。
 
-## Production 還要補上 Lifecycle Control
+## 正式部署的輪替與身分責任
 
 這個 Lab 只比較 Credential Boundary，沒有處理 Static Key 存在 Kubernetes Secret 或外部 Secret Manager、雙 Key Overlap、Hot Reload 與 Rolling Restart。Policy Service 故障時要 Fail Closed 或暫時使用 Cache，也必須由正式環境另外決定。
 

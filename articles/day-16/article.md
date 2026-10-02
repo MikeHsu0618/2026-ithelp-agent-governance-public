@@ -6,7 +6,7 @@ Day 15 把既有 Ingress 與 agentgateway 的流量責任切開後，仍有一�
 
 這篇先認識 kagent 和 Agent Framework 的分工，再看我們用 `0.10.0` 跑過的 LLM、MCP 與 A2A 路徑。採用時要判斷的，是平台能接走多少工作，以及團隊需要的 Agent 行為能否在它提供的介面中表達。
 
-![kagent 官方 Logo](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r7/assets/third-party/kagent/kagent-horizontal-color.png)
+![kagent 官方 Logo](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r8/assets/third-party/kagent/kagent-horizontal-color.png)
 
 > kagent Logo 取自 [CNCF artwork repository](https://github.com/cncf/artwork/tree/main/projects/kagent/horizontal/color)，僅用來識別本文討論的專案。
 
@@ -16,13 +16,13 @@ Day 15 把既有 Ingress 與 agentgateway 的流量責任切開後，仍有一�
 
 官方的 0.x 架構圖先呈現四個角色：Controller、執行 Agent 的 Backend，以及 CLI／Dashboard。這是一張產品總覽，還沒有展開每支 Agent 的 Pod 或 Gateway 路徑。
 
-![kagent 官方 0.x 架構圖：Controller 與 Backend 互動，CLI 與 Dashboard 提供管理和使用入口。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r7/assets/third-party/kagent/kagent-0x-architecture.png)
+![kagent 官方 0.x 架構圖：Controller 與 Backend 互動，CLI 與 Dashboard 提供管理和使用入口。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r8/assets/third-party/kagent/kagent-0x-architecture.png)
 
 > 來源：[kagent 官方架構文件的固定版本](https://github.com/kagent-dev/website/blob/c053e7cb66ec14b6c8767f38042451b33612accc/docs-site/content/kagent/0.x/concepts/architecture.md)，Apache-2.0，原圖未修改。2026-10-01 核對。本文實跑仍為 kagent `0.10.0`。
 
 ## Google ADK、LangGraph 與 kagent 的選擇層次
 
-Google ADK 提供寫 Agent 的程式元件：模型迴圈、Tool、Callback、Session，以及 Sequential、Parallel、Loop 等工作流程。這些元件決定 Agent 收到任務後怎麼執行。本篇使用的 kagent Python Runtime 建在 ADK 上，再把 Kubernetes Resource 轉成 Runtime Config，接上 MCP 與 A2A 整合。因此選用 kagent 的 Declarative Agent 時，你已經間接使用 ADK，只是透過 YAML 表達 Agent。
+Google ADK 提供寫 Agent 的程式元件：模型迴圈、Tool、Callback、Session，以及 Sequential、Parallel、Loop 等工作流程。這些元件決定 Agent 收到任務後怎麼執行。kagent 的 Python Runtime 建在 ADK 上，把 Kubernetes Resource 轉成 Runtime Config，再接上 MCP 與 A2A 整合。透過這條路徑使用 Declarative Agent 時，開發者用 YAML 表達需求，平台再建構 ADK Agent。不過 kagent 也有 Go Runtime，本篇 `0.10.0` Lab 實際產生的是 Go Runtime，不能用這組結果證明 Python 套件的行為。Day 18 才會以 Python ADK BYO Agent 實跑接入。
 
 直接寫 ADK 程式，可以控制 Callback 與流程組合。改用 Declarative Agent，則把一部分程式與接線工作交給平台。ADK 有某個 API，不代表 kagent 的 CRD 已把該 API 全部暴露出來。這個差距，才是評估進階 Workflow 或 Provider-specific 設定時要檢查的地方。依據是 [ADK 核心概念](https://adk.dev/get-started/about/)與 [kagent `0.10.0` 的 ADK 整合套件](https://github.com/kagent-dev/kagent/tree/v0.10.0/python/packages/kagent-adk)。
 
@@ -40,27 +40,17 @@ Google ADK 提供寫 Agent 的程式元件：模型迴圈、Tool、Callback、Se
 
 對 Kubernetes 團隊，kagent 的吸引力是讓 Agent 和既有 Workload 用相近的方式交付、觀察與管理。若團隊只需要單支應用裡的 Agent Loop，直接用 Framework 也能成立。到了多團隊需要共同部署與發現入口時，平台層的工作才開始有集中處理的價值。
 
-## 連得通只是第一個採用條件
-
-kagent 的 `ModelConfig` 可以把 OpenAI-compatible Base URL 指向 agentgateway，Agent 引用 `RemoteMCPServer` 後，也能由 Gateway 連到 MCP Backend。實跑時，LLM 與 MCP Request 都出現在 agentgateway Access Log，A2A Invocation 則得到 Synthetic Model 回覆的 `boundary-ok`。Routing、Header 與 Backend 已經接對。
-
-平台能不能承載真正的 Agent，還要繼續看 Provider-specific Thinking 設定、複雜 Workflow、長任務狀態，以及 Credential 如何取得與更新。我們以前確實遇過 Provider 設定面不一致的問題，某條 Model Path 能調的參數，換另一個 Provider 未必有同等欄位。新版修好的缺口就應該記為修好，不該為了延續舊結論一直扣分。
-
-`0.10.0` 的 OpenAI Path 已能保存 `reasoningEffort`，這一項直接記 PASS。仍待處理的是 MCP Credential Lifecycle 與多步 Workflow State。這也正是我對 kagent 一直有點「又恨又癢」的原因。它替 Kubernetes 團隊準備了 Agent Deployment、UI、Discovery 與 A2A 入口，確實省掉不少平台工作。Declarative Surface 一旦接不住需求，開發團隊最後仍會回到自建 Runtime。
-
-這時 kagent 的價值不能再用「有沒有 Agent」判斷，而要看它接走了哪些 Control-plane 工作，又把哪些能力留給 Application Team。
-
 ## Runtime、Control Plane 與 Traffic Path
 
 幾次討論卡在「kagent 和 agentgateway 是否重疊」後，我們改用三層拆解。
 
-**Runtime** 執行 Agent 行為，包括 Prompt 組合、Model Loop、Memory、Workflow、Tool Call 與 HITL State。Declarative Agent 由 kagent 提供的 ADK Runtime 執行，BYO Agent 則由應用團隊自行實作。agentgateway 不會替任何一邊補出 Business Workflow。
+**Runtime** 執行 Agent 行為，包括 Prompt 組合、Model Loop、Memory、Workflow、Tool Call 與 HITL State。Declarative Agent 由 kagent 提供的 Runtime 執行，BYO Agent 則由應用團隊自行實作。agentgateway 不會替任何一邊補出 Business Workflow。
 
 **Control Plane** 保存並協調 Agent 的期望狀態。kagent 讀取 `Agent`、`ModelConfig` 與 `RemoteMCPServer` 等 Resource，產生 Deployment、Service、Runtime Config 與 Agent Card，也讓 UI／CLI 和其他 Agent 有共同的 Discovery 入口。
 
 **Traffic Path** 是 Request 實際經過的地方。agentgateway 在這裡處理 LLM、MCP 或 A2A Route，以及共用的 Authentication、Authorization、Rate Limit、Backend Credential 與 Telemetry。它能看見並管住流量，卻不決定 Agent 下一步要呼叫哪個 Tool。
 
-![kagent 管理 Agent CR、Deployment 與 discovery，應用團隊負責 Agent runtime 邏輯。Agent 發出的 LLM 與 MCP request 經同一個 agentgateway 進入 backend。Runtime、Control Plane、Traffic Path 各有自己的 source of truth。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r7/assets/diagrams/day-16/runtime-control-traffic-boundary.png)
+![kagent 管理 Agent CR、Deployment 與 discovery，應用團隊負責 Agent runtime 邏輯。Agent 發出的 LLM 與 MCP request 經同一個 agentgateway 進入 backend。Runtime、Control Plane、Traffic Path 各有自己的 source of truth。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r8/assets/diagrams/day-16/runtime-control-traffic-boundary.png)
 
 [agentgateway 官方的 Kubernetes 架構圖](https://agentgateway.dev/docs/kubernetes/latest/documentation/about/architecture/)把 Controller 到 Proxy 的設定流與 Client 到 Backend 的請求流分開（2026-09-26 查閱）。上圖再加上 kagent 管理的 Agent Runtime，因為我們要決定的是 Agent 誰來部署、它發出的 LLM／MCP 流量又由誰處理。兩張圖看的層次不同，放在一起比較，較不容易把 Controller 畫成每筆請求都會經過的一站。
 
@@ -74,7 +64,7 @@ MCP Server 已經有 ClusterIP 時，kagent 可以讓 Agent 直接連 Service，
 
 kagent 的 [Operational Considerations](https://kagent.dev/docs/kagent/operations/operational-considerations/) 說明，`proxy.url` 會改寫內部產生的 Agent-to-Agent 與 Agent-to-MCP URL，並加入 `x-kagent-host` 保存原始目的地。外部 `RemoteMCPServer` URL 則不會被改寫。這不是在 Agent 前憑空多塞一層 Proxy，而是讓 Control Plane 產生的 Internal Route 遵守平台 Egress Policy。
 
-Lab 的 `RemoteMCPServer` 保存原始 Service URL：
+這組分工可以對照 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r8/labs/03-gateway-runtime/README.md) 的 Day 16 設定。`RemoteMCPServer` 保存原始 Service URL：
 
 ```yaml
 spec:
@@ -102,23 +92,19 @@ Agent 最後拿到的 Runtime Config 已改成 Gateway URL，並帶著原始 Hos
 
 前一份 YAML 是 kagent Control Plane 的期望狀態，後一份 JSON 是 Agent Runtime 的實際連線設定，Gateway 的 `HTTPRoute` 才是 Traffic Path 的轉送規則。三份設定都有用途，卻不能同時宣稱自己是相同 Routing Policy 的唯一來源。
 
-## Runtime 設定與維運缺口
+## 用同一組接線檢查 Runtime 設定
 
-這次我用 kagent `0.10.0` 重新檢查最在意的 Runtime 設定。以前對 Declarative Surface 的不滿，不能直接套到現在的版本。但連得通之後，Workflow 與 Credential 仍要有人寫、有人維護。
+我們以前在 kagent `0.9.9` 的宣告式設定遇過 Provider 參數不一致：某條模型路徑能調的設定，換另一個 Provider 未必有同等欄位。到了本次 `0.10.0` Lab，OpenAI `ModelConfig` 已能保存 `reasoningEffort=low`，生成的 Go Runtime 設定也保留這個值。這項舊缺口在測到的路徑上已修好，其他 Provider 則仍要按各自介面核對。
 
-OpenAI `ModelConfig` 現在能設定 `reasoningEffort`，CRD 與生成的 Runtime Config 都保留 `low`。這修掉了我先前在這條 OpenAI-compatible Path 上遇到的缺口。其他 Provider 要能調到什麼程度，仍要按各自的設定介面看。
+同一組設定也讓我們看清 Credential 的邊界。`RemoteMCPServer.headersFrom` 能把同 Namespace Secret 的 Authorization Header 放進 Runtime Config。若要改用短效 Token，取得、更新與失敗恢復還需要自己的流程。程式讀得到 Secret，和平台會替它更新憑證，是不同的採用條件。
 
-`RemoteMCPServer.headersFrom` 能把同 Namespace Secret 的 Authorization Header 放進 Runtime Config。不過團隊若想改用短效 Token，Workload 如何取得、更新，以及失敗後如何復原，仍需要自己的流程。把 Header 接通，和把 Credential Lifecycle 交給平台，是兩件事。
+在獨立 Kind Cluster 裡，kagent 建立 Agent，A2A 呼叫得到合成模型的 `boundary-ok`，agentgateway Access Log 則看得到 LLM 與 MCP 兩條流量。前面的 YAML、生成設定與流量觀察，至此對上了同一條路徑。下圖把這幾份結果放在一起，重點是設定是否真的進到執行程式，以及請求是否走過預定入口。
 
-Declarative Agent 會產生 Deployment、Service 與 Agent Card，也能回覆 Synthetic Model 的 `boundary-ok`。這表示基本部署與 Prompt／Model／Tool 接線已可使用。真正複雜的多步 Workflow、Checkpoint 或自訂 HITL，仍取決於 Runtime 能暴露多少設定，或團隊是否改走 BYO Agent。六項逐條結果放在 [Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r7/labs/03-gateway-runtime/README.md)，正文把力氣留給選型差異。
+![Day 16 在獨立 Kubernetes 環境的實跑結果：kagent 建立 Agent，A2A 呼叫成功，agentgateway 記下 LLM 與 MCP 兩條流量。完整狀態與重跑指令見 Lab README。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r8/assets/screenshots/day-16/01-kagent-boundary-results.png)
 
-## 部署跑通後，Runtime 責任仍在原處
+完整狀態、指令與 Runtime 類型見 [Day 16 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r8/assets/screenshots/day-16/evidence.md)。這次使用合成 LLM 與 MCP Fixture 檢查基本接線，沒有驗收複雜 Workflow、Checkpoint 或自訂 HITL。這些需求能否由宣告欄位表達，或必須改走 BYO，仍是團隊採用時要做的判斷。
 
-在獨立 Kind Cluster 裡，kagent 確實建立了 Declarative Agent，A2A 呼叫得到 `boundary-ok`，agentgateway 的 Access Log 也看得到 Agent 發出的 LLM 與 MCP 流量。這排除了「兩套元件根本接不起來」的疑問，卻沒有改變我們最在意的採用條件：複雜 Workflow 與 Credential 更新仍由誰設計和維護。
-
-![Day 16 在獨立 Kubernetes 環境的實跑結果：kagent 建立 Agent，A2A 呼叫成功，agentgateway 記下 LLM 與 MCP 兩條流量。完整狀態與重跑指令見 Lab README。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-16-r7/assets/screenshots/day-16/01-kagent-boundary-results.png)
-
-[Lab 03](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r7/labs/03-gateway-runtime/README.md) 留有部署設定、指令和逐項狀態。它使用合成 LLM 與 MCP Fixture 觀察接線，沒有拿 API Key 或業務資料做演示。對我們的選型而言，連線已經成立，下一步要談的是平台採用後，哪一組團隊接住尚未消失的 Runtime 工作。
+這也是我對 kagent 一直有點「又恨又癢」的原因。它準備了 Agent Deployment、UI、Discovery 與 A2A 入口，確實省掉不少平台工作。宣告介面接不住需求時，開發團隊仍會回到自建 Runtime。採用的價值要連同剩餘程式工作一起算，接著才有辦法分配 Owner。
 
 ## 責任矩陣決定平台採用後由誰接手
 
@@ -134,12 +120,12 @@ Declarative Agent 會產生 Deployment、Service 與 Agent Card，也能回覆 S
 | Runtime Telemetry | kagent／Application Team | Runtime Span 與 Action Event |
 | Traffic Telemetry | agentgateway | Access Log、Metric 與 Trace |
 
-完整版本放在 [Day 16 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r7/articles/day-16/responsibility-matrix.md)，每一列都附有驗收方法。它也保留一個不太漂亮但很重要的事實：同一個 Agent 可能同時有 kagent CR、生成的 Runtime Config 與 agentgateway Route。沒有 Owner 與 Source of Truth，Declarative Platform 越多，Drift 只會更難查。
+完整版本放在 [Day 16 責任矩陣](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-16-r8/articles/day-16/responsibility-matrix.md)，每一列都附有驗收方法。它也保留一個不太漂亮但很重要的事實：同一個 Agent 可能同時有 kagent CR、生成的 Runtime Config 與 agentgateway Route。沒有 Owner 與 Source of Truth，Declarative Platform 越多，Drift 只會更難查。
 
-## A2A 接通不會補強 Runtime 能力
+## 從 Agent 服務走向對外 A2A 入口
 
-這次 Lab 已透過 Agent Service 的 A2A Endpoint 呼叫 Declarative Agent，但 A2A 在本文只負責送進一筆 Request。它證明 kagent 產生的 Runtime 能接受標準 Invocation，不會替 Agent 補出原本不存在的 Workflow、Memory 或 HITL Semantics。
+這次 A2A 呼叫直接送到 Agent Service，尚未經過對外 Gateway Route。若其他團隊要從公開入口使用這支 Agent，還得確認它公告的 URL 與實際轉送路徑能對得起來。
 
 我們過去遇過更直接的問題：Agent Card 從外部 Route 讀得到，真正 Invocation 卻因 Base URL 重複帶上 `/api/a2a` 而走錯路。那次事故把三層差異說得很清楚。Discovery 成功、Traffic Route 存在，仍不保證 Runtime Invocation 正確。
 
-Day 17 會沿著這條失敗路徑拆 A2A，實測 Agent Card、JSON-RPC、Base URL、Context 與 Task Lifecycle 各由誰負責。更重要的是確認一件事：Runtime 本身若太弱，A2A 再標準也只能讓別人更容易呼叫一個能力不足的 Agent。
+Day 17 會沿著這條失敗路徑拆 A2A，從 Client 如何讀取 Agent Card，到實際送出工作與追蹤 Task，確認服務公告和真正入口如何一起驗收。

@@ -1,59 +1,77 @@
-# Day 28｜從既有 LGTM 開始：Agent Governance 的導入順序
+# Day 28｜從既有觀測與交付開始：Agent Governance 的導入順序
 
-同樣叫 Agent，一支只幫單一團隊查 Log，另一支卻能修改正式環境，兩者不該拿到同一份安裝清單。[Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r5/articles/day-27/capability-ledger.md) 把身分、流量、Agent、資料權限與觀測分回各自的系統；接下來要按這支 Agent 真正會做的事，決定先補哪一段。
+一支 Agent 只替單一團隊查 Logs，另一支可以修改正式環境。兩者可能使用相同框架，甚至相同模型，導入時要先處理的問題卻不一樣。前者需要受限的資料權限與可查詢的結果，後者還要在修改前確認目標、參數和批准。
 
-我手上的現況並不平均。LGTM 是 Production 核心，有人維護，也有既有查詢和告警習慣。AWS Cognito 的 Human／M2M 路徑已經跑通，agentgateway 也有明確的 LLM／MCP／A2A Traffic Boundary。相較之下，企業 Identity Center、跨團隊 Agent Control Plane 與 Catalog 仍缺共同需求或長期 Owner。
+第三種情況是多個團隊都開始使用 Agent，各自處理登入、Provider Key、重試和觀測。每支應用仍能運作，共同規則卻逐漸分岔。這時優先事項可能是收斂流量入口，而不是再替每支 Agent 加一個新工具。
 
-這篇用三個情境來排序：單一團隊的唯讀調查、開始共用流量入口的多個 Agent，以及會改變正式環境的高風險動作。每種情境都問同樣三件事：目前的控制夠不夠、誰接手新增的控制、什麼時候可以停下來。答案不會是一條所有團隊都得爬完的階梯。
+本篇按這些需求安排導入順序。先看已有的控制和維護者，再看下一個控制能接走什麼工作。每個情境都有可以正式停留的架構，也要留下需求改變時重開評估的條件。
 
-![Agent Governance 以既有 Identity、Git-owned BYO Runtime 與 LGTM 為基線。Tool 有副作用時先補 Action contract。多個 Runtime 的 LLM、MCP、A2A policy 與 telemetry 開始重複或漂移後，再加入 agentgateway 作為共同 checkpoint。跨團隊 deployment、discovery 或 catalog 需求成立後才評估 kagent 與 Agent Registry。另有 Workload identity 或法遵保存要求時再檢查既有機制。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28-r5/assets/diagrams/day-28/adoption-path.png)
+## 先盤點現有基礎與改動風險
 
-## 一個團隊的唯讀 Agent，可以先停在這裡
+可以先用 [Day 27 的 Capability Ledger](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r6/articles/day-27/capability-ledger.md) 畫出現有身分、請求、交付與觀測位置。我們已有由人維護的 LGTM 觀測平台，用來查 Logs、Metrics 和 Traces，也有 Git 和映像交付流程，Human／M2M 的 Cognito 路徑已經跑通。這些既有能力讓 Agent 可以沿原來的工作方式接入，新增成本主要在工具權限、事件欄位和查詢契約，而不一定要先建新後端。
 
-Human 使用者走 Authorization Code／PKCE，M2M 走 Client Credentials。Agent Runtime、Tool Callback 與 Dependency 由應用 Repository 維護，執行過程透過 Alloy 進入 Loki、Tempo 與 Prometheus／Mimir 相容介面。Identity、Git-owned Runtime 與 LGTM 都有既有 Owner，也有前面 Lab 能重跑的 Contract，因此足以構成第一個停留點。
+讀者的基礎可能不同。原有 IdP 可以替代 Cognito，原有監控平台也可以替代 LGTM。需要保留的是三種能力：辨認誰在呼叫、知道實際跑哪份程式，以及查回這次操作的結果。先找它們目前的負責人，再討論哪一段真的缺控制。
 
-我們自己的架構已經有 agentgateway。這張導入圖保留更簡單的起點，是給尚未出現共同 Policy 問題的團隊。它不必為了跟上系列進度照抄 Gateway。
+風險也要從工具能力看。唯讀工具仍可能讀到敏感資料，但修改、刪除和部署還會改變系統狀態。共享需求則是另一條軸：只有一個團隊，不表示高風險工具可以省略授權。很多團隊使用，也不表示每支唯讀 Agent 都需要人工批准。
 
-LGTM 先回答 Latency、Error、Tool Outcome 與跨服務 Correlation。設定和映像的變更則回 Git 的 PR／Commit 與部署紀錄找。讀者也可以把 LGTM 換成組織原本使用的觀測平台，重點是能沿同一筆請求查到執行結果。
+下圖可以沿需求分支閱讀。新增副作用先走動作授權，共同流量規則開始重複才走 Gateway，部署與目錄的共用需求成立後再看控制面。它不是要求所有人爬完的階梯。
 
-如果 Agent 仍由單一團隊維護、只讀資料，也沒有共用 MCP／A2A 入口，架構可以停在這裡。前提是 Credential Scope 已受限、Tool Outcome 查得到，而且失敗有人接手。此時增加 Controller 和 CRD，還沒有對應的共享需求。
+![以現有身分、Runtime 交付與觀測為起點，副作用、共同流量和跨團隊部署需求各自觸發不同控制。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-28-r6/assets/diagrams/day-28/adoption-path.png)
 
-例如 Day 25 的 SRE Agent 查 Loki，第一個驗收問題不是「有沒有 Agent Catalog」，而是查詢帳號能看到哪些 Log、Tool 回傳是否帶回可追查的 `trace_id`，以及查不到資料時值班者該往哪裡查。這些事情已有 Application、Grafana 與觀測平台的責任邊界。若只因為它叫 Agent 就加一個部署控制面，反而讓一條原本能查清楚的路多出新的交接點。
+## 單一團隊的唯讀查詢
 
-## 如果 Agent 能改資料，先處理那筆動作
+以 SRE Agent 查 Loki 為例，首先要確認查詢帳號只能讀必要資料，Runtime 能處理工具錯誤與空結果，回應也保留能查證的線索。若使用者問的是某個服務，工具卻可讀整個組織的 Logs，就算沒有寫入能力，資料權限仍然需要收斂。
 
-只要 Tool 開始能寫入、刪除、部署或批准，單純把 Trace 接進 LGTM 就不夠。執行前需要 Resource-aware Policy，執行後則要留下 Action ID、Policy Version、關鍵 Arguments、Effect Receipt，以及當時真正執行的 Commit 或 Artifact Digest。
+登入與服務憑證可以沿既有機制。Human 的互動登入，和背景服務取得 Token 的流程分開管理。Runtime、工具程式與依賴由應用 Repository 維護，部署沿既有流程，觀測資料送到原有平台。這讓應用、身分、資料來源和 SRE 各自承擔熟悉的工作。
 
-這批控制不必等集中式平台。只有一個 Runtime 時，ADK Callback、應用自己的 Authorization 與 Git Review 仍能形成清楚的 Enforcement Path。除了確認拒絕發生在 Tool 執行前，還要能找到當時使用的映像版本與執行結果。Day 27 已把這些分別放回 Runtime、資源服務與交付流程，通常比先增設 Catalog UI 更急。
+唯讀情境的驗收可以具體到一次查詢：允許範圍內找得到資料，超出範圍會拒絕，工具失敗有清楚狀態，值班者能沿操作找到事件或 Trace。Day 25 的 Grafana MCP 路徑提供了這類範例，單是工具名稱出現在 UI 裡還不夠。
 
-Tool 若需要人工核准，HITL 也不能只看畫面上有 Approve／Reject。上線時還要知道誰有權核准、暫停的任務如何恢復，以及這次決定如何留存。Day 18 展示了相容的 Pause／Resume 流程；是否需要共用的核准平台，可以等多個 Agent 都遇到同類需求時再決定。
+若只有一個團隊維護，沒有共享入口或跨團隊上架需求，就可以停在自建 Runtime、Git 交付和原有觀測平台。憑證輪替、套件升級、工具失敗仍要有人處理，停留代表範圍明確，並不是後續工作消失。
 
-這類 Agent 的停留點不取決於團隊數量，而取決於能否說清楚「這筆修改為什麼可以做」。如果工單只允許測試環境，Tool 卻送出正式環境參數，Resource Server 必須在執行前拒絕。把所有 Action 都送去人工核准，也不能代替這條可以寫進程式的業務規則。Day 29 會用這個差異檢查責任交接。
+我們自己的架構已經有 agentgateway。這個較簡單起點是為了讓尚未遇到共同流量問題的團隊，也能有可維護的選擇。若它們的既有入口已足夠，就不需要只為了跟著系列再複製一層。
 
-## 多個 Agent 開始各管各的 Policy，才需要共同入口
+## 工具開始修改資料時的控制
 
-單一 Runtime 可以在應用裡完成 Policy。兩個 Agents 共用同一個 LLM Provider，也不代表中間一定需要 Gateway。真正的 Trigger 是多個 Runtime 各自重複處理 JWT、Retry、Timeout、Provider Credential、Tool Policy 與 Telemetry，設定開始分岔，事故時又缺少共同 Observation Point。
+當 Agent 能改資料，第一個問題會變成：這筆修改對哪個資源、依據什麼需求、允許哪些參數？例如工單只允許測試環境，工具提出的資料庫卻是正式環境，這個差異應在真正呼叫資源以前被檢查。
 
-這時 agentgateway 才有清楚責任：收斂 LLM／MCP／A2A Traffic 的 Authentication、Routing、Policy 與 Telemetry。既有 Ingress 可以繼續處理 TLS、Host Routing 與 Access Log。Tool 的業務合法性、Agent Workflow，以及資料庫裡某筆 Resource 能不能修改，仍由 Runtime 或 Resource Server 決定。
+規則可以先由應用與 Resource Server 實作。ADK Callback 能在工具執行前做檢查，資源服務則以自己掌握的權限和業務狀態作最後判斷。集中式平台未成立時，單一應用仍可以有明確的授權路徑，不需要等 Registry 或控制面才開始保護資源。
 
-Day 24 的成本也沿用這個 Boundary。Model Catalog 可以把 Token Usage 換成 Request-level Estimate，Validated Caller／Team Mapping 則提供 Showback 維度。正式 Chargeback 再補 Pricing Version、Provider Billing Attribution、Credit／Discount 與 Invoice Reconciliation。失敗 Request 沒有 Usage 時保持 `UNKNOWN`，不能為了報表完整而寫成零。
+執行紀錄也要跟著改變。只記請求耗時已經不足以調查修改，還需要操作識別、規則版本、目標、必要的參數摘要、實際執行產物與資源結果。敏感參數不必完整寫入，但事件要能核對這次判斷涵蓋的內容。
 
-BYO Agent、Git、單一 Gateway 與 LGTM 若已能穩定交付，架構可以停在這裡。Gateway 上線後，不會自動產生下一張 kagent 或 Registry 採用單。
+若需要人工批准，就得固定待執行的動作，交給有權處理這個資源的人。批准後目標或參數改變，原決定應失效。Day 18 已驗證相容 BYO 路徑的 Pause／Resume，正式批准者身分與完整動作綁定則仍需另外驗證。
 
-我們需要共同入口，是因為跨 Runtime 的流量規則和觀測資料值得在同一個地方驗收，不是因為每一個 Agent 都必須搬到同一套 Runtime。這個取捨保留應用團隊對 Tool、Workflow 與框架參數的控制，也讓平台團隊把心力放在真正共用的認證、路由和政策上。
+這個情境能否停下來，取決於允許與拒絕是否可重現，批准是否對應真正執行的內容，以及結果能否核對。把所有修改送去人工審核，也不能替代程式本來就能確定的環境與權限限制。
 
-## 真正需要跨團隊自助，才評估新的控制面
+## 多個 Runtime 共用流量規則
 
-到了多個團隊都要上架 Agent 的階段，Deployment、Agent Card、Discovery 和 Catalog 才可能成為平台共同工作。這時可以重新評估 kagent 與 Agent Registry，但兩者不是一包必裝的組合。前者解決 Agent 如何部署和被找到，後者處理 Catalog 與部署宣告。兩邊各自需要維護 Controller、版本升級和例外流程的人。
+第二支 Agent 上線，不一定馬上需要共同 Gateway。可以先看是否真的出現重複工作：多個 Runtime 各自持有 Provider Credential、驗同一類 Token、設定重試與等待，再送不同格式的觀測欄位。若規則只改一次，卻要跨好幾個 Repository 才能完成，就已經有共享控制的需求。
 
-Day 19 已經說明，Registry 能做部署宣告，卻不會替團隊決定誰能批准映像；完整 Agent Image 的 Digest、批准紀錄和部署核對，先進入現有 Git／映像交付流程。Identity 也遵循相同的採用原則：Keycloak 技術鏈跑通，但 IT 尚無資源承接整個企業的人員生命週期，因此目前 Human／M2M 需求由 AWS Cognito 承擔。
+agentgateway 可以在這時接手 LLM、MCP、A2A 的共同認證、路由、政策和流量觀測。平台團隊維護入口契約，應用團隊依契約使用它，保留自己的工具和工作流程。既有 Ingress 仍可以處理對外 TLS 和 Host Routing，兩層的責任要明確。
 
-有些需求甚至不屬於這條平台化路徑。事故調查若要定位執行的 Pod，可以先關聯 Pod UID；如果下游政策必須驗證是哪個工作負載送出請求，再設計對方能驗的憑證。若法遵對紀錄有特定保存期限或防刪改要求，先檢查 Git 的變更歷史、Kubernetes Audit Log 與既有觀測平台能否滿足，再補真正缺的部分。若成本要正式分攤，還得對上 Provider 帳單，而不只看 Gateway Estimate。這些都可以獨立啟動，不會因為部署了 kagent 或 Registry 就順便完成。
+這種收斂需要遷移計畫。先挑一條流量，核對憑證來源、拒絕行為、Timeout 和 Trace Context，再逐步接更多 Runtime。共同入口失敗可能影響多個應用，因此上線時也要有維護者、回退方式與容量考量。這些是導入設計，不能只由 Quickstart 能啟動就推論完成。
 
-## 三種情境，各有停留點
+成本分組也可以在入口收斂。先用可信團隊對應和有限維度觀察用量，若需要正式分帳，再接價格版本與 Provider 帳務核對。Day 24 的失敗 Attempt 沒有 Usage，就應保持未知，面板上的完整外觀不能代替成本證據。
 
-把前面三種情境放在一起，停留條件就比較清楚。單一團隊的唯讀 Agent，只要 Credential Scope、Tool Outcome、查詢證據和維護者都明確，可以停在 Git-owned BYO Runtime 與既有 LGTM。多個 Agent 的 Auth、Route、Policy 和 Telemetry 開始漂移時，加入 agentgateway 作為共同入口。如果這些設定已有 Owner，仍不必立刻加 Deployment Control Plane。能改動正式環境的 Agent 則先補目標資源授權、實際執行版本、必要時的人工核准和執行結果，無論它是否已上架到共同 Catalog。
+當共同規則已有負責人，Runtime 仍由應用維護，觀測也能查回操作，就可以停在 BYO Runtime、Git、單一 Gateway 與原有平台。Gateway 接管流量，並不會自然產生集中部署或目錄需求。
 
-細項與重開評估條件留在可複製的 [Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r5/articles/day-28/adoption-trigger-matrix.md)。它是選擇時的核對表，不是要求每個團隊照順序採購的成熟度模型。我們自己的架構已經走到單一 Gateway 與既有 LGTM 並用。接下來真正要問的，是高風險動作由哪一層拒絕、哪個人有權批准。
+## 跨團隊部署與目錄的需求
 
-Day 29 會拿這種動作走一遍設計審查。共同入口可以擋下不合規的請求，仍不能替業務 Owner 判斷這次修改是否符合意圖。責任必須沿著同一筆 Action 交接，而不是在架構圖上統稱「平台負責」。
+之後若多個團隊都需要自助發布 Agent、取得可用版本、提供 Agent Card 和操作入口，就可以評估部署控制面。kagent 提供 Kubernetes 上的 Agent 部署與發現能力，實際可沿用哪些 Runtime 操作，則要用團隊自己的 Agent 契約驗證。
+
+Registry 處理的是另一項需求：集中搜尋、上架和管理部署宣告。它可以和部署平台整合，也會新增可以修改期望狀態的入口。導入前要說明 Git 與 Registry 誰能修改、版本如何批准，以及失敗部署和下架由誰接手。
+
+交付的內容識別不必等 Catalog 才做。先將完整 Agent Image 固定到 Digest，保留建置和批准紀錄，再讓執行事件核對實際版本，既有 Git 和映像流程就可以開始承擔這項工作。新增 UI 不會自動讓可移動 Tag 變成可信產物。
+
+在我們的經驗裡，Keycloak 技術鏈曾跑通，但企業人員生命週期尚未有人完整承接，所以沒有繼續擴成新的 Identity Center。部署與目錄也沿用相同判斷：需求、維護者和交接範圍一起成立，才有平台能持續接走的工作。
+
+## 可以獨立啟動的需求
+
+工作負載驗證、額外保存和正式成本分攤，不必等到某一層平台完成。若只是事故定位需要知道哪個 Pod 產生事件，可以先保存 Pod UID。若下游要依工作負載身分授權，才需要它能驗證的憑證與信任設定。
+
+保存要求也要從目的出發。先檢查既有 Git 變更歷史、Kubernetes Audit Log 和觀測資料的範圍，是否符合要保存的事件與期限。若提出防刪改或特定存取要求，再由相關負責人確認缺口和補強方式。這些能力都不會因為安裝了 kagent 或 Registry 順便成立。
+
+導入審查可以留一份簡單決策紀錄：目前的問題、新控制接走的工作、負責人、已驗收的結果，以及什麼變化會重開評估。例如新增有副作用的工具，或多個應用的認證設定開始漂移，就讓先前停留的架構重新接受檢查。
+
+[Agent Governance Adoption Trigger Matrix](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-28-r6/articles/day-28/adoption-trigger-matrix.md) 提供可複製的細項。它將需求、控制、維護者和重驗條件放在一起，方便下次 Review 看條件是否改變。導入順序由實際工作推進，讀者可以使用自己的系統填這份表。
+
+高風險工具最後仍會留下一個問題：平台可以維護共同規則，但哪個角色有權決定某次修改可以做？下一篇沿一筆測試與正式環境不一致的操作，把這個決定交回具體的資源與業務負責人。

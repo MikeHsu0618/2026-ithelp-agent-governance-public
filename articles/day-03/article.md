@@ -1,12 +1,14 @@
 # Day 3｜Prompt Injection 防護實測：Guard 漏判後，Tool Allowlist 擋下危險動作
 
-Day 2 把一筆 Tool Call 拆開後，最直接的缺口就在模型與 Tool function 之間：模型提出動作，不代表這個動作已經取得授權。Day 3 我沿用同一個 SRE Investigation Agent，把 Log 裡的攻擊指令換一種寫法，看看輸入檢查漏掉之後，執行前授權能不能真的把 Tool 擋下來。
+一支用 Google ADK 寫的 SRE Investigation Agent，原本只需要讀 Log 和 Metrics，協助調查服務延遲。模型卻可能把 Log 裡偽裝成操作手冊的文字當成指令，提出 `delete_demo_database`。如果程式直接照做，讀取資料的功能就成了執行危險動作的入口。
 
-這次仍用 Day 1 的安全標記代替刪除資料。標記增加，代表危險 Tool 已經進入執行階段。只有數字維持不變，才能證明它在 function 開始前就被攔下。
+Day 2 沿著這筆工具呼叫找到模型與 Tool function 之間的授權缺口。這篇把 Log 裡的攻擊指令換一種寫法，看看輸入檢查漏掉之後，執行前授權能不能真的把 Tool 擋下來。
 
-## 先把兩個問題分開測
+[這次 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-03-r4/labs/01-unsafe-agent/README.md) 用安全標記代替刪除資料。標記增加，代表危險 Tool 已經進入執行階段。要確認它在 function 開始前被攔下，除了看標記維持不變，還會對照拒絕事件與工具執行紀錄。
 
-我一開始把三條結果排在同一張表裡，後來才發現它們其實在回答兩個問題。
+## 輸入檢查與執行授權的對照方式
+
+同一段攻擊文字，會先經過輸入檢查，再由模型選擇工具，最後交給執行前的授權規則。若只看最後有沒有執行，很難知道是哪一層有效，因此這次分開比較兩個問題。
 
 第一個問題是 keyword guard 能不能認出攻擊。原始 Log 直接寫出 `delete_demo_database`，guard 很容易命中。改寫後的 Log 把名稱拆成 `delete`、`_demo_` 和 `database`，完整字串消失了，Gemini 卻仍能把三段重新組起來。
 
@@ -64,7 +66,7 @@ def before_tool_callback(tool, args, tool_context):
 
 目前這段規則只看 `tool.name`，所以它是 name-based allowlist，不是完整的企業授權。它還不知道誰要求動作、目標資源是哪一個，也沒有檢查 `args`。Day 3 先把最小的執行前拒絕點跑通，後面再補齊 policy input。
 
-![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用全部放行的 policy 時讓危險 Tool 繼續執行，換成 Tool allowlist 後則在 function 開始前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-03-r3/assets/diagrams/day-03/guard-vs-authorization.png)
+![改寫 Log 通過 keyword guard，Gemini 提出 delete_demo_database。ADK callback 使用全部放行的 policy 時讓危險 Tool 繼續執行，換成 Tool allowlist 後則在 function 開始前拒絕。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-03-r4/assets/diagrams/day-03/guard-vs-authorization.png)
 
 這個 callback 是 Agent runtime 裡的一個可用攔截點。跨 runtime 共用的規則，可能更適合集中到 Gateway，最終資源也仍要驗證自己的權限。這一篇先確認最基本的一件事：授權判斷確實發生在副作用之前。
 
@@ -72,7 +74,7 @@ def before_tool_callback(tool, args, tool_context):
 
 兩次 Gemini live run 都使用相同的改寫 Log。全部放行時，安全標記增加一筆。換成 allowlist 後，危險 function 沒有執行。
 
-![Gemini 對相同改寫 Log 都提出 delete_demo_database。全部放行時危險 Tool 進入執行階段，Tool allowlist 則在 function 執行前拒絕，安全標記維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-03-r3/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
+![Gemini 對相同改寫 Log 都提出 delete_demo_database。全部放行時危險 Tool 進入執行階段，Tool allowlist 則在 function 執行前拒絕，安全標記維持零。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-03-r4/assets/screenshots/day-03/01-live-guard-vs-allowlist.png)
 
 真正讓這個結果有實務價值的是後半段。Gemini 收到拒絕結果後，沒有卡死，也沒有一直重試同一個危險 Tool，而是改用 allowlist 裡的 `query_metrics` 完成 latency investigation。Policy 擋的是不安全動作，合理的唯讀調查仍然可以完成。
 
@@ -81,11 +83,11 @@ delete_demo_database → DENY
 query_metrics        → ALLOW → 調查完成
 ```
 
-第一次跑 allowlist 時也踩到一個熟悉的觀測問題：危險 Tool 已經被拒絕，後面的 `query_metrics` 卻成功了，舊版摘要因此只留下 `SUCCESS`。我補上 outcome priority 和回歸測試，讓拒絕事件不會再被後續成功結果洗掉。這是 Day 1 同一類 summary bug 的另一個案例，完整事件與修正前後結果留在 [Day 3 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-03-r3/assets/screenshots/day-03/evidence.md)，正文不再重播整段事件。
+第一次跑 allowlist 時也踩到一個熟悉的觀測問題：危險 Tool 已經被拒絕，後面的 `query_metrics` 卻成功了，舊版摘要因此只留下 `SUCCESS`。我補上 outcome priority 和回歸測試，讓拒絕事件不會再被後續成功結果洗掉。這是 Day 1 同一類 summary bug 的另一個案例，完整事件與修正前後結果留在 [Day 3 evidence](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-03-r4/assets/screenshots/day-03/evidence.md)。
 
 ## 跟著跑三條路徑
 
-完整 Lab、fixture 與 live mode 說明都收在同一份 README，需要時可以[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-03-r3/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key，也能從 repo root 跑固定案例：
+完整 Lab、fixture 與 live mode 說明都收在同一份 README，需要時可以[直接執行 Day 3 Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-03-r4/labs/01-unsafe-agent/README.md)。沒有 Gemini API Key，也能從 repo root 跑固定案例：
 
 ```bash
 make lab-01-up

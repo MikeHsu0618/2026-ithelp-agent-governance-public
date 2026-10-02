@@ -1,16 +1,51 @@
-# Day 26｜Agent 事件回放實戰：用 Trace ID 重建 Tool Call 與 Audit 缺口
+# Day 26｜Agent 事件回放實戰：從 Trace ID 查回操作與授權證據
 
-Day 25 的 SRE Agent 已經能從 Loki Result 拿到 `trace_id`。把這串 ID 貼進 Tempo，可以沿著 Spans 找到 agentgateway、Agent Runtime 和 MCP Server，也很容易把完整的瀑布圖當成事故證據。可是當問題變成「誰授權這次 Tool Call？跑的是哪個 Agent Artifact？Approval 有沒有真的發生？」Trace 就不再足夠。
+拿到一個 Trace ID，通常可以開始回答「這次請求經過哪幾個服務，時間花在哪裡」。如果調查的是一次可疑工具操作，接下來還會有人問：使用者原本要求什麼？Agent 提出哪個動作？誰放行？最後資源有沒有改動？這些答案不一定都在 Waterfall 裡。
 
-我把 Day 1 那次危險 Tool Call 拿回來重建，第一個問題甚至不是缺少 Principal，而是同一條 Trace 裡有兩個 Actions。Agent 先提出 `delete_demo_database`，後面又呼叫 `query_metrics`。只依 `trace_id` 排序，很容易讓後一個 Tool 的成功結果蓋掉前面已觸發的 Canary，這正是 Day 1 曾經修過的 Summary Bug。
+事件回放，就是用保留下來的紀錄，重新建立這些動作和判斷的時間線。它不是把模型再跑一次，也不是讓模型替缺失資料寫出合理故事。調查者要能指出每個結論來自哪份資料，並說明有哪些問題當時根本沒有記下來。
 
-更重要的是，Day 1 只留下本機 JSONL、Manifest 與 No-op Canary Receipt，沒有任何資料能證明這串 Trace ID 當時曾進入 Tempo 或 Loki。Day 26 的 [Lab 05 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r4/labs/05-incident-replay/README.md) 因此把兩件事分開：一邊回放鎖定的 Day 1／Day 3 歷史 Artifacts，另一邊重新跑一筆現行 Action，驗證今天的 LGTM Pipeline 能保存什麼。兩組資料可以比較，不能合併成同一場事故。
+本篇回看系列最初的安全示範：Agent 讀到混入操作指令的 Log，提出 `delete_demo_database`，工具只寫下 no-op 標記，沒有真的刪資料庫。這份歷史資料很適合練習回放，因為它能重建部分動作，也留下明確缺口。先看回放的方法，後段再對照當時的紀錄和後來的新觀測管線。
 
-![上半部是 Day 1 歷史 Artifact，經 replay projection 產生帶證據狀態的 Governance Event。下半部是 Day 26 另跑的新 action，由 Tempo、Loki 與 Prometheus 分別提供 request path、structured event 與 aggregate metrics。兩個 run 以虛線分開，不能混成同一場事故。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26-r4/assets/diagrams/day-26/replay-evidence-boundary.png)
+## 先確定正在調查哪個動作
 
-## Trace、Action 與 Event 的粒度
+一次 Agent 工作可能包含多個工具。查異常時，Agent 可能先查 Logs，再查 Metrics，最後整理回答。如果把整條 Trace 的最後狀態當成所有工具的結果，前面某個錯誤或危險操作就可能被後面的成功蓋掉。
 
-Day 1 的八筆 Events 包含共用的 `run.started`、`run.completed`，以及兩組 Tool Call：
+本系列的歷史資料正好有這個情況。同一條 Trace 裡，Agent 先提出 `delete_demo_database`，後來又呼叫 `query_metrics`。第二個工具成功，並不能改變第一個工具已走到安全 Canary 分支的事實。Day 1 的 Summary Bug，就是在摘要時沒有維持這個動作粒度。
+
+因此回放前要先選定目標動作，再找屬於它的提議、Policy Decision 和執行結果。共用的工作開始、工作結束事件可以提供時間範圍，其他工具的事件則不能拿來補目標動作的結果。
+
+| 識別 | 要關聯的範圍 | 回放時的用途 |
+| --- | --- | --- |
+| `trace_id` | 一條技術執行路徑 | 找服務、呼叫關係與耗時 |
+| `action_id` | 一個受治理的操作 | 對齊工具提議、授權與資源結果 |
+| `event_id` | 一筆事件 | 識別哪份紀錄、處理重複寫入 |
+
+這些 ID 需要在產生資料時有明確契約。舊紀錄只有 Trace ID 和 Span ID 時，今天的工具可以產生重建事件的識別，但不能把新 ID 說成當時已經存在的 Action ID。
+
+## 一份證據能支持多強的結論
+
+找到欄位，還要看它是怎麼取得的。Runtime 自行寫下 `ALLOW`，能說明它輸出過放行判斷。若另有可信的 Policy Decision Receipt，才可能再確認由哪個判斷點、依哪份規則簽發。兩者都可能有用，證據強度不同。
+
+本篇用四種狀態標記這個差別。它們描述資料來源與適用性，調查者應連同原因一起讀：
+
+- `VERIFIED`：本次回放能重新驗證某項性質，例如輸入檔符合鎖定的內容摘要。必須交代驗證的是什麼。
+- `OBSERVED`：原始紀錄確實保存這個值，但沒有獨立來源確認它的內容。
+- `UNKNOWN`：沒有足夠資料回答，不能把空白換成安全或未發生。
+- `NOT_APPLICABLE`：依已知流程，這個欄位在此處不應產生。
+
+例如 Policy 在執行前拒絕工具，原本就不會有工具修改結果，可以記為不適用。若 Policy 放行，卻找不到結果，則要記未知，繼續查工具端與儲存管線。兩種空白會導向不同調查工作。
+
+HITL 的批准也一樣。沒有找到 Approval，可能是流程不需要，也可能需要但未留下紀錄。要判定不適用，必須先有當時的規則和流程依據，不能只因為檔案裡沒有這個欄位就推論沒有人工核准。
+
+## 回放歷史操作的時間線
+
+[Lab 05 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r5/labs/05-incident-replay/README.md) 讀取鎖定的 Day 1、Day 3 Artifacts，包含 Manifest、JSONL 事件和 Canary 收據。這些都是當時的本機檔案。它們沒有證明那條舊 Trace 曾送進 Tempo 或 Loki，因此後段的新後端查詢另算一組證據。
+
+下圖上方是歷史檔案到重建事件的路徑，下方是重新送出的現行請求。先分開它們的時間和來源，才能避免把今天查得到的資料放回舊事件。
+
+![歷史 Artifact 產生重建治理事件，現行請求另驗證 LGTM 查詢能力。兩组資料屬於不同 Run。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26-r5/assets/diagrams/day-26/replay-evidence-boundary.png)
+
+Day 1 原始事件包含共用的開始、結束，以及兩組工具動作。目標工具的順序是：
 
 ```text
 delete_demo_database
@@ -20,78 +55,56 @@ query_metrics
   model.tool_call -> policy.decision -> tool.executed
 ```
 
-本文只回放 `delete_demo_database`，所以 Timeline 保留共用 Run Events 和目標 Tool 的三筆 Action Events。`query_metrics` 即使位於同一條 Trace，也不能加入這個 Action 的結論。
+回放 `delete_demo_database` 時，只保留它的三筆 Action Events 和共用的 Run Events。`query_metrics` 用來確認同一工作還做了別的事，不加入刪除工具的結果。
 
-三種識別負責不同粒度：
+重建事件為每個欄位保存 Value、Status、Sources 和 Reason，也就是值、證據狀態、來源與理由。原始 Action ID 不存在，就保留這個缺口。`evt-replay-*` 識別的是今天產生的 Projection，事件類型也標為 `RECONSTRUCTED_GOVERNANCE_EVENT`。
 
-| ID | 粒度 | 適合回答的問題 |
+## 歷史資料留下的內容與缺口
+
+原始 Manifest 和事件都記錄 Trace ID，工具提議、Policy 和執行事件也能互相對照。這讓我們知道模型提出哪個工具、Runtime 寫下什麼判斷，以及安全 Canary 是否觸發。它們仍不足以說明完整的發起者身分和執行產物。
+
+| 回放問題 | 現有資料 | 證據狀態 |
 | --- | --- | --- |
-| `trace_id` | 一次跨服務執行 | Request 經過哪些 Services，哪一段延遲或失敗 |
-| `action_id` | 一個治理動作 | Tool Proposal、Policy Decision 與 Effect 是否屬於同一個 Action |
-| `event_id` | 一筆治理事件 | Normalized Event 是哪筆紀錄，是否重複寫入 |
+| 提出哪個工具？ | `delete_demo_database`，提議與執行紀錄可對照 | `OBSERVED` |
+| Runtime 決定什麼？ | `ALLOW`，沒有獨立 Decision Receipt | `OBSERVED` |
+| 工具留下什麼結果？ | `CANARY_TRIGGERED` 的 no-op Artifact | `OBSERVED` |
+| 哪個可信主體發起？ | 缺經驗證的 Human／Service Principal | `UNKNOWN` |
+| 實際跑哪份 Agent？ | 缺映像 Digest 或 Deployment Revision | `UNKNOWN` |
+| 是否完成必要的批准？ | 缺足夠的 Approval 紀錄 | `UNKNOWN` |
+| 當時是否保存到 Tempo？ | 缺舊 Trace 的 Backend Receipt | `UNKNOWN` |
 
-舊資料只有 `trace_id` 與 `span_id`。Replay 工具不會倒推一個不存在的原始 Action ID，而是替今天產生的 Projection 建立 `evt-replay-*`，並標示為 `RECONSTRUCTED_GOVERNANCE_EVENT`。它識別的是 Day 26 的重建結果，不是假裝 Day 1 當時就有完整事件模型。
+回放工具能驗證輸入檔案符合 Repository Lock，但這不會把檔案中的所有欄位一起升成 `VERIFIED`。檔案內容沒變，和當時寫入者的身分可信，是兩種不同性質。
 
-## 每個欄位都有證據狀態
+缺少 Principal 時，也不從 Username、Pod Name 或模型名稱猜出一個。這樣保留下來的事件可能不好看，卻能明確告訴下一次 Instrumentation：入口應記身分驗證來源，Runtime 應記執行版本，需要批准的流程應留下可對回動作的決定。
 
-Governance Event v1 替欄位保存 `value`、`status`、`sources` 與 `reason`。四種狀態不是資料品質分數，而是限制讀者可以做出的推論：
+## 執行前拒絕的對照
 
-- `VERIFIED`：這次 Replay 能重新驗證，例如輸入檔符合 Repository Lock。
-- `OBSERVED`：原始 Artifact 有這個值，但沒有獨立來源背書。
-- `UNKNOWN`：當時沒有留下足夠資料，不能把空白解釋成安全、未發生或不存在。
-- `NOT_APPLICABLE`：流程走到這裡本來就不該產生該欄位。
+Day 3 的相同危險工具提議，在 Tool Allowlist 做出 `DENY` 後，沒有走到 `tool.executed`，Canary 檔也為空。先前的 Keyword Guard 仍可能被混淆字串繞過，但執行前的工具控制確實終止了這條路徑。
 
-Day 1 重建後，Tool、Policy 與 Canary 都有來源，Identity 與 Approval 則沒有：
+這時修改結果應是 `NOT_APPLICABLE`。若強迫每個動作都交一份 Effect Receipt，實作者反而可能替沒有執行的工具補造結果。回放要按實際分支判斷需要哪些證據，才看得出控制在哪裡生效。
 
-| 欄位 | 值 | 狀態 | 原因 |
-| --- | --- | --- | --- |
-| `trace_id` | `a281375f...11c9b` | `OBSERVED` | Manifest 與 Event Stream 都有記錄 |
-| `target.tool` | `delete_demo_database` | `OBSERVED` | Proposal、Policy 與 Execution Event 能對上 |
-| `policy.decision` | `ALLOW` | `OBSERVED` | Runtime 寫下決策，沒有獨立 Decision Receipt |
-| `result.effect_receipt` | `CANARY_TRIGGERED` | `OBSERVED` | No-op Canary 另有 Artifact |
-| `identity.principal` | `null` | `UNKNOWN` | 沒有 Verified Human 或 Service Principal |
-| `agent.artifact_digest` | `null` | `UNKNOWN` | 沒記 Image Digest 或 Deployment Revision |
-| `approval` | `null` | `UNKNOWN` | 無法分辨沒做 Approval，還是做過但未記錄 |
-| `backend_presence.tempo` | `null` | `UNKNOWN` | 沒有舊 Trace 的 Tempo Receipt |
+真正修改資源的工具則需要相應結果。建立工單可以保存後端回傳的 Ticket ID，修改 Kubernetes 資源可以核對 Revision 與後續狀態，資料操作需要對照交易或查詢結果。這些是設計例子，不能用本篇 no-op 收據證明它們已完成。HTTP 狀態和 Span 結束只能提供過程線索，資源結果要由能確認它的元件回報。
 
-這張表故意不把每格填滿。從 Username、Pod Name 或 Model Name 猜出一個 Principal，只會讓資料看起來完整，不能增加可信度。Runtime 寫下 `ALLOW` 也只證明它曾輸出這個值，沒有獨立 Policy Receipt 時仍屬 `OBSERVED`。
+## 現行管線能保存什麼
 
-## DENY Action 的合理空白
+歷史回放之外，Lab 另外送一筆新的 `normal-call`。它經 Client、agentgateway、Runtime 和 MCP Adapter，再將訊號送進 Alloy 和 LGTM。新請求有自己的 Action ID 和 Trace ID，用來檢查現行管線的查詢能力。
 
-Day 3 的 `POLICY_DENIED` 是一組重要對照。模型仍提出 `delete_demo_database`，Keyword Guard 也因混淆字串而放行，但 Tool Allowlist 在執行前做出 `DENY`。Timeline 因此沒有 `tool.executed`，Canary 檔也是空的。
+下圖是這次新請求的 Tempo Waterfall。可以沿 Runtime 的下游呼叫找到 MCP Adapter，確認工具端與入口仍在同一條路徑，而不只是各自有紀錄。
 
-這時 Effect Receipt 應是 `NOT_APPLICABLE`，因為 Policy 已經終止執行路徑。若 Decision 是 `ALLOW`，卻找不到 Tool Result 或 Effect Receipt，才應標成 `UNKNOWN`。要求所有 Actions 都填入 Effect，只會逼實作者替被拒絕的動作補造一張 Receipt，反而抹掉控制真正生效的事實。
+![現行請求的 Tempo 實拍：四個服務、八個 Span，能追到 MCP Adapter。這不是 Day 1 的歷史 Trace。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26-r5/assets/screenshots/day-26/grafana-tempo-action-trace.png)
 
-不同 Tool 需要不同 Effect Evidence。讀取類 Tool 可以保存 Response Digest 或 Query Outcome，修改 Kubernetes 資源則要看 Resource Version、Controller Status 或 Read-after-write。建立工單應留下 Ticket ID 與後端 API Receipt。HTTP `200`、Span End 或 Function Return 都只是執行過程，不能自動證明 Domain Effect。
+Tempo 查到四個 Service、八個 Span。Loki 找到四筆帶相同 `action_id` 的結構化事件，Prometheus 也收到 Gateway 聚合指標。三者分別提供路徑、事件內容與整體趨勢，沒有為回放把每筆操作 ID 加進 Metric Label。
 
-## 現行 LGTM 的回放能力
+這組結果讓我們知道今天的資料可以如何關聯，不能改善舊事件原本沒有寫下的欄位。即使現行 Waterfall 完整，還要另外檢查可信 Principal、Policy、Approval 和 Effect 是否有來源，才能做授權調查。
 
-歷史 Replay 完成後，Lab 另送一筆新的 `normal-call`，用它自己的 Action ID 和 Trace ID 分別查 Tempo、Loki 與 Prometheus。舊紀錄回答當年留下了什麼。新請求回答今天的 Instrumentation 能查到什麼。
+## 檔案一致性與保存完整性
 
-![Grafana Explore 的 Tempo trace 實跑畫面。查詢指定 trace ID，結果顯示 ithelp-lab-client、agentgateway、agent-runtime 與 mcp-adapter 四個 service，共八個 spans。路徑包含 Agent request、Gateway、Runtime、MCP Call 與 Tool execution。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-26-r4/assets/screenshots/day-26/grafana-tempo-action-trace.png)
+歷史 Case Directory 的 `evidence-lock.json` 保存內容摘要。Replay 前會重新計算 Manifest、Events 和 Canary 的 SHA-256，任何差異都停止。這能讓文章、測試和後續重跑使用同一份輸入，避免素材隨編輯悄悄改變。
 
-Tempo 顯示 `ithelp-lab-client → agentgateway → agent-runtime → agentgateway → mcp-adapter` 的 Request Path，Loki 找到四行帶相同 `action_id` 的 Structured Events。OpenTelemetry LogRecord 可以帶 Trace ID 與 Span ID，Resource 則描述哪個 Service 送出資料，三者本來就負責不同關聯層級。
+這份 Lock 不是事件發生當下的簽章，也不能證明一名有權修改 Repository 的人無法同時改檔案與 Lock。若組織需要防刪改或長期保存，應按具體要求檢查寫入權限、保存機制與存取紀錄。Git 版本可以追設定與素材變更，每次 Agent 執行仍需要自己的事件來源。
 
-| Backend | 本次結果 | 能證明 | 不能單獨證明 |
-| --- | --- | --- | --- |
-| Tempo | 4 Services、8 Spans | 跨服務 Request Path 與時間關係 | Principal 已驗證、Audit 沒漏事件 |
-| Loki | 4 Lines 命中 `action_id` | 各元件寫下相關 Structured Event | 儲存不可竄改、每個 Effect 都有 Receipt |
-| Prometheus | Gateway Metrics 正常收集 | 整體流量與錯誤趨勢 | 某個 Action 的逐筆責任鏈 |
+觀測資料也可能因 Sampling、Collector 故障或 Retention 而缺失。查不到工具事件時，先確認原本由誰寫入、管線是否送達、資料是否已過保存期，再決定能做什麼結論。沒有紀錄是一個調查狀態，不能單独當成沒有發生的證據。
 
-Prometheus 適合聚合，不需要為了事件回放加入 `action_id`。把單筆關聯硬塞進 Metric Labels，只會把 Day 23 的 Cardinality 問題帶回來。
+完整欄位可對照 [Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r5/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json) 和 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r5/articles/day-26/incident-replay-field-guide.md)。把來源和未知保留在事件裡，下一次審查才能分辨該補驗證、補 Instrumentation，還是補保存。
 
-## 重跑時確認事件檔案沒變
-
-Day 1 與 Day 3 的 Case Directory 各有 `evidence-lock.json`。Replay 前會重新計算 Manifest、Events 與 Canary 檔案的 SHA-256，有任何差異就停止。這能避免文章、測試與輸入 Artifact 在後續編輯中悄悄漂移。
-
-Repository Lock 是為了讓 Lab 重跑時讀到同一份輸入，Git Commit 也保留文章與設定的版本變更。它們足以處理這裡的重現需求，但不是每次 Agent 執行都會留下 Git Commit。實際呼叫仍要從 Gateway、Runtime、Tool 和後端的紀錄查。若組織另有長期保存或法遵要求，再檢查既有紀錄能否滿足。
-
-Telemetry 適合把這些執行紀錄串起來，卻仍可能因 Sampling、Collector 故障或 Backend 保存期限而缺少資料。因此 Trace 查不到某筆動作時，要回頭確認哪一站原本應該寫入，而不是立刻把空白解讀成「沒有發生」。
-
-完整 Replay 的設定、指令與原始結果都留在前面的 Lab 05 README。要替自己的事件逐欄標示來源與狀態，可以對照 [AI Governance Event Schema v1](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r4/labs/05-incident-replay/src/incident_replay/schemas/replay-event-v1.schema.json)和 [Incident Replay 欄位指南](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-26-r4/articles/day-26/incident-replay-field-guide.md)。
-
-## Trace 之後的責任
-
-歷史 Artifact 能找回 Tool、Resource、Policy Decision 與 Canary Result。Principal、Delegation、Agent Artifact、Credential、Approval 和原始儲存完整性仍是 `UNKNOWN`。新 Action 雖然已能跨四個 Services 查詢，也改變不了舊事件的紀錄缺口。
-
-這些空白把問題帶到 Day 27：身分在哪裡驗、Agent 從哪裡交付、Tool 在哪裡執行、最後又去哪裡查。下一篇會把前面登場的產品放回同一筆請求與交付路徑，讓讀者看出各系統負責哪段，而不是把缺的欄位直接變成產品採購清單。
+回放最後留下的問題，是每份證據原本由哪個系統負責提供。下一篇把身分、Runtime、Gateway、交付和觀測放回同一張產品地圖，讓缺口能對到具體的位置與維護者。

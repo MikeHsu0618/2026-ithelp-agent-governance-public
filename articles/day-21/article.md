@@ -1,86 +1,98 @@
-# Day 21｜Agent Telemetry Pipeline 實戰：把 Gateway、Runtime 與 MCP 的 Trace 接起來
+# Day 21｜Agent Telemetry Pipeline 實戰：追過 Gateway、Runtime 與 MCP 的服務邊界
 
-Day 20 的 Tempo Waterfall 有兩個 Span，`invoke_agent` 底下接著 `execute_tool`。欄位 Contract 看起來完整，`action_id` 也能把 Trace 和 Governance Event 對上。不過兩個 Span 都由同一個 Python Runner 產生，Request 根本沒有跨過服務邊界。
+假設你請 Agent 查一個服務的異常，畫面一直停在「查詢中」。Gateway 的紀錄顯示請求已送出，Runtime 說自己正在等工具，工具服務卻說查詢早就完成。三邊都各有紀錄，值班的人仍不知道這幾筆是不是同一次操作，也不知道時間究竟花在哪裡。
 
-單機 Demo 只要 Parent Span 包住 Child Span，畫面自然連得起來。Agent Runtime、Gateway 和 MCP Server 分開部署後，每個 HTTP Request 都可能把因果關係弄丟。Day 21 將它們拆成真正獨立的服務，再故意拿掉一次 `traceparent`，比較「Tool 執行成功」與「整條路徑追得到」之間的差異。
+Agent 的工作很容易跨過這些邊界。Runtime 負責安排步驟，Gateway 負責轉送與入口控制，MCP 服務負責提供工具。每個元件都看見自己的那一段，把它們的 Log 放進同一套平台，也還需要明確的關聯方式，才能從使用者的請求一路追到工具。
 
-## 一條 Data Path，四個 Telemetry Producer
+前一篇先討論一次操作要留下什麼。本篇接著處理資料分散之後的調查方式：先理解跨服務追蹤怎麼接線，再比較一條完整路徑和一條中途斷開的路徑。兩次工具都正常回應，觀測資料卻會給出不同的調查能力。
 
-公開 Lab 使用單一 agentgateway。Client 先經 Gateway 呼叫 Agent Runtime，Runtime 要執行 Tool 時，再回到相同 Gateway 的 MCP Route。這樣能觀察兩段真實 Gateway Traffic，不必為了 Demo 疊出第二層 Proxy。
+## 一次請求經過哪些元件
 
-下圖要分成上下兩條線閱讀。上半部是 Request 實際經過的 Data Path，下半部是每個元件將訊號送進 Alloy 的 Telemetry Path。
+先把角色放回實際呼叫順序。Client 是提出請求的一端，Agent Runtime 收到請求後安排工作，例如決定呼叫工具、等待結果，再組織回覆。MCP 服務則提供工具介面，讓 Runtime 能取得工具執行結果。本篇以 MCP Adapter 扮演工具端，回傳可檢查的安全收據。
 
-![Day 21 Lab 的 data path 與 telemetry path。Client、agentgateway、Agent Runtime 和 MCP adapter 都是獨立 producer，訊號經 Alloy 送入 LGTM。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r5/assets/diagrams/day-21/telemetry-pipeline.png)
+Gateway 位於轉送邊界。Client 呼叫 Runtime 時會通過它，Runtime 呼叫工具時也會通過它。這兩段可以使用同一個 agentgateway 的不同路由（Route），分別指向 Runtime 和 MCP Adapter，讓它依請求入口選擇轉送目標。
 
-四個 Producer 看見同一筆 Action，手上的資料卻不同：
+下圖有兩條不同用途的路徑。上半部是請求的去向，順著它看，能理解哪個元件在等待誰。下半部是觀測資料的去向，各元件將自己的紀錄送到 Alloy，再存入後端。Alloy 是資料收集器，並不參與上半部的工具決策。
 
-| 元件 | 能直接知道 | 不知道 |
+![請求路徑與觀測資料路徑：Client 經 agentgateway 呼叫 Runtime，Runtime 再經 MCP Route 呼叫工具，各元件另將訊號送至 Alloy。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r6/assets/diagrams/day-21/telemetry-pipeline.png)
+
+同一次操作到了不同位置，能留下的證據也不同。例如 Gateway 可以確認自己選了哪個 Route、上游回了什麼 HTTP 狀態。它通常看不到 Runtime 為什麼選這個工具，也無法只靠 HTTP 回應確認資料庫有沒有改動。
+
+| 元件 | 本篇能直接觀察的內容 | 調查時需要向其他元件確認的內容 |
 | --- | --- | --- |
-| Lab Client | Action 開始、情境、最後 HTTP 結果 | Gateway Route、Runtime 內部步驟 |
-| agentgateway | Request、Route、Upstream、Policy、HTTP Status | Agent 為何選 Tool、Tool 的 Domain Effect |
-| Agent Runtime | Workflow、HITL、Fallback、準備呼叫的下游 | MCP Adapter 是否真的改到資源 |
-| MCP Adapter | Tool Request、Receipt、實際副作用 | 上游完整 Planning 與 Policy 判斷 |
+| Client | 請求開始、最後收到的回應 | 中間哪段服務處理較慢 |
+| agentgateway | Route、轉送目標、入口判斷、HTTP 狀態 | Agent 選工具的理由、資源結果 |
+| Runtime | 工作步驟、準備呼叫的工具、收到的結果 | 工具是否真的改到目標資源 |
+| MCP Adapter | 工具請求、執行收據與回報的效果 | 使用者原始要求、上游授權依據 |
 
-我在維護觀測平台時，Collector 通常不是最難的一段。Claude Code、Agent Workload 或 Gateway 都能把 OTLP 指向同一套 Alloy／LGTM，真正花時間的是 Producer 要寫什麼、欄位由誰負責，以及查詢時能否還原同一筆 Action。訊號都進 Alloy，不代表 Alloy 自動知道 Runtime 的 Approval 或 MCP 的 Effect。
+這也是我在維護觀測平台時比較花時間的地方。OTLP 接到 Alloy 之後，資料有共同的收集入口，但每個欄位仍要有人負責。Runtime 的工作狀態要由 Runtime 記錄，工具結果要由工具端回報。Collector 無法從一份 Gateway Access Log 推導出這兩件事。
 
-## Alloy 接收訊號，不能替 Producer 補資料
+## Trace 如何把局部操作連起來
 
-agentgateway 使用 OTLP/gRPC 傳送 Trace 與 Access Log，Python 寫的 Client、Runtime 與 MCP Adapter 使用 OTLP/HTTP。Alloy 在同一個 Receiver 開啟兩種 Protocol，經過 Memory Limiter 與 Batch Processor 後送進 OTEL-LGTM。Gateway 原生 Prometheus Metrics 則由另一條 Scrape Pipeline 收集。
+Trace 可以想成一次處理的呼叫地圖。地圖上的每一段操作叫 Span，它記錄開始與結束時間、狀態和相關欄位。Runtime 呼叫工具時，可以先建立一個代表下游呼叫的 Span，工具端收到請求後再建立自己的處理 Span。兩段接成父子關係，就能看出「誰呼叫誰」以及等待時間。
 
-[agentgateway Observability 文件](https://agentgateway.dev/docs/standalone/latest/documentation/observability/) 將內建訊號分成 Metrics、Distributed Traces 與 Access Logs，官方也有可直接使用的 [Grafana Dashboard](https://agentgateway.dev/docs/standalone/main/integrations/observability/grafana/)。日常監控不必從空白重做 Request、LLM、MCP、Latency、xDS 與 Runtime Health 面板。
+在同一個程式裡，SDK 可以透過目前的執行 Context 找到上層 Span。換成另一個服務後，記憶體中的 Context 不會跟著 HTTP 自動搬過去，傳送端需要把關聯資訊放進請求，接收端再取出來，當作新 Span 的上層。
 
-本篇自訂畫面只處理官方 Dashboard 沒有的跨服務問題：Gateway、Agent Runtime 與 MCP Adapter 能否對回同一筆 Action，以及 Tempo、Loki 與 Prometheus 是否各自收到該由它們回答的資料。完整 Alloy 與 agentgateway Config 放在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r5/labs/04-telemetry-pipeline/README.md)，正文不再逐段複製。
+[OpenTelemetry Context Propagation](https://opentelemetry.io/docs/concepts/context-propagation/) 用 Inject 和 Extract 描述這兩個步驟。HTTP 常見的載體是 `traceparent` Header，裡面包含 Trace ID、上游 Span ID 和追蹤旗標。接收端沿用 Trace ID，建立自己的 Span ID，並把收到的上游 Span 設為 Parent，後端才知道兩段屬於同一條路徑。
 
-兩段 Request 都實際通過 agentgateway。Route、HTTP Status、Upstream、原生 Trace、OTLP Access Log 與 `agentgateway_requests_total` 由它產生。Python 扮演 Client、Runtime 與 MCP Adapter。這次先專心處理跨服務的 Trace Context，還沒有啟用 JWT。畫面裡若出現 Runtime 填的 Team，不能把它當成 Gateway 已驗證的身分。Day 23 才會讓 JWT 通過 Gateway，再觀察 Claim 如何進入 Telemetry。
+例如 Runtime 正在呼叫工具，送出 Header 的 Context 應該來自這一次下游呼叫。工具端取出後，便能接在正確的呼叫底下。若 Runtime 只是把最初收到的 Header 原封不動複製出去，可能保留同一個 Trace ID，卻跳過中間的父子關係。因此檢查時除了 ID 相同，也要看縮排和 Parent 是否合理。
 
-本文先沿正常呼叫檢查 Trace，再刻意拿掉一次 `traceparent`。兩條路徑使用相同的安全 MCP Tool，只留下 `NO_OP_CANARY` Receipt，不會修改外部資源。其他 Policy 拒絕、HITL、A2A 失敗與 LLM 備援情境，連同完整重跑方式，都留在 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r5/labs/04-telemetry-pipeline/README.md)。
+追蹤資訊本身不代表授權。請求帶著 `traceparent`，只能提供呼叫關聯線索，不能證明呼叫者是哪個人。身分仍須由入口驗證，操作是否符合規則也需要另外記錄。
 
-## 正常 Trace 跨過四個 Service
+## 觀測資料如何送到後端
 
-Normal Call 在 Tempo 裡共有四個 Service、八個 Span。Client、Runtime 與 MCP Adapter 建立自己的 Span，agentgateway 另外替 `/agent/run` 與 `/mcp/execute` 留下 Server／Upstream Span。
+每個元件產生 Trace 和事件之後，還要把資料送到查詢系統。本篇使用 Alloy 接收 OTLP，這是 OpenTelemetry 的資料傳輸協定。OTLP 可以使用 HTTP 或 gRPC，元件採用不同傳输方式，也可以進入同一套收集管線。
 
-![Tempo 的正常 Trace 實拍。畫面由本次 Lab 產生，共有 4 個 service、8 個 span，能從 Lab Client 追到 MCP adapter。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r5/assets/screenshots/day-21/tempo-cross-service-trace.png)
+這裡的 agentgateway 用 OTLP/gRPC 送 Trace 和 Access Log，Python 元件用 OTLP/HTTP。Alloy 接收後先經過記憶體限制與批次處理，再送到 OTEL-LGTM，這是一個整合收集器、Grafana 和觀測後端的本機示範環境。記憶體限制降低 Collector 過載風險，批次處理則減少零散傳送的成本。Gateway 原生的 Prometheus Metrics 另外以定期抓取端點資料的方式收集，這種方式稱為 Scrape。
 
-四個 Service 留在同一條因果鏈，靠的是每一跳都正確處理 Trace Context。Client 在送出 Request 前注入 `traceparent`，Gateway 接續後傳給 Runtime。Runtime 呼叫 MCP Route 時重新注入目前 Context，MCP Adapter 收到後取出 Parent，再建立自己的 Span。[OpenTelemetry Context Propagation](https://opentelemetry.io/docs/concepts/context-propagation/) 將跨服務 Propagation 分成傳送端序列化與接收端反序列化，少掉其中一邊，Backend 不會因為時間接近就替我們接線。
+如果要看 Gateway 本身的流量、錯誤和延遲，可以先使用 [官方 Observability 文件](https://agentgateway.dev/docs/standalone/latest/documentation/observability/) 和 [Grafana Dashboard](https://agentgateway.dev/docs/standalone/main/integrations/observability/grafana/)。本篇另外查看跨服務 Trace，是因為 Gateway 面板無法單獨呈現 Runtime 內部步驟與工具端的全部紀錄。
 
-在這張 Waterfall 裡，`mcp-adapter` 與上游共享 Trace ID，也接上正確 Parent。從 Client 到 Tool 的呼叫因果關係沒有斷。至於呼叫者是誰、Tool 對資源造成什麼結果，得看各自的身分檢查與執行紀錄，不能從一條綠色 Span 猜出來。
+這裡有兩個需要分開驗收的問題。第一個是每個元件的資料有沒有送達，第二個是收到的資料能不能連回同一次呼叫。收集管線健康，並不保證每個服務都傳對了 Trace Context。
 
-## 拿掉 Traceparent，功能成功但責任鏈斷掉
+## 完整路徑與中途斷鏈的比較
 
-負向實驗保留相同 Topology，只在 Runtime → MCP Request 拿掉 Trace Context。重跑指令放在 Lab 04 README。
+[Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-21-r6/labs/04-telemetry-pipeline/README.md) 提供完整設定與重現方式。實測將 Client、Runtime、MCP Adapter 拆成獨立服務，請求實際經過 agentgateway 的兩個 Route。Gateway 的轉送、HTTP 狀態、原生 Trace、Access Log 與 Metrics 都真實執行，Runtime 與工具端則用 Python Fixture 固定流程，讓兩次比較只改變追蹤資訊。
 
-HTTP Response 仍是 `200`，MCP Receipt 也回 `CANARY_TRIGGERED`。若驗收只看功能測試，這一筆會被判成成功。Backend Verifier 回頭檢查原 Trace 時，卻找不到預期的 `mcp-adapter`。
+工具只回傳 `NO_OP_CANARY` 收據，不會修改外部資源。這次也沒有啟用 JWT，Runtime 填入的 Team 只是示範欄位，不能當成 Gateway 已驗證的身分。這個範圍讓我們可以先專心檢查服務邊界上的關聯。
 
-Tempo Waterfall 從四個 Service、八個 Span，變成三個 Service、五個 Span。`mcp.call` 仍掛在 Runtime 底下，真正執行 Tool 的 `mcp.tool.execute` 已落到另一個 Trace。
+正常情況下，Tempo 查到四個 Service、八個 Span。Gateway 在 `/agent/run` 與 `/mcp/execute` 兩段請求都留下處理和轉送紀錄，其他元件留下各自的操作。讀圖時可以從最上方的 Client 往下找 Runtime，再沿下游呼叫找到 MCP Adapter，確認工具端仍在同一條路徑裡。
 
-![拿掉 Runtime 到 MCP 的 traceparent 後，原 Trace 只剩 3 個 service、5 個 span。Tool 回成功，但 mcp-adapter 已不在這條因果鏈裡。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r5/assets/screenshots/day-21/tempo-broken-context.png)
+![正常呼叫的 Tempo Waterfall：四個服務、八個 Span，可以從 Client 沿父子關係找到 MCP Adapter。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r6/assets/screenshots/day-21/tempo-cross-service-trace.png)
 
-MCP 的獨立 Trace 和上游 Trace 都不是空的，這比整套 Telemetry 掛掉更容易漏看。單查 MCP 會看到 Tool 正常執行，單查上游也會看到 Runtime Outbound Span 已結束。事故發生後才以 Timestamp、Session 或模糊字串拼回兩筆紀錄，很快就會回到人工通靈。
+這條路徑成立，是因為傳送端注入目前 Context，接收端取出上游 Context，再建立自己的 Span。Runtime 呼叫 MCP Route 時也重新完成這個步驟，因此工具端和上游共享 Trace ID，並接到正確的 Parent。
 
-## Loki 保存事件，Prometheus 觀察流量
+接著只在 Runtime 到 MCP 的請求移除 Trace Context，其他流程保持相同。HTTP 仍回 `200`，工具收據仍是 `CANARY_TRIGGERED`，使用者看到的功能結果沒有改變。回頭查原本的 Trace，卻只剩三個 Service、五個 Span。
 
-同一筆 Normal Action 在 Loki 可以查到 Client、Runtime 與 MCP Adapter 各自送出的結構化 Event。四行資料共用 `action_id`，內容分別描述 Client Result、Runtime Completion、MCP Receipt 與 Runtime Accepted Event。
+![移除 Runtime 到 MCP 的 Trace Context 後，原 Trace 只剩三個服務、五個 Span，工具端落在另一條 Trace。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r6/assets/screenshots/day-21/tempo-broken-context.png)
 
-![Loki 以 action_id 查到四筆跨 producer event，包含 Client 結果、Runtime 狀態與 MCP no-op receipt。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r5/assets/screenshots/day-21/loki-action-events.png)
+比較兩張圖時，要找的是工具端有沒有接在 Runtime 的呼叫底下。斷鏈後，Runtime 的 `mcp.call` 還在，工具端的 `mcp.tool.execute` 則進了另一條 Trace。它仍有紀錄，只是失去了和這次上游呼叫的明確關聯。
 
-Gateway Access Log 能看到 Path、Route、Upstream 與 HTTP Status，但設定沒有從 Request Body 解析 `action_id`，所以該欄位只存在 Runtime 和 MCP Event。agentgateway 可以投影已驗證 JWT Claim 或明確允許的 Header。本篇的 `action_id` 仍只在 Application Payload，尚未定義可信 Header、Overwrite Rule 與防偽邊界，不能升格成 Gateway 的 Governance Evidence。
+這種情況很容易被功能測試漏掉。單看工具端，一切正常。單看 Runtime，它也拿到了回應。等到有人問「這次等待發生在哪裡」，才得用時間戳或其他 ID 人工拼回兩邊的資料。因此我會把跨服務追蹤完整性放進驗收，確認關鍵下游確實出現在預期路徑，並測試拿掉 Context 時能不能發現缺口。
 
-Prometheus 的用途又不同。以下 Query 將 Gateway Request 按 Route、Status 與 Reason 聚合：
+## 用事件補路徑，用指標看範圍
+
+Trace 能展開呼叫順序，事件紀錄則補上各元件當時做了什麼。同一筆正常操作在 Loki 中有四筆結構化事件，分別記錄請求接受、Runtime 完成、工具收據和 Client 結果。它們共用 `action_id`，可以把工具結果和使用者最後收到的回應對起來。
+
+![Loki 以 action ID 查回 Client、Runtime 和 MCP Adapter 的四筆事件，包含工具收據與最終回應。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r6/assets/screenshots/day-21/loki-action-events.png)
+
+這個關聯鍵在本篇放於 Application Payload。Gateway 設定沒有解析 Body 裡的 `action_id`，所以它的 Access Log 能查 Route、轉送目標和狀態，卻不能直接用同一個欄位查回。若要讓 Gateway 也記錄這個 ID，就要另外定義 Header 或其他傳遞契約，並決定誰可以產生、覆寫與驗證它。
+
+再換到 Prometheus，問題會從「這一筆發生什麼」變成「相同路徑是不是普遍出錯」。以下查詢依 Route、Status 和 Reason 聚合 Gateway Request，能觀察哪個入口出現拒絕或後端不可用。
 
 ```promql
 sum by (route, status, reason) (agentgateway_requests_total)
 ```
 
-![Prometheus 查詢 agentgateway requests。畫面能分辨 agent-runtime 200、MCP 200、policy deny 403 與 missing A2A backend 503。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r5/assets/screenshots/day-21/prometheus-agentgateway-metrics.png)
+![Prometheus 實拍：Gateway Request 依 Route、Status 和 Reason 分組，能看正常回應、授權拒絕與無可用後端。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-21-r6/assets/screenshots/day-21/prometheus-agentgateway-metrics.png)
 
-`gateway-policy-deny` 留下 `Authorization`／`403`，刻意不存在的 A2A Backend 留下 `NoHealthyBackend`／`503`。Metrics 適合回答 Route 流量、錯誤率與趨勢，不該塞入每一筆 `action_id`。單筆因果交給 Trace，離散細節交給 Log／Governance Event，聚合健康度留給 Metrics。
+圖中的 Policy 拒絕情境是 `Authorization`／`403`，不存在的 A2A Backend 則是 `NoHealthyBackend`／`503`。這些數據協助判斷錯誤範圍與類型，再選一筆相關 Trace 展開細節。本篇不把每筆 `action_id` 加入 Metric Label，個別操作的查詢留給 Trace 和事件。
 
-## 本機 Pipeline 搬回 Kubernetes 還缺什麼
+## 部署之後的觀測責任
 
-公開 Lab 使用 Standalone agentgateway 與 `grafana/otel-lgtm`，目的是讓讀者在一台電腦上重現跨服務 Propagation。[Grafana OTEL-LGTM Image](https://grafana.com/docs/opentelemetry/docker-lgtm/) 的定位也是 Development、Demo 與 Testing，不代表 Production 只需一個 All-in-one Container。
+這份示範使用 Standalone agentgateway 和 `grafana/otel-lgtm`。[Grafana 對 OTEL-LGTM Image 的定位](https://grafana.com/docs/opentelemetry/docker-lgtm/) 是開發、示範與測試。正式部署還需要按流量、可用性和資料保存需求安排後端與 Collector，不能把本機成功直接當成完整的運維設計。
 
-回到 Kubernetes，我會把三種健康度分開看：agentgateway Control Plane 是否完成 Reconciliation、Data Plane 是否正常處理 Traffic，以及 Agent Runtime 是否完成 Workflow。它們可以在同一個 Dashboard 相鄰出現，SLO 與告警 Owner 不能混成單一綠燈。Collector 也要補 Queue、Retry、Capacity、Network Policy、TLS、Authentication 與 Backpressure。
+回到 Kubernetes，我會先分開看設定是否成功套用、Gateway 是否正常處理請求，以及 Runtime 是否完成工作。設定控制器正常，不代表工具服務可用。Gateway 持續回應，也不代表 Agent 最後產生了預期結果。這些狀態需要各自的告警和處理人員，才不會在一個綠燈底下漏掉工作失敗。
 
-這次 Gateway Request 能一路追到 Runtime 與 MCP Tool。刻意拿掉 `traceparent` 後，Tool 雖然執行成功，Waterfall 卻少了一段。Alloy 負責接收與轉送訊號，跨服務因果靠 Trace Context 傳遞，執行狀態則由各個 Producer 記錄。
+Collector 同樣要有自己的健康檢查。後端暫時不可用時，資料是否重試、佇列能撐多久、什麼情況會丟棄，都會影響事後能查到的範圍。先知道這些限制，調查時才不會把「沒有紀錄」誤判成「沒有發生」。
 
-下一個誘惑是把 `principal`、`team`、`role` 與 `tenant` 全部塞進 Telemetry，讓每種查詢都能分組。這些值從 JWT 到 Gateway，再到 Runtime 的途中，可信度不完全相同。進入 Metrics、Traces、Logs 與長期 Audit 後，敏感程度和成本也不同。Day 22 會處理這批身分資料應該落在哪裡。
+到這裡，我們已經能由入口追到工具，也知道一段 Context 遺失會怎樣破壞調查。接下來做 Dashboard 時，通常會想按團隊或使用者篩選。這些身分資訊進入指標、Trace 和 Logs 之後，查詢方式、成本與暴露面各不相同，下一篇就從這個需求開始安排欄位落點。

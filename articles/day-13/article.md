@@ -1,16 +1,16 @@
 # Day 13｜從 LiteLLM 轉向 agentgateway：官方文件沒寫的維運成本
 
-我最初找 AI Gateway 的條件很直接：把不同 LLM Provider 收進同一個 OpenAI-compatible Endpoint，再補上 Routing、Fallback、Virtual Key、Budget 與管理介面。只看功能表，LiteLLM 幾乎每一格都打中需求。
+我最初找 AI Gateway 的條件很直接：讓應用用同一個相容 OpenAI API 的入口呼叫不同模型，再集中處理轉送、失敗切換、專案 Key、預算與管理介面。只看功能表，LiteLLM 幾乎每一格都打中需求。
 
-把方案放進 Kubernetes 後，評估的問題開始改變。除了 Proxy，我們還要接手 PostgreSQL、Redis、Migration、Team／User State，以及為了配合 GitOps 補上的 API 與 Terraform Glue。這些元件都能運作，真正難回答的是「誰要長期維運這套平台」「Git 能不能重建狀態」「員工離職時要從哪裡撤權」。
+把方案放進 Kubernetes 後，評估的問題開始改變。除了 Proxy，我們還要接手 PostgreSQL、Redis、資料庫升級和團隊／使用者狀態，以及為了配合 GitOps 自行補上的 API 與 Terraform 整合。這些元件都能運作，真正難回答的是「誰要長期維運這套平台」「Git 能不能重建狀態」「員工離職時要從哪裡撤權」。
 
-LiteLLM 並沒有在評估途中突然少掉某項功能。當需求從統一 LLM Endpoint，擴大到 LLM、MCP 與 A2A 共用的 Policy 和 Telemetry Boundary，原本排在前面的 UI 與 Virtual Key，便不再是最重要的選型條件。真正讓決定翻轉的，是我們要長期經營哪一種平台。
+LiteLLM 並沒有在評估途中突然少掉某項功能。當需求從統一模型入口，擴大到模型呼叫、MCP 工具存取與 A2A 遠端 Agent 協作，共用的政策和觀測資料也要一起規劃，原本排在前面的 UI 與 Virtual Key，便不再是最重要的選型條件。真正讓決定翻轉的，是我們要長期經營哪一種平台。
 
 ## LiteLLM 為什麼會先進入候選名單
 
-![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r5/assets/third-party/litellm/litellm-logo.jpg)
+![LiteLLM 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r6/assets/third-party/litellm/litellm-logo.jpg)
 
-[LiteLLM](https://www.litellm.ai/) 同時是一層多 Provider Translation／Routing Layer 與 LLM Gateway。應用程式只要更換 `base_url`，便能用相近的介面呼叫不同模型。真正的 Provider Key 留在 Proxy，Application Repository 不必各自保存一份。再加上 Virtual Key、Rate Limit、Budget、Spend Tracking、Fallback 和 UI，它很自然會成為共用模型入口的候選方案。
+[LiteLLM](https://www.litellm.ai/) 會轉換不同模型供應商的呼叫格式，也提供集中轉送請求的 LLM Gateway。應用程式只要更換 `base_url`，便能用相近的介面呼叫不同模型。真正的 Provider Key 留在 Proxy，各應用的 Repository 不必各自保存一份。Gateway 發給呼叫端的 Virtual Key 則能對應預算與用量，再配合流量限制、失敗切換和 UI，讓它成為共用模型入口的候選方案。
 
 官方 [Proxy Architecture](https://docs.litellm.ai/docs/proxy/architecture) 會在 Request Path 上處理 Virtual Key、Budget、Rate Limit、Router 與 Provider Translation，Response 回來後再更新 Spend 與 Logging Callback。PostgreSQL 保存 Key、Team 和 Spend，Redis 負責 Cache 與 Rate-limit Counter。這是一套完整的 LLM Management 架構，也意味著平台團隊接手的從來不只一個 Proxy Pod。
 
@@ -29,7 +29,7 @@ LiteLLM Proxy
 
 最後一層 API + Terraform Glue 是我們自己補上的整合，用來讓 Team 與 User 管理符合既有交付方式。LiteLLM 當時已經能跑，選型卡住的是這些狀態日後要如何維運。
 
-## Kubernetes 裡浮出的第二本帳
+## Kubernetes 交付中的狀態與身分同步
 
 我們習慣在 Pull Request 裡 Review 變更，由 Git 保存 Diff，再讓 Controller 將宣告狀態收斂進 Kubernetes。LiteLLM 的 Model List 可以寫進設定檔，Team、User、Virtual Key 與部分管理狀態則主要透過 UI、API 和資料庫操作。為了把這些資料納入 IaC，我們曾用 Terraform 呼叫管理 API，建立前先查 Team ID，刪除時再找一次 ID，最後送出 Delete Request。
 
@@ -37,15 +37,15 @@ LiteLLM Proxy
 
 Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬於哪個 Team，Gateway 裡又建立了 `Human → LiteLLM User → Team → Virtual Key`。Virtual Key 很適合追 Usage 與 Budget，員工離職、轉調或換組時，平台仍要確保這份 Mapping 同步撤權。知道一把 Key 花了多少錢，和證明某次 Request 由哪位 Human 授權，是兩個不同問題。
 
-高可用也不能只數 Proxy Replica。PostgreSQL、Redis、Migration、Connection Pool、Background Spend Write 與 UI State 都需要 Backup、Upgrade、Recovery 和 On-call Owner。這些不是 LiteLLM 的缺陷，而是選擇這種 Operating Model 後，團隊必須一起接下來的責任。
+如果 Proxy 還活著，資料庫卻無法讀取 Key 或寫入用量，平台仍可能無法正常服務。高可用的範圍因此包括 PostgreSQL、Redis、資料庫升級、連線池和背景用量寫入。備份、復原與值班都需要 Owner，這些責任會跟著整套管理平台一起進來。
 
-當時 UI 確實有些操作不太順手，但我不想把選型濃縮成「UI 不好用，所以換掉」。UI 會改版，功能也可能補齊。Source of Truth、Identity Lifecycle 和 On-call Responsibility 才是比較不會靠下一版自動消失的差異。
+當時 UI 確實有些操作不太順手，但我不想把選型濃縮成「UI 不好用，所以換掉」。UI 會改版，功能也可能補齊。哪份狀態有權修改部署、員工異動怎麼撤權、故障時誰值班，則需要團隊自己決定。
 
 ## Scorecard 先寫 Owner，再填產品能力
 
-最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r5/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
+最早那種 `Provider 數量 5 分、UI 4 分、效能 4 分` 的評分方式看似客觀，實際上很容易等答案出來後再調權重。我們後來改用 [AI Gateway 平台選型 Scorecard](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-13-r6/articles/day-13/gateway-selection-scorecard.md)，每個決策面都先寫清楚產品外的 Owner，再標示依據來自實際操作、當時 Snapshot、官方文件或架構判斷。
 
-正文只留下最影響這次結果的六列：
+下面六個決策面，可以拿來對照應用團隊看到的方便，以及平台需要接下的責任：
 
 | 決策面 | Application Team 容易先看見 | Platform Team 還要回答 |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ Identity 也出現第二份 Mapping。企業 IdP 已經知道值班工程師屬�
 
 ## agentgateway 對齊既有的交付方式
 
-![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r5/assets/third-party/agentgateway/agentgateway-logo.png)
+![agentgateway 官方產品識別。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r6/assets/third-party/agentgateway/agentgateway-logo.png)
 
 [agentgateway](https://agentgateway.dev/) 的 Data Plane 能代理 HTTP、gRPC、LLM、MCP 與 A2A 流量，Kubernetes 模式則由 Controller Watch Gateway API 與相關 Resource，產生 Runtime Config，再透過 xDS 送到 Data Plane。Route、Backend、Policy 與 Gateway Lifecycle 都從 Kubernetes API 進場，變更能沿用原本的 Git Review 與 Reconciliation。
 
@@ -83,7 +83,7 @@ agentgateway data plane
 
 ## Gateway 之外仍有 Discovery 與 Registration
 
-Day 12 已讓 agentgateway 驗證 AWS Cognito 發出的 Human／M2M Token，並依 `client_id`、`aud` 與 Scope 分流。那只處理 Token 進入 Gateway 後的 Request。MCP Client 在登入前怎麼找到 Authorization Metadata、Client 要預先註冊還是使用 Client Metadata，以及 AWS Cognito 缺少的 Provider Adapter 由誰維護，仍需要另外指定 Owner。
+Day 12 整理了 Human／M2M Token 的分流設計，並用合成 Token 做離線對照。公開設定尚未完成真實 Cognito Token 到 Gateway 的整合驗證。即使正式環境驗過 Token，解決的也只是帶憑證進入 Gateway 後的請求。MCP Client 在登入前怎麼找到 Authorization Metadata、Client 要預先註冊還是使用 Client Metadata，以及 AWS Cognito 缺少的 Provider Adapter 由誰維護，仍需要另外指定 Owner。
 
 ```text
 登入與取 Token
@@ -99,15 +99,15 @@ MCP client → agentgateway → JWT / Tool policy → MCP server
 
 下圖把原始選型與事後事件分成兩條時間線。上半部是當時真正影響決定的 Operating Model 與 Identity Mapping，下半部則是轉向 agentgateway 後才發生的 LiteLLM 供應鏈事件，以及後續改善。
 
-![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r5/assets/diagrams/day-13/selection-timeline.png)
+![AI Gateway 選型時間線。原始決策來自 LiteLLM Kubernetes operating model 與 identity mapping。轉向 agentgateway 後才發生 2026 年 3 月 PyPI 惡意套件事件，2026 年 8 月再重新查證 Security Working Group 與 Rust staging。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-13-r6/assets/diagrams/day-13/selection-timeline.png)
 
 [官方事件 Issue](https://github.com/BerriAI/litellm/issues/24518) 列出 PyPI `1.82.7` 與 `1.82.8` 遭植入惡意程式，可能蒐集並外傳 Credential。維護團隊移除受影響套件、輪替 Maintainer 帳號，並在調查期間暫停 Release。Issue 也說明，當時使用 Proxy Docker Image 的人不在公告列出的影響範圍。
 
 這次事件發生時，我們已經完成轉向。當初的決定仍是維運與身分模型的取捨。事件讓往後的評估多了一組固定問題：Image 和套件從哪裡來、出事後誰能確認影響範圍，以及平台要花多久取得修補版本。Signature、SBOM 與 Release Provenance 因此進入後續選型，不會改寫當時的時間線。
 
-2026 年 8 月重新查證時，[LiteLLM Security Working Group](https://github.com/BerriAI/litellm-security-wg) 已列出完成與尚待處理的 Hardening 項目，Release 也提供 Image Verification。LiteLLM 同時有一個 Rust Gateway Staging Project，目前公開內容仍偏向 Realtime Hot Path 與 Python Bridge，不能直接解讀成整套 Proxy 已重寫。這些改善值得記錄，卻尚未回答 Team／User State、Identity Mapping 與 GitOps Reconciliation。它們是不同層次的問題。
+2026 年 8 月重新查證時，[LiteLLM Security Working Group](https://github.com/BerriAI/litellm-security-wg) 已列出完成與尚待處理的 Hardening 項目，Release 也提供 Image Verification。LiteLLM 同時有一個 Rust Gateway Staging Project，在這次 2026 年 8 月查閱時，公開內容仍偏向 Realtime Hot Path 與 Python Bridge，不能直接解讀成整套 Proxy 已重寫。這些改善值得記錄，卻尚未回答 Team／User State、Identity Mapping 與 GitOps Reconciliation。它們是不同層次的問題。
 
-## 最後選的是責任位置，不是產品輸贏
+## 共同入口的採用理由與剩餘責任
 
 我們最後把 agentgateway 放在 LLM、MCP 與 A2A Runtime Traffic 的共同 Policy／Telemetry Checkpoint，因為它的 Kubernetes Control Plane 比較符合既有 GitOps 工作方式。Identity Provider、Client Registration、Agent Runtime、Tool Ownership、Delegation Context 與 Telemetry Backend 仍由不同系統負責，沒有因為選了一個 Gateway 就全部消失。
 

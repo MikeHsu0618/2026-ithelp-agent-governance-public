@@ -1,60 +1,87 @@
-# Day 30｜Agent Governance 最終章：三十天後，我們留下的參考架構
+# Day 30｜Agent Governance 最終章：把授權、執行與查證放回同一條路
 
-三十天前，Gemini 從一段混入操作指令的 Log 讀到 `delete_demo_database`，接著提出 Tool Call。Google ADK 把參數交給 Tool，open policy 也照設定回了 `ALLOW`。公開 Lab 沒有真的刪除資料庫，只留下 `CANARY_TRIGGERED` receipt。換成有副作用的 Resource Server，這條正常運作的 action path 就可能改到 production 資料。
+系列開始時，我讓 SRE Agent 調查異常。Gemini 從一段混入操作指令的 Log 讀到 `delete_demo_database`，提出工具呼叫，Open Policy 回 `ALLOW`，Google ADK 再把參數交給 Tool。公開 Lab 只留下安全 Canary，沒有連到資料庫，但這條路已經暴露出一個問題：原本只想查資料，模型卻可以提出另一種動作。
 
-三十天後，模型仍可能提出同一個 Tool Call。如果今天重新設計，我會先問這筆動作應在哪裡遇到決策點，執行後又該留下哪些可查證的結果。最後的參考架構，就是把這兩個問題放進一條能檢查的路徑，不再寄望模型突然變得永遠正確。
+如果今天再讀到相同內容，模型仍可能提出危險工具。三十天的工作不是讓這個可能性消失，而是逐步建立可檢查的邊界：誰發起請求、哪個元件能拒絕、目標資源如何授權，以及執行後有哪些結果可以核對。
 
-## 同一筆 Tool Call，前後差在哪裡
+最後這篇把它們接回一條路。讀者可以沿同一次操作，找到執行前的判斷、執行版本的來源和事後查詢的入口，再把這些位置換成自己環境裡的系統。已實測的能力與尚待完成的設計，仍保留各自的界線。
 
-Day 1 的 Lab 留下了危險動作的安全標記，Day 3 則試出一個有效的執行前拒絕點。如果下一筆高風險 Action 真的要碰資源，還需要哪些控制？右欄是接下來的設計目標，和左欄已跑過的 Lab 分開看。
+## 從危險提議到執行前控制
 
-| 這一站 | 當時的公開 Lab | 下一筆高風險 Action 的設計目標 |
-| --- | --- | --- |
-| 讀到不可信內容 | Log 裡的指令進入模型 Context，模型提出危險 Tool | 把外部內容當資料，不讓它直接取得動作權限 |
-| 執行前決策 | Open Policy 回 `ALLOW`。Day 3 另驗出 Tool Allowlist 可在執行前拒絕 | 共同入口與目標服務各守自己的授權邊界，並檢查 Resource／Arguments |
-| 真正的執行結果 | Tool 只寫安全標記，沒有刪除資料庫 | Resource Server 回傳可對回同一筆 Action 的實際修改紀錄 |
-| 事故發生後 | 能找回當時留下的 Event 與 Trace ID，卻缺可信發起者和執行映像 | 沿同一筆 Action 查回身分、政策、實際映像、必要的核准與結果 |
+最初的工具名稱和參數符合程式介面，Policy 也按設定放行，所以沒有發生讓流程停止的技術錯誤。真正缺的是「這個調查任務能不能提出刪除操作」的執行控制。模型把外部資料當成下一步指令時，系統仍需要獨立判斷工具能否執行。
 
-Day 3 用相同輸入做了放行與拒絕對照：換成 Tool Allowlist 後，危險 Function 沒有執行，Agent 仍改用 `query_metrics` 完成唯讀調查。這筆對照的回放資料留在 [Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r5/labs/05-incident-replay/README.md)。
+[Day 3](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r6/articles/day-03/article.md) 用相同輸入加入 Tool Allowlist，危險 Function 在執行前被拒絕，Agent 後來改用 `query_metrics` 完成唯讀調查。這個對照說明，拒絕一個危險工具，仍可能保留完成原任務的路徑。它驗證的是工具級拒絕，並沒有完成所有真實資源的參數授權。
 
-## Reference Architecture 的四條路徑
+若下一版工具真的能修改資料庫，還需要知道允許的目標環境、參數與影響範圍。工單只批准測試環境時，正式環境參數就應被資源授權拒絕。這是後續設計目標，不能拿 no-op Canary 的安全性代替真實資料庫驗收。
 
-最後的圖只有一條主要動作路徑：呼叫者提出請求，Gateway 檢查共同規則，Agent Runtime 決定下一步，Tool 所屬的服務決定資源能否修改。另外兩條支線回答執行版本從哪裡來、事後資料送到哪裡。架構審查不用先背完產品名稱，先沿這筆 Action 問誰能拒絕、誰能批准、實際跑了什麼。
+[Incident Replay Lab](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r6/labs/05-incident-replay/README.md) 保留最初放行與後來拒絕的歷史對照。正文在這裡使用的是決定性差異：前者走到安全工具分支，後者在執行前停止，兩者沒有產生真實刪除。
 
-![一筆 action 由 Human 或 M2M caller 經 agentgateway、Google ADK Runtime 到 Tool 或 Resource Server。下方 Artifact 卡片標明完整 Agent Image Digest、批准及執行映像核對仍是待驗證的設計目標。Evidence 卡片區分 Alloy／LGTM 與尚待獨立驗證的 Audit 保存。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r5/assets/diagrams/day-30/reference-architecture.png)
+## 參考架構的三條工作路徑
 
-## Request Path：Identity、Gateway 與 Resource Authorization
+下圖中央是動作路徑：Caller 提出請求，Gateway 處理共同入口，Runtime 安排工作，Tool／Resource Server 決定目標操作能否執行。下方另有執行產物的交付資料，以及事件和觀測資料的保存位置。
 
-Human 與 M2M 先走各自的登入／取 Token 流程，再把憑證帶進請求。AWS Cognito 完成簽發後就退出資料面，業務流量不必穿過 IdP。前面已交代為什麼沒有為少數 AI 服務另建 Identity Center。在這張圖裡，重要的是兩種 Caller 都有明確的驗證入口，而不是再比較 IdP 功能。
+閱讀時可以先沿中央找「哪裡能拒絕這個動作」，再看下方找「怎麼知道跑的是哪份程式」和「之後去哪裡查結果」。這三個問題讓圖上的產品位置有具體用途，讀者不用先背一整份能力清單。
 
-帶著 Token 的 request 可以經過既有 Ingress，但那一層只保留成 optional pass-through edge。agentgateway 才是跨 Runtime 共用的 checkpoint，負責驗 issuer、audience、signature、route、rate limit 與最低共同 policy，也產生 gateway request ID、policy version 和 decision。它可以拒絕不符合共同規則的流量，卻不知道某張工單是否真的允許刪除指定資料庫。
+![中央是 Caller、Gateway、Runtime 與資源服務的動作路徑。Artifact 支線提供執行版本來源，Evidence 支線提供事件與觀測。完整產物綁定和額外 Audit 保存仍有待驗證項目。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-30-r6/assets/diagrams/day-30/reference-architecture.png)
 
-Google ADK Runtime 接手 workflow、state、Tool schema、argument normalization、delegation 與 pause／resume。真正有副作用的 Tool／Resource Server 仍保留最後授權：它要看受信任 principal、current actor、目標 resource 與 normalized arguments，再依自己的 business rule 決定是否執行並回傳 effect receipt。Gateway 已經回 `ALLOW`，不代表任何 Tool 參數都合理。
+同一筆操作還需要帶著可驗證的脈絡往下走。入口的 Caller、Runtime 的工具與參數、資源端的結果，不能只因為放在同一個 JSON 就視為同等可信。每個位置都要說明自己提供什麼、根據什麼來源，再用 ID 關聯。
 
-### Context Rail：Principal、Policy、Artifact 與 Approval
+## 請求進入共同入口
 
-Gateway 從驗過的 JWT 加入 principal／client 與 policy decision。Runtime 再加入 delegation、Tool、resource、normalized arguments、Artifact digest 和必要的 approval digest，Resource Server 最後補 effect receipt。Action ID 與 trace ID 負責把這些紀錄接回同一筆動作；每個欄位也保留來源，讓事故調查知道它是由哪一站寫入的。
+Human 和 M2M 先走各自的登入或取 Token 流程。Cognito 在本系列提供這兩種入口，簽發完成後就退出業務資料路徑，Agent 每次查工具並不需要讓請求穿過 IdP。讀者也可以沿用組織已有的身分系統。
 
-高風險 action 若需要人工批准，Runtime 可以提供 pause／resume，平台可以提供 UI 與傳遞機制，Business Owner 則必須在完整 action context 下決定。一次批准要綁住 Tool、目標 resource 與參數摘要，並記下 approver、Artifact digest、policy version 與 expiry。任一內容改變，原本的批准就不能繼續使用。Day 18 跑通的是 pause／resume，包括 BYO Agent 的有限路徑。它沒有證明 approver 身分與授權，也沒有涵蓋所有跨 A2A／HITL 的 context 傳遞。這些不能因為畫面上有個「Approve」按鈕就算完成。
+Token 到達服務入口，才驗證簽章、Issuer、Audience 和有效時間。這一步確認憑證可被此服務接受。登入者的角色、服務 Client 和實際執行 Workload 仍是不同身分，若下游政策需要知道是哪個工作負載，還要有相應的可驗證憑證。
 
-## Artifact Path：Desired State 與 Runtime Digest
+既有 Ingress 可以留在外層處理 TLS 和 Host Routing。agentgateway 作為多個 Runtime 的共同入口，處理已配置的認證、路由、流量政策和觀測。兩層分清等待、重試與 Header 處理，才能避免一次 Agent 串流被外層設定意外改變。
 
-Day 19 的 `approved` Catalog Tag 可以換掉 Image Reference。Day 18 固定的則是 BYO **基底映像** Digest。兩者的差異提醒我，架構圖不能只寫「版本已管理」。我們希望在 Git／OCI 交付時保存完整 Agent Image 的 Digest 與批准紀錄，部署時核對，事故事件再記錄實際執行版本。這條鏈尚未在公開 Lab 完成 Admission 與每個 Workload 的執行映像綁定，因此是下一步要驗證的設計，不是這三十天已交付的功能。
+Gateway 可以拒絕不符合共同規則的請求，但特定工單允許修改哪個資料庫，需要理解該資源的服務決定。共同入口與資源端各守自己的規則，這一點比把所有判斷都放進單一產品更重要。
 
-控制面說明「應該部署什麼」，執行中的 workload 則要證明「這次實際跑了什麼」。兩條路徑靠 Artifact digest 會合，事故發生後才不會只剩 deployment 宣告。
+## Runtime 與資源端的決策
 
-## Evidence Path：Operational Telemetry 與 Audit Integrity
+Google ADK Runtime 保留工作流程、狀態、工具介面、參數處理和暫停恢復。模型提出工具後，Runtime 可以先將參數轉成一致形式，再按應用規則檢查。外部 Log、網頁或工具輸出可以提供線索，是否要取得動作權限，仍由這條執行路徑決定。
 
-既有 LGTM 是我們日常查 Log、Metric 與 Trace 的地方。Day 25 讓 SRE Agent 真的透過 Grafana MCP 查到 Loki。Day 26 再用另一筆新 Action 驗證 Tempo 的跨服務路徑、Loki 的事件和 Prometheus 的聚合資料。這些新紀錄能幫助調查今天的 Action，不能拿來補 Day 1 當時沒留下的資料。
+資源服務則以自己掌握的目標與權限作最後判斷。刪除資料需要檢查環境和範圍，查 Logs 需要限制資料來源，部署需要確認可接受的版本和目標。這些例子有不同的業務語意，Gateway 的入口放行不能代替所有判斷。
 
-在這張架構裡，設定與映像的變更先由 Git PR、Commit 和部署紀錄追溯，每次 Agent 呼叫則回到 Gateway、Runtime 與 LGTM 查。這已經能回答多數維運調查。若組織另有法遵要求，再檢查這些現有紀錄的存取與保存方式是否足夠；我們沒有因為 Agent 多建一套稽核儲存平台。
+正式設計時，可以將工單範圍與正規化參數交到授權點，再留下 Policy Version 和決定。下游不應只相信上游自行宣告 `authorized=true`，而要有明確的信任來源與資料契約。哪些欄位由 Runtime 提供、哪些由資源服務驗證，必須在接線時說清楚。
 
-## 回到 Day 1 的 Tool Call
+若需要人工決定，Runtime 先固定待執行內容並暫停，由對這個資源有權的人批准。恢復前再核對目標、參數、產物和規則版本，內容改變時原決定失效。[Day 18](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-30-r6/articles/day-18/article.md) 已驗證部分 BYO Pause／Resume 路徑，正式批准者認證、授權與完整動作綁定仍是待驗證設計。
 
-[去年寫 LLM Observability](https://ithelp.ithome.com.tw/articles/10380029) 時，我在意的是模型為什麼這樣回答、一次呼叫花了多少錢，以及 Prompt、Response、Token、Latency 能不能沿 trace 找回來。今年把 Agent 接上 Tool 後，問題往前移了一步：誰讓它做、它代表誰、跑的是哪份程式、哪一層有權拒絕，以及事後拿什麼證明。
+## 動作脈絡如何逐站留下
 
-執行前的 allowlist 可以拒絕危險 Tool，Agent 也不一定因此失去完成調查的能力；Day 3 已經跑過這個對照。難的是再往下追問：「誰准許這次操作？實際跑的是哪個版本？改動是否真的發生？」這三十天的其餘工作，就是把答案放回能作決定、能留下結果的地方。
+入口提供身分確認與路由決策，Runtime 記工具提議、參數與執行產物，資源端補結果。Action ID 關聯同一個操作，Trace ID 指向執行路徑，事件本身再保存資料來源，調查者才能分清每一站知道什麼。
 
-這三十天裡，我最有感的不是把更多產品接進同一張圖，而是幾次「跑通後仍不採用」的決定。技術上能做，和組織有能力長期維護，是兩回事。產品可以隨條件更換，動作在哪裡被允許、被拒絕，以及事後如何查證，不能跟著模糊。
+例如 Runtime 說工具成功，資源端只回報已接受工作，事件就應保留「已接受」而不是直接寫成完成修改。若 Policy 已拒絕，則不用替沒有執行的工具補一份效果收據。這些結果差異在 Day 20 和 Day 26 已形成欄位與回放方法。
 
-如果今天又有 Agent 讀到一段混著指令的 Log，模型仍可能提出危險 Tool Call。我希望不同的是，它會在碰到正式資料前遇到真正懂這個 Resource 的授權檢查。若仍獲准執行，值班的人能沿同一筆 Action 找到批准、版本和結果。這些要求有些已在 Lab 驗過，有些仍是我們明確留下的缺口。Day 1 的安全標記到最後沒有變成一場英雄救火，卻讓我們有機會在出事以前，把該由誰擋、誰准、誰查證問清楚。
+這條脈絡是本系列的資料設計，不是產品裝完後自動生成的完整上下文。組織接入時仍要定義哪些欄位可信、如何傳遞與覆寫，以及缺少關鍵資料時怎麼處理。關聯 ID 可以幫忙找紀錄，不能取代身分或批准驗證。
+
+## 交付產物與實際執行版本
+
+工程師改 Agent 程式，交付流程可以記 PR、Commit、建置結果和完整映像 Digest。部署再選定這份產物，執行事件記下實際使用的版本。這樣調查某次工具操作時，才能從結果回到產生它的程式和設定。
+
+Tag 只是名稱，可能改指向。Day 19 的 `approved` Catalog Tag 實測可以換 Image Reference，提醒我們批准紀錄需要綁內容。Day 18 鎖定的是 BYO 基底映像，也不能直接當成完整 Agent Image 的來源鏈。
+
+因此參考架構把完整產物的 Digest、批准和部署核對列為設計目標。公開 Lab 尚未完成所有 Admission 和每個 Workload 的執行映像綁定，事件調查需要保留這個缺口。只知道某個版本曾發布，仍不能證明某次請求跑的就是它。
+
+kagent 和 Agent Registry 位於這條交付與平台操作路徑，適合在共享部署、發現或目錄需求成立後評估。它們不會替每筆工具請求確認業務意圖。Git-owned BYO Runtime 也可以是正式選擇，只要交付、執行和維護責任清楚。
+
+## 觀測資料如何支援事後查證
+
+既有 LGTM 提供 Logs、Metrics 和 Traces 的查詢。Gateway、Runtime 和工具端各自送出所見資料，Alloy 收集與轉送。日常可以先看錯誤趨勢，再展開 Trace，最後查事件內容，分辨入口拒絕、下游失敗或結果不足。
+
+Day 25 已讓 SRE Agent 經 Grafana MCP 真正查到 Loki，並保留 Action ID 和 Trace ID。Day 26 另送一筆新請求，查到跨四個服務的 Trace 和相關事件。這些結果支持現行管線的查詢能力，舊事件的 Principal、執行產物和批准缺口仍然不能由新資料補造。
+
+我會讓設定變更回 Git 查，單次執行回 Gateway、Runtime 和 LGTM 查，再核對實際產物。當工具結果只剩一段摘要，或關聯欄位在中間被丟掉，模型仍可能寫出像樣的回答，值班者卻失去下一步查證入口。因此資料是否能一路保留，也要和工具功能一起驗收。
+
+如果保存目的超出日常維運，例如需要特定保存期限或防刪改，則由對應角色確認事件來源、存取權限和儲存方式。LGTM 能查到紀錄，不會自動證明紀錄沒有缺漏或從未被修改。這項差別要按實際要求處理，不能由完整 Waterfall 代替。
+
+## 把這條路帶回自己的架構
+
+[去年寫 LLM Observability](https://ithelp.ithome.com.tw/articles/10380029) 時，我關心模型為什麼這樣回答、一次呼叫用了多少 Token，以及輸入、輸出和耗時能不能對回來。今年把工具接上後，需要再問誰讓它做、它代表誰、跑哪份程式，以及哪一層有權拒絕。
+
+讀者可以從自己的一個工具開始，先畫它的請求與資料來源，再畫程式如何交付、執行紀錄存在哪裡。查詢工具先檢查資料範圍與結果，修改工具再補目標授權和必要批准，多個 Runtime 的共同工作才交給平台收斂。這個方法可以使用現有產品，不需要照抄我們的選型。
+
+這三十天也有幾次跑通後仍未採用的決定。Keycloak、kagent 和 Registry 都各有能解決的工作，但需求範圍與長期維護者是否成立，會改變採用方式。我會讓每段工作都有能理解、能維護的人，也有出問題時可以核對的資料，再決定產品怎麼接進來。
+
+回到最初那段混著指令的 Log，Agent 仍可能提出刪除工具。我希望後續不同的是，它在接觸正式資源以前，會遇到能理解這次目標與參數的授權檢查。若獲准執行，結果能對回批准、規則和實際版本。有些控制已有實測，有些還保留明確缺口，這讓我們能在開放真正副作用以前，知道下一次應該驗證什麼。
+
+最初的 Canary 最後沒有變成一場真實資料庫事故。它留下的價值，是讓「模型提出了什麼」一路延伸成「系統允許了什麼，資源做了什麼，我們又能查證什麼」。這條路清楚之後，工具和平台可以繼續演進，責任與證據也有位置可以接下去。

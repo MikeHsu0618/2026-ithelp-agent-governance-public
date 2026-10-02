@@ -1,26 +1,60 @@
-# Day 25｜讓 SRE Agent 真的查 Loki：Grafana MCP 接上 agentgateway
+# Day 25｜讓 SRE Agent 查 Loki：Grafana MCP 的查詢路徑與資料權限
 
-Day 1 的 SRE Agent 有一個 `query_logs` Tool，實際上只會讀取 Repo 裡準備好的 JSONL Fixture，從來沒有碰到 Loki。當時這樣做，是為了把實驗焦點留給 Prompt Injection 與 Tool Boundary。如果走到 Day 25 還沒有還掉這筆技術債，前面談的治理就始終圍著一個玩具函式打轉。
+請 SRE Agent 調查錯誤，最有用的回答通常不只是一句「可能是服務逾時」。我們還需要知道它看了哪個服務、哪段時間、哪些 Log，以及能不能沿結果繼續查 Trace。這些資料如果只存在模型的摘要裡，值班的人就很難核對。
 
-Day 20 到 Day 24 都把 LGTM 放在 Agent 外面。Agent、Gateway 與 MCP Server 送出 Telemetry，SRE 再到 Grafana 查 Loki、追 Tempo。這篇把方向轉過來：既有 LGTM 不只觀測 Agent，也能提供受控的查詢能力，讓 Agent 自己取得事故證據。
+既有 Grafana 和 Loki 已經有可查詢的資料，下一步是讓 Agent 在受限的範圍裡使用它們。這時要處理的事情包括：查詢工具放在哪裡、由誰持有 Grafana 憑證、Agent 可以讀哪些 Logs，以及工具回傳的結果是否足以支持後續調查。
 
-這次 Google ADK Agent 會實際呼叫 `query_loki_logs`，流量經過 agentgateway、官方 mcp-grafana、Grafana Datasource Proxy，最後查到真正的 Loki。為了讓讀者每次都走到同一條查詢路徑，Lab 用 Deterministic Callback 固定提出這次 Tool Call。ADK Runtime、MCP Handshake 和後端查詢仍由真實元件完成。模型如何選 Tool 是另一個問題，不放進這次實驗。
+系列最初的 `query_logs` 只讀取準備好的 JSONL Fixture，用來隔離 Prompt Injection 和工具執行的問題。本篇接上真實資料路徑：Google ADK Runtime 經 agentgateway 呼叫官方 mcp-grafana，再由 Grafana 查 Loki。先看角色和資料權限，後段再用固定的工具請求確認這條路徑。
 
-## Grafana MCP 在既有 LGTM 裡的位置
+## MCP 如何提供查詢能力
 
-[mcp-grafana](https://grafana.com/docs/grafana/latest/developer-resources/mcp/introduction/) 是 Grafana 官方的 MCP Server，將 Dashboard、Alerting、Prometheus、Loki、Tempo 等能力整理成 MCP Tools。本文只開放 Loki 的 `query_loki_logs`，不碰 Dashboard 修改、Alert Rule 寫入或 Incident 操作。
+Agent Runtime 需要知道工具名稱、參數和回傳內容，才能把「查這段時間的錯誤」轉成可執行的請求。MCP 提供工具發現與呼叫介面，讓 Runtime 不必直接理解每個後端的 HTTP API。MCP Server 則負責把工具請求轉成實際的後端操作。
 
-它沒有取代 Loki，也不是另一套可觀測性平台。mcp-grafana 把既有資料來源整理成 Agent 能理解的 Tool Contract，agentgateway 則放在前面處理 MCP Routing、Backend Credential、Policy 與 Traffic Telemetry，避免每個 Agent 都直接持有 Grafana Endpoint 和 Credential。
+[mcp-grafana](https://grafana.com/docs/grafana/latest/developer-resources/mcp/introduction/) 是 Grafana 官方的 MCP Server，將 Grafana 與資料來源的查詢、管理能力提供成 Tools。本篇只使用 Loki 的 `query_loki_logs`。它接受查詢條件，透過 Grafana 的 Datasource Proxy 呼叫資料來源，再把結果交回 Agent。
 
-![SRE 問題先交給 Google ADK Agent，再經 agentgateway、mcp-grafana 與 Grafana datasource proxy 查詢 Loki。Tool result 帶著 service_name、action_id 與 trace_id 回到 Agent，下方分開標示三段連線的授權責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r5/assets/diagrams/day-25/sre-agent-grafana-mcp-path.png)
+Datasource Proxy 是 Grafana 對資料來源的查詢入口。由它轉送，Agent 不必自己持有 Loki 的連線設定，但這條查詢仍受 Grafana 帳號角色、所用版本可配置的權限和後端設定約束。mcp-grafana 提供的是工具介面，實際 Log 仍由 Loki 保存。
 
-圖中的三段連線有不同責任。Agent 到 Gateway 要處理 Caller、Tenant 與 Scope，Gateway 到 MCP Server 要決定能呼叫哪個 Backend，mcp-grafana 到 Grafana 則受 Grafana Service Account、RBAC、Datasource 與資料範圍約束。這裡的 Grafana Service Account 不是 Kubernetes ServiceAccount。三段都成功，也不能把 Grafana 最後看到的服務身分說成 End-user Delegation。
+agentgateway 位於 Runtime 和 MCP Server 之間，管理 MCP 路由、後端憑證與共同政策。Agent 只連這個入口，Gateway 再接 mcp-grafana。下圖先看請求方向，再看下方各段授權責任：同一筆查詢用了哪些身分，會影響最後能讀到什麼。
 
-公開 Lab 使用合成 Backend Token，沒有實作 End-user OAuth 或 On-behalf-of。這項邊界很重要，因為「Agent 不持有 Grafana Credential」和「Grafana 知道是哪位 Human 發起」是兩件不同的事。
+![ADK Runtime 經 agentgateway、mcp-grafana 和 Grafana Datasource Proxy 查 Loki，結果帶關聯欄位回到 Agent。下方分開標示三段連線的授權責任。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r6/assets/diagrams/day-25/sre-agent-grafana-mcp-path.png)
 
-## ADK 改用真正的 MCP Toolset
+## 入口身分與資料來源身分
 
-Day 1 直接把 Python Function 放進 `tools=[...]`。Day 25 改用 ADK 的 `McpToolset`，連到 agentgateway 暴露的 Streamable HTTP Endpoint：
+使用者請 Agent 查 Logs，並不表示 Grafana 最後一定看見這位使用者。常見設計是 Gateway 持有後端憑證，MCP Server 再以 Grafana Service Account 查資料。這時入口可以知道是哪位 Caller，資料來源實際接受的卻是服務帳號。
+
+這裡的 Grafana Service Account 是 Grafana 的服務身分，和 Kubernetes ServiceAccount 分屬不同系統。它的權限、Datasource 範圍與 Token 管理，需要由 Grafana 的管理方式決定。入口使用者登入成功，不能代替這一段的資料授權。
+
+因此我會分開檢查三件事：Caller 能不能進這條 Agent 或 MCP Route，Gateway 能不能呼叫所選 MCP Backend，MCP Server 使用的帳號能讀哪些資料。如果需要依使用者隔離查詢，還要設計可信的使用者與資料範圍對應，不能只把 Email 傳進工具參數就算完成。
+
+後面的公開示範使用合成 Backend Token，沒有 End-user OAuth 或 On-behalf-of，也就是沒有讓下游以原使用者的授權身分執行。它驗證 Agent 可以透過共同入口查資料，尚未驗證完整的使用者代理鏈。
+
+## 唯讀查詢的資料範圍
+
+Logs 可能包含其他團隊的事件、使用者資訊或系統細節。工具沒有寫入能力，只能降低修改風險，仍要決定它能讀到哪些資料。對 SRE Agent 而言，查詢時間區間、資料來源、服務集合和回傳筆數，都會影響暴露面與調查品質。
+
+mcp-grafana 啟動時可以使用 `--disable-write`，移除 Create、Update 等副作用工具。1.4.2 的 `--loki-enforced-matchers` 則能把固定 Matcher 加進原生 Loki 查詢，例如只允許某組服務。這是把資料範圍放在工具端執行，比單純請模型「不要查其他服務」更可檢查。
+
+[該版本的 Loki Query Enforcement 說明](https://github.com/grafana/mcp-grafana/blob/v1.4.2/README.md#loki-query-enforcement) 也列出可能繞開原生查詢路徑的其他 Tools。實際收斂權限時，必須一起檢查這些入口、Grafana 帳號權限與 Datasource 設定。只限制一條查詢工具，若仍能透過通用 API 讀同一份資料，邊界就還有缺口。
+
+這份官方說明特別提到，OSS 沒有它所需要的逐 Datasource 或逐使用者 Label 存取控制。因此本篇用 MCP 端固定 Matcher 限定查詢範圍，沒有假設 Grafana 會自動依入口 Caller 隔離 Logs。若組織改用其他部署模式或額外權限機制，也應重新確認限制發生在哪一層。
+
+Runtime 端的工具篩選也有不同用途。`tool_filter` 讓模型只看到選定工具，可以降低選錯的機率。真正不被允許的呼叫，則仍要由 Runtime 的執行檢查、Gateway、MCP Server 或資料來源拒絕，讓所有請求路徑都有對應控制。
+
+## 工具結果如何支持後續調查
+
+查詢結果需要保留的不只是 Log 文字。服務欄位讓我們知道來源，時間和查詢條件說明觀察範圍，`action_id` 與 `trace_id` 則讓調查能接到相關事件和執行路徑。若工具只回一段「共找到一筆錯誤」，值班的人仍不知道怎麼找到原始資料。
+
+Loki 的欄位也有不同位置。Stream Labels 用於有限的來源分組，Structured Metadata 保存每筆事件的關聯值，Query-time Parsed Labels 則是查詢時才從內容解析的欄位。它們在畫面上都可能像 Key／Value，但來源與用途不同，工具應該保留這個區別。
+
+我先前替 mcp-grafana 做過這一段修補。當時 Loki Response 沒有把幾種欄位分開帶回，Structured Metadata 裡的 `trace_id` 很容易消失。我在 Request 加上 `X-Loki-Response-Encoding-Flags: categorize-labels`，再解析回應第三個 Values Element。這項修改以 [PR #671](https://github.com/grafana/mcp-grafana/pull/671) 合入，收錄於 [v0.11.4](https://github.com/grafana/mcp-grafana/releases/tag/v0.11.4)。本篇的 1.4.2 已包含它。
+
+這段經驗讓我在接 Tool 時，會沿著 Datasource、MCP Server、Client SDK 和 Agent State 檢查資料是否仍可使用。Schema 可以說明回傳格式，實際串接仍可能在其中一站把欄位丟掉。模型有能力根據剩餘文字寫摘要，但調查者能否查證，取決於這些欄位有沒有一路保留。
+
+## ADK 實際取得 Loki 資料
+
+[Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r6/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki) 提供完整重現。本次以 Deterministic Callback 固定模型提出的工具呼叫，讓每次都走相同查詢。Google ADK 2.7.0 的 Runtime、MCP Handshake、工具發現與 Grafana／Loki 查詢仍由真實元件執行，並沒有用固定結果代替後端。
+
+ADK 使用 [MCP Toolset](https://adk.dev/tools-custom/mcp-tools/) 連到 Gateway 的 Streamable HTTP Endpoint。關鍵設定如下，工具篩選只保留 `query_loki_logs`：
 
 ```python
 toolset = McpToolset(
@@ -33,25 +67,9 @@ toolset = McpToolset(
 )
 ```
 
-`tool_filter` 只減少模型看見的 Tools，不能當成完整授權。真正的拒絕仍要落在 Runtime Callback、Gateway Policy、MCP Server 設定或 Grafana RBAC。Tool 沒出現在 Prompt 裡，不代表其他 Request Path 已經封閉。
+工具端使用 `--disable-write`，Loki Matcher 限在 `service_name=~"day25-.*"`，並關閉 API、Rendering、Sift 和 Assistant Tools。Backend Credential 留在 Gateway 邊界，ADK 不直接取得它。這些設定一起限定本次查詢能力。
 
-這組實驗可從 [Lab 04 README](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r5/labs/04-telemetry-pipeline/README.md#讓-google-adk-sre-agent-透過-grafana-mcp-查-loki) 重現。第一次 Tool Call 查 Loki，第二個 Model Turn 整理結果。我關心的是回到 Agent 手上的資料是否還保有調查所需的結構。
-
-乾淨環境裡，ADK 最後取得一筆 `service_name=day25-sre-agent` 的 Error Log，並保留 `action_id=act-day25-adk-query` 和 `trace_id=2525...2525`。這三個欄位也能在 Loki 原始資料查回，所以結果不是 Runner 自己補出來的 Summary。
-
-## 唯讀 Tool 仍需要資料範圍
-
-Lab 啟動 mcp-grafana 時使用 `--disable-write`，先移除 Create、Update 等副作用工具。Backend Credential 放在 agentgateway Boundary，ADK Agent 不會直接取得它。這兩個設定解決的是寫入風險與憑證分發，還沒回答 Agent 可以讀哪些 Logs。
-
-mcp-grafana `1.4.2` 的 `--loki-enforced-matchers` 可以把固定 Matcher 加進原生 Loki Query。Lab 將範圍限制在 `service_name=~"day25-.*"`，並關閉 API、Rendering、Sift 與 Assistant Tools。官方的 [Loki Query Enforcement 說明](https://github.com/grafana/mcp-grafana/blob/v1.4.2/README.md#loki-query-enforcement) 也提醒，若其他 Tools 能繞過原生 Loki Query Path，Matcher 就不是完整邊界。
-
-Production 還要收斂 Grafana Service Account、Datasource 權限、Tenant 與 Gateway Policy。`--disable-write` 只能保證這個 MCP Server 不提供寫入工具，不能自動把所有讀取都變成最小權限。
-
-## Correlation Fields 必須活到 Agent
-
-合成 Log 只把低基數 `service_name` 放進 Loki Stream Label，`action_id` 與 `trace_id` 留在 Structured Metadata。這延續 Day 23 的取捨：單筆調查需要高基數識別，不代表每個 Action ID 都要進 Index Label。
-
-mcp-grafana 實際回傳的關鍵部分如下：
+實際結果包含一筆 `service_name=day25-sre-agent` 的 Error Log，以及 Action ID 和 Trace ID。它們能從 Loki 原始資料對回，工具回應中也保留分類後的欄位：
 
 ```json
 {
@@ -63,43 +81,28 @@ mcp-grafana 實際回傳的關鍵部分如下：
 }
 ```
 
-鎖定的 ADK `2.7.0` 與 MCP Python SDK 組合，主要從 `content[].text` 取得 Tool Response，不保證直接提供 `structuredContent`。Runner 因此解析 Text 裡的 JSON，只把 Result、筆數、Service、Action ID 與 Trace ID 留進 Agent State。驗收重點不是 Function Call 有沒有結束，而是後續調查需要的結構是否仍存在。
+鎖定的 ADK 和 MCP Python SDK 組合主要從 `content[].text` 取得工具回應，不保證直接提供 `structuredContent`。Runner 因此解析文字中的 JSON，只將結果、筆數、服務和關聯 ID 留到 Agent State，供下一步整理使用。這裡驗收的是結構是否仍在，並非只看 Function Call 有沒有結束。
 
-這也接回我先前對 mcp-grafana 的 Upstream 修補。當時 Loki Response 沒有把 Stream Labels、Structured Metadata 與 Query-time Parsed Labels 分開帶回，`trace_id` 很容易在 Tool Result 裡消失。我替 Request 加上 `X-Loki-Response-Encoding-Flags: categorize-labels`，再解析 Response 的第三個 Values Element。修改後來以 [PR #671](https://github.com/grafana/mcp-grafana/pull/671) 合入，收錄在 [v0.11.4](https://github.com/grafana/mcp-grafana/releases/tag/v0.11.4)。本文使用的 `1.4.2` 已包含這項能力，因此只驗現行版本，不安排一場新舊版功能 PK。
+下圖是 Gateway 官方 MCP Playground 的實際工具輸出。展開 Log 後，可以找到服務 Label，以及 Metadata 裡的 Action ID 和 Trace ID，對照剛才的 JSON。
 
-這段經驗讓我更在意 Tool Result 的資料血緣。Tool Schema 能規定欄位形狀，卻不能保證關聯欄位一路活過 Datasource、MCP Server、Client SDK 與 Agent State。`trace_id` 一旦在中間退化成不可解析文字，模型仍然能寫出結論，只是 SRE 沒辦法繼續向 Tempo 查證。
+![agentgateway MCP Playground 實跑 query_loki_logs，輸出包含 Loki Log、服務 Label 和 Action／Trace 關聯欄位。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r6/assets/screenshots/day-25/agentgateway-grafana-mcp-playground.png)
 
-## HTTP 200 的三種結果
+## HTTP 回應與查詢結果的分層
 
-第一次接真實鏈路時，我遇過 `initialize` 和 `tools/list` 都正常，`query_loki_logs` 也回 HTTP `200`，Body 卻出現 `invalid character '<' looking for beginning of value`。沿著 URL Path、Content-Type 與 Response Body 往下查，才發現某段 Grafana API Route 回了 HTML 登入頁。查詢改走正確的 Datasource Proxy 後，Loki JSON 才正常回來。
+我第一次接真實鏈路時，曾遇到 MCP `initialize` 和 `tools/list` 都正常，查詢也收到 HTTP `200`，Body 卻出現 `invalid character '<' looking for beginning of value`。沿 URL、Content-Type 和 Body 往下找，才發現某段 Grafana API Route 回了 HTML 登入頁。改走正確的 Datasource Proxy 後，Loki JSON 才正常回來。
 
-這是產品鏈除錯的一個分支，不是本文主題。它的價值在於把同一筆 Tool Call 的 Transport、MCP、Tool 與 Query Outcome 拆開：
+這個情況讓我把驗收分成網路回應、MCP 訊息、工具結果與查詢內容。HTTP `200` 表示入口回了訊息，MCP 仍可能帶工具錯誤。工具查詢完成，也可能合法地沒有符合的 Log。這些狀態要分開，Agent 才知道該修連線、改查詢，還是帶著有效資料繼續調查。
 
-![同樣收到 Client HTTP 200，Grafana API 回 HTML 會形成 Tool error，合法空查詢是 NO MATCH，只有查到帶 action_id 與 trace_id 的 Loki log 才是 USABLE。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r5/assets/diagrams/day-25/grafana-mcp-four-layer.png)
+下圖將相同入口 HTTP 狀態下的三種結果放在一起。先找 HTML 解碼失敗，再看合法空查詢，最後才是帶關聯欄位的有效 Log。
 
-圖裡最容易誤判的是第一條：Grafana API 回 HTML 時，入口仍是 `200`，錯誤到 Tool 解碼才出現。合法空查詢也已通過 Tool，卻沒有能支持後續調查的 Log。只有結果保留 `action_id` 與 `trace_id`，Agent 才能繼續向其他 Telemetry 查證。Repo 裡的 [MCP Tool 四層結果檢查表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r5/articles/day-25/mcp-outcome-checklist.md) 保留各層狀態，方便拿自己的 Tool Result 對照。
+![入口同樣回 HTTP 200，仍可能是工具解碼錯誤、合法空結果，或帶關聯欄位的可用查詢結果。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r6/assets/diagrams/day-25/grafana-mcp-four-layer.png)
 
-## 各觀測點的責任
+空結果本身也是資訊，但要連同查詢時間、資料範圍和管線狀態解讀。它可能表示沒有符合條件的事件，也可能是範圍選錯或資料尚未送達。不能在沒有其他證據時，把空查詢直接寫成「服務正常」。完整分層方式留在 [MCP Tool 四層結果檢查表](https://github.com/MikeHsu0618/2026-ithelp-agent-governance-public/blob/day-25-r6/articles/day-25/mcp-outcome-checklist.md)。
 
-agentgateway 的[原生 Telemetry](https://agentgateway.dev/docs/standalone/latest/documentation/observability/) 可以看到 `tools/call`、Tool Name、Server、Route、Session 與 Latency，適合回答流量是否經過正確入口、哪個 Backend 變慢，以及錯誤集中在哪條 Route。mcp-grafana 也能輸出 MCP Operation Metrics 與 Traces，繼續拆解 Tool Execution 和 Grafana API Latency。
+## 調查與維護如何分工
 
-Query Result 是否足以完成事故調查，仍應由 Runtime 或 Application Event 判斷。Gateway 不需要理解每一種 Tool 的業務語意，也不該把完整 Arguments 與 Log Result 塞進 Metric Labels。
+Gateway 的觀測資料適合看 Route、Tool、Backend、延遲與流量錯誤。mcp-grafana 可以繼續定位工具執行和 Grafana API 的處理。查詢內容是否足以支持下一步判斷，則由 Runtime 或應用決定，資料來源權限仍由 Grafana 和後端管理。
 
-| 觀測點 | 適合保存的證據 | 不能自行推論的事 |
-| --- | --- | --- |
-| agentgateway | Route、Server、Tool、Policy、Latency、Traffic Error | Loki Result 是否足以完成調查 |
-| mcp-grafana | Tool Schema、Grafana API、Datasource Query、Decode Error | Human Delegation 是否成立 |
-| Google ADK Runtime | Tool Proposal、Tool Result、下一步調查判斷 | Backend Credential 是否符合最小權限 |
-| Grafana／Loki | Datasource 權限、LogQL、實際 Log 與 Metadata | Agent 是否完成整個治理任務 |
+例如工具回了格式正確的空結果，Gateway 不必替值班者判斷事故是否結束。Runtime 可以記錄查詢條件與 Outcome，值班者再沿關聯 ID 查看其他資料。這樣每一站留下自己真正知道的事，調查時也知道該找誰處理。
 
-四層透過 `action_id`、`trace_id`、Tool Name 與時間窗對起來，各自保存適合自己的 Evidence。這比要求單一 Dashboard 判定所有 Tool 是否「成功」更能維持責任邊界。
-
-完整產品鏈的啟動、清理、三種 Outcome 與原始結果留在前面的 Lab 04 README。agentgateway MCP Playground 的實跑畫面則讓讀者直接看 Tool Output：Loki Log、`service_name`，以及 Structured Metadata 裡的 `action_id` 和 `trace_id`。
-
-![agentgateway 官方 MCP Playground 實跑 query_loki_logs，Tool output 含一筆 Loki log、service_name label，以及 action_id、trace_id structured metadata。](https://raw.githubusercontent.com/MikeHsu0618/2026-ithelp-agent-governance-public/day-25-r5/assets/screenshots/day-25/agentgateway-grafana-mcp-playground.png)
-
-## Trace ID 是回放入口
-
-Day 25 把假的 `query_logs` 換成真實的 Loki Query。SRE Agent 能透過統一 Gateway 使用既有 LGTM，也能從 Tool Result 取得 `action_id` 與 `trace_id`，繼續查其他 Telemetry。HTTP `200`、Tool Error 與合法空結果也沒有再被壓成同一個綠燈。
-
-下一篇會沿著這個 Trace ID 回放一次 Agent Tool Call，逐欄檢查 Caller、Runtime、Policy 與 Effect。Trace 很適合當調查入口，卻不會自動補上 Sampling、Retention、授權與完整性保證。這正是 Day 26 要拆開的差距。
+本篇接通的是受限的查詢能力：Agent 可以使用既有 Loki，工具結果也保留繼續查證的入口。拿到 Trace ID 之後，下一個問題是它能還原多少事實。呼叫路徑、授權依據和資料保存的完整性，仍要在事件回放時逐一確認。
